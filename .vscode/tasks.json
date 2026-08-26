@@ -1,0 +1,133 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Final Windows beta lifecycle acceptance",
+			"type": "shell",
+			"command": "$ErrorActionPreference='Stop'; $installer=Resolve-Path 'dist-windows-beta\\exact-extract-1.0.0-setup.exe'; $candidateExe=Resolve-Path 'dist-windows-beta\\win-unpacked\\exact-extract.exe'; $install=Start-Process $installer -ArgumentList '/S' -PassThru -Wait; if($install.ExitCode -ne 0){throw \"Install failed: $($install.ExitCode)\"}; $entry=Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' | Where-Object DisplayName -eq 'EXACT EXTRACT' | Select-Object -First 1; if($entry.UninstallString -notmatch '^\"([^\"]+)\"'){throw 'Uninstaller missing'}; $uninstaller=$matches[1]; $installedExe=Join-Path (Split-Path $uninstaller) 'exact-extract.exe'; if((Get-FileHash $installedExe).Hash -ne (Get-FileHash $candidateExe).Hash){throw 'Installed hash mismatch'}; $reinstall=Start-Process $installer -ArgumentList '/S' -PassThru -Wait; if($reinstall.ExitCode -ne 0){throw \"Reinstall failed: $($reinstall.ExitCode)\"}; $entry=Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' | Where-Object DisplayName -eq 'EXACT EXTRACT' | Select-Object -First 1; if($entry.QuietUninstallString -notmatch '^\"([^\"]+)\"\\s*(.*)$'){throw 'Quiet uninstaller missing'}; $uninstall=Start-Process $matches[1] -ArgumentList $matches[2] -PassThru -Wait; $remaining=Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' -ErrorAction SilentlyContinue | Where-Object DisplayName -eq 'EXACT EXTRACT'; if($uninstall.ExitCode -ne 0 -or $remaining){throw 'Uninstall cleanup failed'}; Write-Output \"PASS install=$($install.ExitCode) reinstall=$($reinstall.ExitCode) uninstall=$($uninstall.ExitCode) hash=match registration=removed\"",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Agent B Sprint 0 baseline gate",
+			"type": "shell",
+			"command": "$ErrorActionPreference='Stop'; npm run lint; npm exec -- prettier --check .; npm test; npm run typecheck; npm run build; npm run verify:ocr-offline; npm run verify:ocr-fixtures; npm run verify:windows-beta",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Agent B formatting boundary check",
+			"type": "shell",
+			"command": "npm exec -- prettier --check .",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Agent B normalize source formatting",
+			"type": "shell",
+			"command": "npm exec -- prettier --write .vscode/tasks.json docs/accessibility-audit.md src/extraction/layout.test.ts src/extraction/tables.ts src/ocr/orchestrationFixtures.test.ts src/renderer/src/components/AnalysisPanel.tsx src/renderer/src/components/KeptExportTemplateEditor.css src/review/heuristics.test.ts src/review/heuristics.ts src/shared/keptExportTemplate.ts test-setup.cjs; npm exec -- prettier --check .; npm run lint",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Agent B Sprint 0 executable gates",
+			"type": "shell",
+			"command": "$ErrorActionPreference='Stop'; npm test; npm run typecheck; npm run build; npm run verify:ocr-offline; npm run verify:ocr-fixtures; npm run verify:windows-beta",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Agent B candidate lock check",
+			"type": "shell",
+			"command": "Get-CimInstance Win32_Process | Where-Object { $_.Name -in @('electron.exe','exact-extract.exe') } | ForEach-Object { Write-Output (\"PID={0} NAME={1} PATH={2} CMD={3}\" -f $_.ProcessId,$_.Name,$_.ExecutablePath,$_.CommandLine) }",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Agent B candidate lock check JSON",
+			"type": "shell",
+			"command": "Get-CimInstance Win32_Process | Where-Object Name -in 'electron.exe','exact-extract.exe' | Select-Object ProcessId,Name,ExecutablePath,CommandLine | ConvertTo-Json -Depth 2",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Agent B fresh Windows release candidate",
+			"type": "shell",
+			"command": "$ErrorActionPreference='Stop'; Remove-Item -Recurse -Force dist-windows-beta -ErrorAction SilentlyContinue; npm run build:win-beta",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "build"
+		},
+		{
+			"label": "Agent B lifecycle script syntax",
+			"type": "shell",
+			"command": "$tokens=$null; $parseErrors=$null; [void][System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'scripts\\verify-windows-lifecycle.ps1'),[ref]$tokens,[ref]$parseErrors); if($parseErrors.Count -gt 0){$parseErrors | Format-List; exit 1}; npm exec -- prettier --check package.json; Write-Output 'Lifecycle script syntax PASS'",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Agent B final Windows lifecycle",
+			"type": "shell",
+			"command": "npm run verify:windows-lifecycle",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Agent B inspect existing installation",
+			"type": "shell",
+			"command": "$entry=Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' -ErrorAction SilentlyContinue | Where-Object DisplayName -EQ 'EXACT EXTRACT' | Select-Object -First 1; if(-not $entry){Write-Output '{}'; exit 0}; if($entry.UninstallString -match '^\"([^\"]+)\"'){$root=Split-Path $Matches[1];$exe=Join-Path $root 'exact-extract.exe'}; [pscustomobject]@{DisplayName=$entry.DisplayName;DisplayVersion=$entry.DisplayVersion;Publisher=$entry.Publisher;InstallDate=$entry.InstallDate;UninstallString=$entry.UninstallString;QuietUninstallString=$entry.QuietUninstallString;Executable=$exe;ExecutableSha256=if(Test-Path $exe){(Get-FileHash $exe).Hash.ToLowerInvariant()}else{$null};CandidateSha256=(Get-FileHash 'dist-windows-beta\\win-unpacked\\exact-extract.exe').Hash.ToLowerInvariant()} | ConvertTo-Json -Depth 3",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Agent B compare installed candidate",
+			"type": "shell",
+			"command": "$installed=Join-Path $env:LOCALAPPDATA 'Programs\\exact-extract\\exact-extract.exe'; $candidate='dist-windows-beta\\win-unpacked\\exact-extract.exe'; [pscustomobject]@{InstalledExists=(Test-Path $installed);InstalledSha256=if(Test-Path $installed){(Get-FileHash $installed).Hash}else{''};CandidateSha256=(Get-FileHash $candidate).Hash;Processes=@(Get-CimInstance Win32_Process -Filter \"Name = 'exact-extract.exe'\" | Where-Object ExecutablePath -Like \"$env:LOCALAPPDATA\\Programs\\exact-extract*\").Count} | ConvertTo-Json",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Agent B remove stale acceptance install",
+			"type": "shell",
+			"command": "$ErrorActionPreference='Stop'; $uninstaller=Join-Path $env:LOCALAPPDATA 'Programs\\exact-extract\\Uninstall exact-extract.exe'; if(-not (Test-Path $uninstaller)){throw 'Registered stale uninstaller is missing'}; $process=Start-Process $uninstaller -ArgumentList '/currentuser','/S' -PassThru -Wait; if($process.ExitCode -ne 0){throw \"Stale uninstall failed: $($process.ExitCode)\"}; $remaining=Get-ItemProperty 'HKCU:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\*' -ErrorAction SilentlyContinue | Where-Object DisplayName -EQ 'EXACT EXTRACT'; if($remaining){throw 'Stale registration remains'}; Write-Output \"PASS stale uninstall=$($process.ExitCode) registration=removed\"",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Agent B final package evidence",
+			"type": "shell",
+			"command": "$ErrorActionPreference='Stop'; npm run verify:ocr-package -- dist-windows-beta/win-unpacked/resources/app.asar; $installer=Get-Item 'dist-windows-beta\\exact-extract-1.0.0-setup.exe'; $exe=Get-Item 'dist-windows-beta\\win-unpacked\\exact-extract.exe'; [pscustomobject]@{Node=(node --version);Npm=(npm --version);Electron=(node -p \"require('./node_modules/electron/package.json').version\");ElectronBuilder=(node -p \"require('./node_modules/electron-builder/package.json').version\");Windows=(Get-CimInstance Win32_OperatingSystem).Caption;WindowsVersion=(Get-CimInstance Win32_OperatingSystem).Version;InstallerSignature=(Get-AuthenticodeSignature $installer).Status;ExecutableSignature=(Get-AuthenticodeSignature $exe).Status;WindowsSandbox=(Test-Path \"$env:WINDIR\\System32\\WindowsSandbox.exe\");HyperVVMCount=if(Get-Command Get-VM -ErrorAction SilentlyContinue){@(Get-VM -ErrorAction SilentlyContinue).Count}else{$null}} | ConvertTo-Json",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Agent B Sprint 3-4 final static gate",
+			"type": "shell",
+			"command": "$ErrorActionPreference='Stop'; npm run lint; if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}; npm run typecheck",
+			"isBackground": false,
+			"problemMatcher": [],
+			"group": "test"
+		},
+		{
+			"label": "Agent B2 responsive acceptance server",
+			"type": "shell",
+			"command": "& 'C:\\Program Files\\nodejs\\npm.cmd' run dev",
+			"isBackground": true,
+			"problemMatcher": [],
+			"group": "test"
+		}
+	]
+}

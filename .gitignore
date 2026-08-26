@@ -1,0 +1,9 @@
+node_modules
+dist
+dist-*/
+out
+*.asar
+src/renderer/public/ocr
+.DS_Store
+.eslintcache
+*.log*

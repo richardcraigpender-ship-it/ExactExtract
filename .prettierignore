@@ -1,0 +1,15 @@
+out
+dist
+dist-*
+node_modules
+src/renderer/public/ocr
+test-data/fixtures
+resources
+pnpm-lock.yaml
+LICENSE.md
+tsconfig.json
+tsconfig.*.json
+Agent-chatter.md
+catalogue-ideas.md
+chats*.md
+test-results.txt
