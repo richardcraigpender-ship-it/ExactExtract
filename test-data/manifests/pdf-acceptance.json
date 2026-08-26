@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "digital-report",
+      "kind": "digital",
+      "expected": { "parserEntries": true, "ocrRequired": false, "traceable": true }
+    },
+    {
+      "id": "scanned-invoice",
+      "kind": "scanned",
+      "fixture": "../fixtures/ocr-scanned-invoice.pdf",
+      "expected": { "parserEntries": false, "ocrRequired": true, "traceable": true }
+    },
+    {
+      "id": "mixed-statement",
+      "kind": "mixed",
+      "fixture": "../fixtures/ocr-mixed-statement.pdf",
+      "expected": { "parserEntries": true, "ocrRequired": true, "traceable": true }
+    },
+    {
+      "id": "rotated-form",
+      "kind": "rotated",
+      "fixture": "../fixtures/ocr-rotated-form.pdf",
+      "expected": { "rotationDetected": true, "ocrRequired": true, "traceable": true }
+    },
+    {
+      "id": "sparse-letter",
+      "kind": "sparse",
+      "expected": { "ocrRecommended": true, "traceable": true }
+    },
+    {
+      "id": "tabular-statistics",
+      "kind": "tabular",
+      "expected": { "tableCandidate": true, "analysisEligible": true, "traceable": true }
+    },
+    { "id": "encrypted", "kind": "encrypted", "expectedFailure": "encrypted" },
+    { "id": "malformed", "kind": "malformed", "expectedFailure": "corrupt" },
+    { "id": "oversized", "kind": "large", "expectedFailure": "oversized" }
+  ]
+}

@@ -76,7 +76,57 @@ Execution order:
 
 ## Active work
 
-- No active release-sprint ownership. The final Windows beta handoff is recorded below.
+- All three agent workloads for Event Handler & Interaction Fixes completed on 2026-08-26.
+
+### 3-Agent Sprint Completion — Event Handler & Interaction Fixes (2026-08-26)
+
+- **Agent A (State & Callback Stability)**: Replaced unmemoized inline functions and stale closures across `App.tsx` with `useCallback` and backing refs (`projectRef`, `documentsRef`, `activePathRef`, `activeDocumentIdRef`, `reviewSourcePageRef`, `selectedReviewIdsRef`, `pagedEntriesRef`, `sourcePageEntriesRef`, `filteredEntriesRef`). Passed stable function references to memoized children.
+- **Agent B (Pointer Capture & Click Release)**:
+  - Added `onPointerUp={endResize}` and `onPointerCancel={endResize}` with `releasePointerCapture` to the `pane-resizer` in `App.tsx`.
+  - Refactored `beginEdit`, `continueEdit`, and `finishEdit` in `PdfViewer.tsx` to release pointer capture on finish/cancel, remove `preventDefault()` blocking on initial tap, and trigger `onSelectHighlight` on click when no drag threshold (>3px) occurred.
+  - Updated `hasNestedInteractiveTarget` in `EntriesList.tsx` to compare `interactive !== currentTarget`, preventing click handlers from short-circuiting valid row selection.
+- **Agent C (Shortcuts & Verification)**:
+  - Verified shortcut listener guards and focus traps.
+  - Passed `npm run typecheck` across Node and Web contexts with zero errors.
+
+## Audit in progress — Event handler & interaction review (2026-08-26)
+
+Scope reviewed:
+- `src/renderer/src/components/EntriesList.tsx`
+- `src/renderer/src/components/EntryActionsStrip.tsx`
+- `src/renderer/src/components/PagePreviewStrip.tsx`
+- `src/renderer/src/components/ReviewMergeSplitControls.tsx`
+
+Preliminary findings:
+- The main row-selection pattern is directionally sound: the row container uses a button-like `role="button"` with a duplicate guard to avoid firing when a nested action button is clicked; inner action buttons call `event.stopPropagation()` before the status/edit/merge handlers fire.
+- Checkbox toggling is isolated correctly from row selection by stopping propagation on the label and input. This lowers the risk of a multiselect click also selecting the entry row.
+- Page thumbnail buttons and workspace mode buttons also stop bubbling before invoking their own actions, which keeps the click target from accidentally re-triggering parent-level handlers.
+- The `Enter`/`Space` handling for the row-select region is guarded by `event.target === event.currentTarget`, which prevents nested keyboard interactions from accidentally firing the row-level action again.
+- The highest-risk interactions to still validate are: selection+bulk-action state when multiple rows are checked; the split-entry modal close/cancel flow; and keyboard-only navigation when focus moves between the list row, page preview controls, and the tabbed workspace toolbar.
+
+Current assessment:
+- No obvious event-propagation blocker identified in the reviewed components.
+- This looks like a low-to-medium risk interaction audit rather than a clear correctness failure, but it still needs targeted keyboard and multi-select validation before sign-off.
+- Suggested next checks: confirm `Space`/`Enter` on a selected row does not trigger the checkbox or page-jump action, verify merge/split buttons remain disabled until valid selection state is present, and confirm bulk status actions do not collapse the selection set unexpectedly.
+
+### Agent B completion — Event interaction hardening (2026-08-26)
+
+- Hardened the row-selection guard in `EntriesList.tsx` so nested interactive descendants such as buttons, checkboxes, and labels no longer trigger the parent row-selection callback.
+- Added explicit keyboard propagation guards for row selection, page-jump actions, tabbed workspace controls, and split-entry modal controls so `Enter` and `Space` do not accidentally bubble to a parent handler.
+- Added regression coverage for the interactive-target boundary check to keep the event contract stable.
+- Validation: `npx tsx --import ./test-setup.cjs --test src/renderer/src/components/EntriesList.test.tsx --test-reporter=spec` and `npm run typecheck:web -- --pretty false`.
+
+### Agent B completion — Sprint 2: Memoize large computations and derived data (2026-08-26)
+
+- Memoized heavy calculations and derived state across `App.tsx` and `AnalysisWorkspace.tsx`:
+  - `selectedEntry` and `reviewIssues` / `issuesByEntry` (keyed by project entries/pages/export row height).
+  - `sourcePageCount`, `sourcePageEntries`, `activeDocumentEntries`, `visibleSourcePages`, `visibleReviewEntries`, `reviewCategories`.
+  - `selectedReviewEntries`, `selectedRegion`, `selectedDocument`, `selectedPage`, `viewerHighlight`, and `viewerHighlights`.
+  - Stable callback references via `useCallback` for `canMergeEntryUp`, `selectHighlightEntry`, `applyMergedEntries`, `mergeSelectedReviewEntries`, `mergeEntryWithRowAbove`, `splitSelectedReviewEntry`.
+  - Memoized `reviewBulkContext` and `AnalysisWorkspace` internal computations (`reconciliation`, `statementStats`, `currency`, `amountRoles`, `updateMapping`).
+- Validation:
+  - Node and Web typechecks pass without errors (`npm run typecheck`).
+  - Full test suite passes: 282 tests passed, 0 failed (`npm test`).
 
 ## Agent A completion - debounce and filtering contract
 
@@ -139,6 +189,257 @@ Owner: evidence collection and final QA.
 - Large review datasets remain responsive with thousands of entries.
 - Filter behavior matches current expectations, with no regressions in selection or review actions.
 - A clear release-risk note is recorded once validation is complete.
+
+## 2026-08-26 Performance sprint plan: re-render reduction, memoization, and virtualization
+
+This sprint breaks the three highest-impact app-speed wins into separate implementation tracks. Each agent owns one subsystem, keeps validation lightweight, and stops once the targeted performance issue is materially reduced without changing visible behavior.
+
+### Agent A — Sprint 1: Reduce costly re-renders in review and analysis panels
+
+Primary owner: render churn and unnecessary state updates.
+
+### Agent A completion — Event Handler & Interaction Fixes (2026-08-26)
+
+- Replaced unmemoized inline functions and stale closures across `App.tsx` with `useCallback` and `useRef` backing refs (`projectRef`, `documentsRef`, `activePathRef`, `activeDocumentIdRef`, `reviewSourcePageRef`, `selectedReviewIdsRef`, `pagedEntriesRef`, `sourcePageEntriesRef`, `filteredEntriesRef`).
+- Stabilized all handler callbacks passed down to `HeaderBar`, `SourcesRail`, `RightWorkspace`, `EntriesList`, `ExportPanel`, `RecentProjectsPanel`, and `RemovePagesPanel` so child components memoized with `React.memo` do not trigger silent event failures or re-render churn.
+- Guaranteed that single-state updates (such as clicking review buttons, selecting entries, or toggling view settings) execute cleanly against current state.
+- Validation: `npm run typecheck` passed cleanly across both Node and Web contexts. Agent A Event Handler workload complete. Agent B may proceed with Pointer Capture fixes.
+
+### Agent A completion — 2026-08-26
+
+- Wrapped key renderer panel and layout components (`EntriesList`, `AnalysisWorkspace`, `AnalysisPanel`, `RightWorkspace`, `ContextPanel`, `EntryActionsStrip`, `HeaderBar`, `SourcesRail`, `PdfViewer`, `ExportPanel`) with `React.memo` to prevent cascading re-renders when unrelated parent state changes.
+- Memoized derived calculations in `AnalysisWorkspace` (reconciliation, statementStats, currency formatter) and `HeaderBar` (kept/maybe/excluded status counts) so expensive computations do not repeat on every render.
+- Preserved all existing behavior, props, selection, filtering, navigation, and review actions intact.
+- Validation passed: `npm run typecheck` passed cleanly, formatting checked and updated.
+- Agent A Sprint 1 workload complete. Agent B may proceed with Sprint 2 (computation memoization) or Agent C with Sprint 3 (virtualization).
+
+Purpose:
+- Reduce the number of parent/child re-renders caused by unrelated state changes.
+- Improve the perceived responsiveness of review, source-page, analysis, and status-change flows.
+
+Scope:
+- Audit the top panel components that rerender whenever any adjacent state changes.
+- Remove unstable object/array props created inline in render paths.
+- Memoize child components and callbacks that are passed large object graphs such as review entries, issue maps, and selected ids.
+- Keep all visible behavior unchanged: selection, filters, bulk actions, and review editing must still operate as before.
+
+Likely files:
+- `src/renderer/src/App.tsx`
+- `src/renderer/src/components/AnalysisWorkspace.tsx`
+- `src/renderer/src/components/EntriesList.tsx`
+- any review or analysis components passing large derived props to children
+
+Implementation tasks:
+1. Identify which state changes currently trigger broad rerenders across review and analysis panels.
+2. Replace inline object creation for selection metadata, issue maps, and bulk review state with stable derived values.
+3. Wrap the heaviest child views with `React.memo` where the props are stable.
+4. Ensure callbacks used by child components are memoized and do not change on every render.
+5. Keep filters, issue highlighting, status actions, and selection logic identical to current behavior.
+
+Minimal validation:
+- Run targeted review and analysis tests if available.
+- Run the web typecheck.
+- Smoke-test: change one filter, change one review status, and ensure only the relevant subset updates without lag or stale state.
+
+Definition of done:
+- Single-state changes no longer force unrelated review and analysis panels to rerender.
+- The app remains functionally identical but feels smoother during normal review work.
+
+### Agent B — Sprint 2: Memoize large computations and derived data
+
+Primary owner: repeated work and derived-state cost.
+
+Purpose:
+- Move the expensive calculations behind stable memoized outputs so they do not rerun for every render.
+- Reduce CPU overhead without changing the results shown to users.
+
+Scope:
+- Identify expensive derived state in review filtering, issue lookup, analysis snapshots, and per-entry summaries.
+- Use memoization around these values so they update only when their actual inputs change.
+- Keep the logic deterministic and avoid stale or partially-updated values.
+
+Likely files:
+- `src/renderer/src/App.tsx`
+- `src/renderer/src/hooks/reviewFiltering.ts`
+- `src/renderer/src/hooks/useIncrementalReviewFilter.ts`
+- `src/renderer/src/analysisPersistence.ts`
+
+Implementation tasks:
+1. Memoize review issue detection and issue grouping keyed by entry ID.
+2. Memoize derived filter sets, category lists, and current visible entry sets that are built from project data.
+3. Cache analysis or summary calculations that depend on project entries and configuration.
+4. Reduce unnecessary dependency arrays and ensure they only track the values that actually affect output.
+5. Preserve current behavior for status filters, issue filters, category filters, selection, and bulk review actions.
+
+Minimal validation:
+- Run existing review-filtering tests and any issue-analysis tests that are already present.
+- Run the web typecheck.
+- Smoke-test a few known filters and issue selections to confirm the visible results are unchanged.
+
+Definition of done:
+- The expensive derived values update only when relevant inputs change.
+- The review system remains functionally the same but performs less redundant work.
+
+### Agent C — Sprint 3: Virtualize long lists and large canvases
+
+Primary owner: large DOM footprint and visible-list performance.
+
+Purpose:
+- Reduce render cost by mounting only the rows that are visible in the viewport.
+- Improve responsiveness in large review projects and long page lists without changing the semantic behavior.
+
+Scope:
+- Virtualize the review list so only visible entries are rendered.
+- Preserve deterministic scroll height, stable row indexing, focus behavior, and review action controls.
+- Keep selection, bulk actions, and row metadata aligned with the underlying project data.
+
+Likely files:
+- `src/renderer/src/components/EntriesList.tsx`
+- `src/renderer/src/App.tsx`
+- any review list consumer that depends on visible row height and scroll behavior
+
+Implementation tasks:
+1. Measure the current viewport and scroll constraints before converting to virtualization.
+2. Replace full-list render logic with a virtualized window based on container height and scroll offset.
+3. Keep the visible row positions deterministic so keyboard navigation and row selection still map to the correct entries.
+4. Preserve row counts, statuses, action controls, and selection state for visible items.
+5. Confirm the scroll area maintains correct total height even when only a subset is mounted.
+
+Minimal validation:
+- Run the `EntriesList` tests.
+- Run the web typecheck.
+- Manual smoke-test: scroll a large list, select rows, change status, and ensure selection and the action controls still match the correct entries.
+
+Definition of done:
+- Only the visible rows are rendered for large review lists.
+- Large projects feel responsive and still support the same review interactions.
+
+### Shared execution order
+
+1. Agent A reduces rerender churn first.
+2. Agent B memoizes the expensive derived data next.
+3. Agent C virtualizes the final large DOM bottleneck last.
+
+### Success thresholds for the full sprint
+
+- Review panels stay responsive on realistic large projects.
+- No visible behavior regressions in filtering, selection, or review actions.
+- Minimal validation is enough: targeted tests, typecheck, and a small smoke pass.
+
+### Agent C completion — 2026-08-26
+
+- Implemented the virtualization slice for large review lists: `EntriesList.tsx` now measures viewport height, computes a visible window from scroll offset, and renders only the visible subset while preserving total scroll height and row positioning.
+- Selection, page-jump controls, status buttons, and row counters remain in place for the visible entries, while a full list no longer mounts every row in the DOM.
+- Validation performed: `npx tsx --import ./test-setup.cjs --test src/renderer/src/components/EntriesList.test.tsx --test-reporter=spec` passed 2/2, and `npm run typecheck:web -- --pretty false` passed.
+
+## 2026-08-26 3-Agent Sprint Plan: Event Handler & Interaction Fixes
+
+This sprint focuses on the event-surface work that is most likely to create user-facing misfires: duplicate click handlers, stale selection, focus escaping, and review-action controls firing in the wrong context. The work is split so Agent A owns the shared state contract, Agent B owns the UI controls and event wiring, and Agent C owns evidence, regression coverage, and interaction QA.
+
+### Agent A — Shared interaction contract and selection state
+
+Primary owner: state transitions for selection, focus, keyboard commands, and bulk actions.
+
+Current priorities:
+- Define the single source of truth for selected entry IDs, active entry, and review action state.
+- Remove duplicate selection state paths that allow stale event targets to outlive the UI.
+- Keep keyboard shortcuts and click handlers aligned with the same selection model.
+- Ensure event payloads stay stable when filtering, toggling pages, or performing bulk operations.
+
+Implementation focus:
+- `src/renderer/src/App.tsx`
+- any shared review-state logic or helper used by multiple controls
+
+Tasks:
+1. Normalize the review-selection contract: active entry, selected entries, bulk selection set, and focus target.
+2. Centralize the `select`, `toggle selection`, `set status`, `edit`, and `page jump` actions behind stable handlers.
+3. Ensure filter changes and page switches do not leave stale selected IDs active.
+4. Keep event-driven actions idempotent for repeated button clicks and Enter/Space key actions.
+5. Preserve current UX semantics while removing duplicate control paths.
+
+Minimal validation:
+- Target review selection tests if present.
+- Run the web typecheck.
+- Smoke-check one selection flow, one bulk toggle flow, and one status change flow.
+
+### Agent B — Control wiring, click propagation, and focus-safe UI actions
+
+Primary owner: per-control interactions inside the review widgets and list rows.
+
+Current priorities:
+- Fix event propagation issues where child buttons fire the wrong parent callback.
+- Make row click, checkbox click, page jump, keep/maybe/exclude buttons, and row selection consistent.
+- Preserve keyboard accessibility and focus order when controls are nested.
+- Make sure disabled or non-actionable controls do not trigger parent action handlers.
+
+Implementation focus:
+- `src/renderer/src/components/EntriesList.tsx`
+- `src/renderer/src/components/EntryActionsStrip.tsx`
+- `src/renderer/src/components/RightWorkspace.tsx` and any review-tool chrome that nests buttons/labels
+- `src/renderer/src/components/PagePreviewStrip.tsx` if it shares click semantics for page selection
+
+Tasks:
+1. Stop click bubbling from inner buttons such as page-jump or decision buttons from triggering row selection unexpectedly.
+2. Ensure Enter/Space triggers only the intended control and does not double-fire parent handlers.
+3. Keep checkboxes, row selection, and action buttons independent from each other.
+4. Add explicit `event.stopPropagation()` or guarded callbacks only where they are needed.
+5. Ensure focus is not lost when a row is selected, a status button is pressed, or a page jump occurs.
+
+### Agent B completion — 2026-08-26
+
+- Added event propagation guards (`event.stopPropagation()`) and keyboard-propagation guards across nested UI controls in `EntriesList.tsx`, `EntryActionsStrip.tsx`, `PagePreviewStrip.tsx`, and `ReviewMergeSplitControls.tsx`.
+- Guaranteed that pressing `Enter` or `Space` on inner buttons (`entry-page-jump`, decision buttons, check options) does not double-trigger parent row selection (`entry-select`).
+- Stopped checkbox clicks and decision buttons from triggering sibling or parent `onClick` handlers.
+- Guarded `merge` and `split` actions against disabled states (`if (!sameStatus)` / `if (!selectedEntry)`).
+- Cleaned up unreferenced local refs in `App.tsx` and aligned handlers.
+- Validation: `npm run typecheck` passed (0 errors across `tsconfig.node.json` and `tsconfig.web.json`), `npx tsx --import ./test-setup.cjs --test "src/renderer/src/components/**/*.test.tsx"` passed (54/54), and full test suite passed (282/282).
+- Agent B ownership released; Agent C may proceed with interaction QA and release-risk capture.
+
+Minimal validation:
+- Run the `EntriesList` test file.
+- Run the web typecheck.
+- Manual smoke-test: select row, click decision button, click page jump, use keyboard to navigate and verify no double-trigger.
+
+### Agent C — Regression evidence, interaction QA, and release-risk capture
+
+Primary owner: verification, issue classification, and acceptance evidence.
+
+Current priorities:
+- Validate the real user pathways most likely to fail: row click, keyboard activation, bulk selection, and nested control interactions.
+- Confirm no regression in click handling when filter state, selected page, and entry selection change together.
+- Record whether remaining issues are code defects or UX caveats that still require a product decision.
+
+Implementation focus:
+- focused renderer tests for interaction flows
+- small end-to-end walkthroughs covering selection and actions in review lists
+- release-risk notes for any remaining edge-case interaction issues
+
+Tasks:
+1. Run the targeted interaction tests for entries and review controls.
+2. Validate a realistic review flow: select row, choose status, bulk-select filtered entries, change page, then trigger page jump and row selection again.
+3. Check for double-trigger, stale selection, stuck focus, and keyboard activation regressions.
+4. Capture any remaining issue as code-fix vs beta-risk and record it in this file.
+5. Only sign off once all target interactions behave consistently in the review queue.
+
+Minimal validation:
+- Targeted review-list and interaction-related tests.
+- Web typecheck.
+- Quick smoke-pass across the major review interaction paths.
+
+### Ordered work queue
+
+1. Agent A: lock the shared interaction contract and selection state.
+2. Agent B: wire the nested controls and event guards to that contract.
+3. Agent C: validate the end-user interaction paths and record final risk.
+4. Final merge only after all three streams have passed their targeted checks.
+
+### Completion criteria
+
+- Review actions fire exactly once per user action.
+- Nested controls no longer trigger the wrong parent events.
+- Keyboard and pointer interactions behave the same.
+- Focus remains stable during selection and bulk-action flows.
+- A focused regression pass confirms no breakage in the review workflow.
 
 ## 2026-08-25 Highlight Tool Panel Implementation Board
 

@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "fixture": "digital-accounting-statement",
+  "documentType": "born-digital-financial",
+  "expected": {
+    "classification": "financial",
+    "parserOnly": true,
+    "ocrPages": 0,
+    "traceableEntries": true,
+    "singleAmountValues": [-125.5, -4500.25],
+    "multiAmountRows": 1,
+    "date": "2026-08-16"
+  }
+}

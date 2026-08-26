@@ -1,0 +1,133 @@
+{
+  "exportSchemaVersion": 1,
+  "project": {
+    "id": "0852b78f-d6a7-437b-aaec-6e199ca518f6",
+    "name": "PDF Review 8/18/2026",
+    "schemaVersion": 1,
+    "createdAt": "2026-08-18T06:37:50.528Z",
+    "updatedAt": "2026-08-18T06:37:50.528Z"
+  },
+  "documents": [
+    {
+      "id": "7fb02b5b-ca57-4135-ae0e-fec5665542ae",
+      "name": "agent-a-workflow.pdf"
+    }
+  ],
+  "sections": {
+    "kept": [
+      {
+        "id": "7fb02b5b-ca57-4135-ae0e-fec5665542ae:p1:l3:entry",
+        "rawText": "Consulting services 1250.00",
+        "normalizedText": "Consulting services 1250.00",
+        "source": "parser",
+        "status": "keep",
+        "confidence": 1,
+        "category": "paragraph",
+        "numericValue": 1250,
+        "regions": [
+          {
+            "documentId": "7fb02b5b-ca57-4135-ae0e-fec5665542ae",
+            "pageNumber": 1,
+            "bbox": {
+              "x": 72,
+              "y": 628,
+              "width": 150.732,
+              "height": 12,
+              "coordinateSpace": "pdf-points"
+            }
+          }
+        ],
+        "tags": ["accounting", "paragraph", "semantic:paragraph"],
+        "createdAt": "2026-08-18T06:38:44.669Z",
+        "updatedAt": "2026-08-18T06:39:09.836Z"
+      }
+    ],
+    "maybe": [
+      {
+        "id": "7fb02b5b-ca57-4135-ae0e-fec5665542ae:p1:l1:entry",
+        "rawText": "Invoice 1001",
+        "normalizedText": "Invoice 1001",
+        "source": "parser",
+        "status": "maybe",
+        "confidence": 1,
+        "category": "heading",
+        "numericValue": 1001,
+        "regions": [
+          {
+            "documentId": "7fb02b5b-ca57-4135-ae0e-fec5665542ae",
+            "pageNumber": 1,
+            "bbox": {
+              "x": 72,
+              "y": 702,
+              "width": 102.06,
+              "height": 18,
+              "coordinateSpace": "pdf-points"
+            }
+          }
+        ],
+        "tags": ["accounting", "heading", "semantic:heading"],
+        "createdAt": "2026-08-18T06:38:44.669Z",
+        "updatedAt": "2026-08-18T06:38:44.669Z"
+      },
+      {
+        "id": "7fb02b5b-ca57-4135-ae0e-fec5665542ae:p1:l2:entry",
+        "rawText": "Date: 2026-08-18",
+        "normalizedText": "Date: 2026-08-18",
+        "source": "parser",
+        "status": "maybe",
+        "confidence": 1,
+        "category": "key-value",
+        "date": "2026-08-18",
+        "regions": [
+          {
+            "documentId": "7fb02b5b-ca57-4135-ae0e-fec5665542ae",
+            "pageNumber": 1,
+            "bbox": {
+              "x": 72,
+              "y": 668,
+              "width": 93.38399999999996,
+              "height": 12,
+              "coordinateSpace": "pdf-points"
+            }
+          }
+        ],
+        "tags": ["accounting", "key-value", "semantic:key-value"],
+        "createdAt": "2026-08-18T06:38:44.669Z",
+        "updatedAt": "2026-08-18T06:38:44.669Z"
+      },
+      {
+        "id": "7fb02b5b-ca57-4135-ae0e-fec5665542ae:p1:l4:entry",
+        "rawText": "Total 1250.00",
+        "normalizedText": "Total 1250.00",
+        "source": "parser",
+        "status": "maybe",
+        "confidence": 1,
+        "category": "paragraph",
+        "numericValue": 1250,
+        "regions": [
+          {
+            "documentId": "7fb02b5b-ca57-4135-ae0e-fec5665542ae",
+            "pageNumber": 1,
+            "bbox": {
+              "x": 72,
+              "y": 588,
+              "width": 73.38,
+              "height": 12,
+              "coordinateSpace": "pdf-points"
+            }
+          }
+        ],
+        "tags": ["accounting", "accounting:total", "paragraph", "semantic:paragraph"],
+        "createdAt": "2026-08-18T06:38:44.669Z",
+        "updatedAt": "2026-08-18T06:38:44.669Z"
+      }
+    ],
+    "excluded": []
+  },
+  "summary": {
+    "documentCount": 1,
+    "keptCount": 1,
+    "maybeCount": 3,
+    "excludedCount": 0
+  }
+}

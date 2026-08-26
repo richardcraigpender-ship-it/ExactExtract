@@ -1,0 +1,58 @@
+{
+  "schemaVersion": 1,
+  "happyPath": [
+    "create-project",
+    "import-pdf",
+    "preflight",
+    "extract",
+    "review-decisions",
+    "analyze-kept-only",
+    "export-csv-json-pdf",
+    "close",
+    "reopen",
+    "verify-persistence"
+  ],
+  "failurePaths": [
+    "missing-source-recovery",
+    "corrupt-pdf-message",
+    "encrypted-pdf-message",
+    "unsupported-pdf-message",
+    "oversized-pdf-message",
+    "too-many-pages-message",
+    "too-many-documents-message",
+    "ocr-failure",
+    "extraction-cancel",
+    "save-failure-retry",
+    "export-cancel",
+    "export-overwrite-failure",
+    "close-guard-unsaved",
+    "close-guard-extraction",
+    "close-guard-export"
+  ],
+  "accessibilityPaths": [
+    "keyboard-review-decisions",
+    "entry-editor-focus-restoration",
+    "dialog-tab-trap",
+    "dialog-escape-close",
+    "progress-live-announcement",
+    "error-alert-announcement",
+    "export-status-announcement"
+  ],
+  "responsiveContracts": [
+    "light-theme",
+    "dark-theme",
+    "reduced-motion",
+    "narrow-window-fallback",
+    "source-page-entry-scoping"
+  ],
+  "requiredInvariants": [
+    "every-entry-has-source-region",
+    "maybe-excluded-from-default-analysis",
+    "excluded-excluded-from-default-analysis",
+    "autosave-survives-reopen",
+    "export-preserves-page-reference",
+    "pdf-document-destroyed",
+    "ocr-canvas-released",
+    "ocr-worker-terminated"
+  ]
+}

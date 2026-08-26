@@ -1,0 +1,142 @@
+.export-canvas-viewport {
+  display: grid;
+  place-items: start center;
+  min-width: 0;
+  min-height: 0;
+  padding: 20px;
+  overflow: auto;
+  background:
+    linear-gradient(
+        45deg,
+        color-mix(in srgb, var(--studio-border) 24%, transparent) 25%,
+        transparent 25%
+      )
+      0 0 / 16px 16px,
+    linear-gradient(
+        -45deg,
+        color-mix(in srgb, var(--studio-border) 24%, transparent) 25%,
+        transparent 25%
+      )
+      0 0 / 16px 16px,
+    var(--studio-raised);
+}
+
+.export-canvas-page {
+  position: relative;
+  isolation: isolate;
+  width: min(100%, 760px);
+  min-width: 320px;
+  overflow: hidden;
+  color: #17231c;
+  background: #fff;
+  box-shadow: 0 12px 32px rgba(25, 35, 29, 0.2);
+}
+
+.export-canvas-background,
+.export-canvas-placement {
+  position: absolute;
+}
+
+.export-canvas-background {
+  z-index: 0;
+}
+
+.export-canvas-background > img {
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+}
+
+.export-canvas-background.is-editable {
+  outline: 1px dashed var(--studio-accent);
+  cursor: grab;
+  touch-action: none;
+}
+
+.export-canvas-content {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+}
+
+.export-canvas-placement {
+  display: block;
+  padding: 0;
+  overflow: hidden;
+  line-height: 1.2;
+  letter-spacing: 0;
+  transform-origin: top left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.export-canvas-placement[role='group'] {
+  cursor: grab;
+  touch-action: none;
+}
+
+.export-canvas-placement[role='group']:active {
+  cursor: grabbing;
+}
+
+.export-canvas-placement.is-selected {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 2px;
+}
+
+.export-canvas-resize-handle {
+  position: absolute;
+  right: -1px;
+  bottom: -1px;
+  width: 12px;
+  height: 12px;
+  border: 2px solid #fff;
+  border-radius: 2px 0 0;
+  background: var(--studio-accent);
+  cursor: nwse-resize;
+  touch-action: none;
+}
+
+.placement-font-toolbar {
+  display: grid;
+  grid-template-columns: minmax(130px, 1fr) 68px 78px 54px;
+  align-items: end;
+  gap: 10px;
+}
+
+.placement-font-toolbar > label {
+  display: grid;
+  gap: 5px;
+  color: var(--studio-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.placement-font-toolbar select,
+.placement-font-toolbar input[type='number'] {
+  min-height: 32px;
+  border: 1px solid var(--studio-border);
+  border-radius: 5px;
+  color: var(--studio-text);
+  background: var(--studio-surface);
+}
+
+.placement-font-toolbar input[type='color'] {
+  width: 100%;
+  height: 32px;
+  padding: 2px;
+  border: 1px solid var(--studio-border);
+  border-radius: 5px;
+  background: var(--studio-surface);
+}
+
+.placement-font-toolbar .font-picker {
+  grid-column: 1 / -1;
+}
+
+.placement-font-toolbar-empty {
+  margin: 0;
+  color: var(--studio-text-muted);
+  font-size: 12px;
+}

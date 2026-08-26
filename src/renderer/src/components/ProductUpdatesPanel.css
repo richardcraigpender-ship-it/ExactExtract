@@ -1,0 +1,108 @@
+.product-updates {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  align-self: stretch;
+  min-width: 0;
+  max-height: min(680px, calc(100vh - 110px));
+  padding: 7px 0 0 18px;
+  border-left: 1px solid var(--studio-border);
+}
+.product-updates > header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--studio-border);
+}
+.product-updates > header div {
+  display: grid;
+  gap: 4px;
+}
+.product-updates > header span {
+  color: var(--studio-accent);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+}
+.product-updates h2 {
+  margin: 0;
+  font:
+    500 24px/1.1 Georgia,
+    serif;
+  letter-spacing: 0;
+}
+.product-updates > header > svg {
+  color: var(--studio-text-muted);
+}
+.product-updates-list {
+  display: grid;
+  align-content: start;
+  margin: 0;
+  padding: 0 10px 0 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  list-style: none;
+}
+.product-updates li {
+  display: grid;
+  gap: 5px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--studio-border);
+}
+.product-updates li:last-child {
+  border-bottom: 0;
+}
+.product-update-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.product-update-meta time {
+  color: var(--studio-text-muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.product-update-meta span {
+  padding: 2px 5px;
+  border-radius: 3px;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.product-update-meta .is-feature {
+  color: var(--studio-accent);
+  background: var(--studio-accent-soft);
+}
+.product-update-meta .is-changed {
+  color: #9a6415;
+  background: color-mix(in srgb, #e9a32a 15%, var(--studio-surface));
+}
+.product-update-meta .is-fixed {
+  color: #386a8a;
+  background: color-mix(in srgb, #4a8fb8 15%, var(--studio-surface));
+}
+.product-updates li > strong {
+  font-size: 13px;
+}
+.product-updates li > p {
+  margin: 0;
+  color: var(--studio-text-muted);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.product-updates-toggle {
+  justify-self: start;
+  margin: 8px 0 0;
+  padding: 5px 0;
+  border: 0;
+  color: var(--studio-accent);
+  background: transparent;
+  font-size: 11px;
+  font-weight: 750;
+  cursor: pointer;
+}
+.product-updates-toggle:hover {
+  text-decoration: underline;
+}
