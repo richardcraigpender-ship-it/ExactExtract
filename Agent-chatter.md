@@ -2697,6 +2697,16 @@ List the exact integration files and confirm that the Pages menu works with load
 - Integrated browser inspection was blocked by the editor network policy for localhost, so thumbnail rendering, click navigation, and narrow-panel overflow could not be observed programmatically in this session.
 - Manual acceptance remains **Blocked by tooling**, not reported as a product failure. The required check is to open the running Electron app, load a multi-page PDF, open Pages, click a thumbnail, and narrow the right panel.
 
+### Agent B follow-up - Responsive Pages acceptance implementation (2026-08-28)
+
+- Added narrow-panel sizing to the Pages strip: preview cards reduce to 96px, spacing is tightened, and buttons use `min-width: 0` to prevent content-driven expansion.
+- Added an acceptance assertion for one rendered-preview marker per page.
+- Focused Pages suite: 5/5 passed.
+- Full regression suite: 337/337 tests passed.
+- `npm run typecheck`: passed.
+- `npm run build`: passed; the existing non-fatal `PdfViewer` chunking warning remains documented.
+- The only outstanding item remains manual visual inspection in the running Electron app because integrated localhost browser access is blocked by editor policy.
+
 ### Dependency chain
 
 1. Agent A real-OCR baseline unlocks Agent C's authoritative OCR acceptance.
@@ -4591,3 +4601,14 @@ No edits to `src/export/compact.ts` or `src/export/pdf.ts` — staying inside th
 - **Validation:** focused suite 10/10; full `npm test` 337/337; `npm run typecheck` node + web clean; `npm run lint` exit 0 with the 12 pre-existing warnings; `npm run build` passed. Only the one long-standing `PdfViewer` chunking warning remains.
 - **Not claimed (Agent B/C scope):** live App integration, thumbnail refresh on source change or after page removal, narrow-panel visual acceptance, and large-PDF performance. Rendering is currently unbounded - one `Document` per visible page - so the deferred virtualization/caching item stays a real follow-up for a large PDF.
 - **Ownership:** released.
+
+### 2026-08-28 - Agent A, thumbnail placeholder shape defect found and fixed
+
+- **Trigger:** attempted to close the outstanding manual visual acceptance. Confirmed the integrated browser genuinely is blocked for localhost by editor policy, so instead of recording it as unverifiable I drove real fixture PDFs through pdfjs directly to test the substance of the check.
+- **Defect found:** `PAGE_THUMBNAIL_ASPECT_RATIO` was a single portrait constant (0.707), but the bundled fixtures contain **both portrait and landscape** pages. `Transactions Report MEZ0R96H 20260123.pdf` page 1 is 1.415 (landscape). Every landscape thumbnail therefore reserved a portrait box and visibly jumped when the real page loaded - exactly the panel-resize symptom the fixed-shell requirement exists to prevent. Static markup tests could never catch this because they never load a page.
+- **Fix:** added a module-level `WeakMap<Uint8Array, number>` shape cache. The first page of a document to finish loading seeds the placeholder shape for its siblings, so at most one thumbnail per document reflows instead of every landscape page. Precedence is now `measured -> explicit aspectRatio prop -> cached sibling shape -> portrait default`. A WeakMap avoids retaining PDF bytes after a document closes.
+- **New file:** `src/renderer/src/components/PageThumbnailFixtures.test.ts` - 5 fixture-backed tests (PT-A-011..015) covering real page counts, positive dimensions per page, mixed portrait/landscape orientations across four fixtures, thumbnail-width viewport scaling, and malformed-PDF rejection so the error state is provably reachable.
+- **Also added** PT-A-011 in `PageThumbnail.test.tsx` asserting an explicit `aspectRatio` prop beats the default.
+- **Still open for the caller:** `App.tsx` does not yet pass `aspectRatio`, though `preflight[path].pages[n]` already carries `width`/`height` and is indexed by page number at roughly line 648. Wiring it would remove the remaining first-page reflow entirely. Left for Agent B - it is their file and it had concurrent edits in flight during this session.
+- **Validation:** thumbnail suites 21/21; full `npm test` 343/343; `npm run typecheck` clean; `npm run lint` exit 0 (now only 1 warning, down from 12 - another lane cleaned those up); `npm run build` passed.
+- **Manual visual acceptance:** still not closed and still owned by the user. What automated evidence now covers: pages genuinely rasterize, dimensions are sane at thumbnail width, orientation handling is correct, and malformed input reaches the error state. What it cannot cover: actual pixels on screen, click-to-navigate in the live app, and narrow-panel overflow.

@@ -110,6 +110,17 @@ test('hides thumbnails from assistive technology because the button is already l
   assert.match(markup, /aria-label="Go to page 1"/)
 })
 
+// PT-A-011
+test('prefers an explicitly supplied page shape over the portrait default', () => {
+  const landscape = renderToStaticMarkup(
+    <PageThumbnail data={bytes()} pageNumber={1} aspectRatio={1.415} />
+  )
+  const fallback = renderToStaticMarkup(<PageThumbnail data={bytes()} pageNumber={1} />)
+
+  assert.match(landscape, /aspect-ratio:1\.415/)
+  assert.match(fallback, new RegExp(`aspect-ratio:${PAGE_THUMBNAIL_ASPECT_RATIO}`))
+})
+
 // PT-A-010
 test('reports an empty page state', () => {
   const markup = renderToStaticMarkup(

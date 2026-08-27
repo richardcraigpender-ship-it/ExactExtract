@@ -5,8 +5,23 @@ import '../lib/pdf'
 /** Fixed render width in CSS pixels. */
 export const PAGE_THUMBNAIL_WIDTH = 96
 
-/** Fallback page shape (width / height, ISO A4 portrait) used before the real page reports its own. */
+/**
+ * Fallback page shape (width / height, ISO A4 portrait) used only when nothing better is known.
+ *
+ * Real projects mix orientations - the bundled fixtures contain both portrait and landscape pages -
+ * so no single constant fits every page. Callers that already know a page's shape should pass
+ * `aspectRatio`; otherwise the first sibling page to render seeds the shape for the rest.
+ */
 export const PAGE_THUMBNAIL_ASPECT_RATIO = 0.707
+
+/**
+ * Last observed page shape per document, keyed by identity of the byte array.
+ *
+ * Pages within one document are usually the same shape, so the first page to finish rendering gives
+ * its siblings a far better placeholder than the portrait default and stops the strip reflowing as
+ * each thumbnail arrives. A WeakMap keeps this from retaining PDF bytes after the document closes.
+ */
+const documentShapes = new WeakMap<Uint8Array, number>()
 
 export interface PageThumbnailProps {
   /** Raw bytes of the active PDF, or null when no document is loaded. */
@@ -43,7 +58,8 @@ export const PageThumbnail = memo(function PageThumbnail({
   }, [data, pageNumber])
 
   const file = useMemo(() => (data && data.length > 0 ? { data } : null), [data])
-  const shape = measuredRatio ?? aspectRatio ?? PAGE_THUMBNAIL_ASPECT_RATIO
+  const knownShape = data ? documentShapes.get(data) : undefined
+  const shape = measuredRatio ?? aspectRatio ?? knownShape ?? PAGE_THUMBNAIL_ASPECT_RATIO
 
   if (!file) {
     return (
@@ -77,7 +93,9 @@ export const PageThumbnail = memo(function PageThumbnail({
           error={<></>}
           onLoadSuccess={({ originalWidth, originalHeight }) => {
             if (originalWidth > 0 && originalHeight > 0) {
-              setMeasuredRatio(originalWidth / originalHeight)
+              const ratio = originalWidth / originalHeight
+              setMeasuredRatio(ratio)
+              if (data) documentShapes.set(data, ratio)
             }
           }}
           onRenderSuccess={() => setState('ready')}
