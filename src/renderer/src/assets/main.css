@@ -1665,6 +1665,61 @@ button:disabled {
   font-size: 14px;
   font-weight: 750;
 }
+/* The rendered thumbnail supplies its own dimensions, so the placeholder shape must step aside. */
+.page-preview-thumbnail.is-rendered {
+  aspect-ratio: auto;
+  border: none;
+  background: none;
+}
+/* Reserves its box before the page renders so a slow load cannot resize the Pages panel. */
+.page-thumbnail {
+  position: relative;
+  display: grid;
+  place-items: center;
+  max-width: 100%;
+  overflow: hidden;
+  background: #fff;
+}
+/* Sits behind the rendered canvas, so it shows through while loading and after a failure. */
+.page-thumbnail-label {
+  position: absolute;
+  z-index: 0;
+  color: #485249;
+  font-size: 14px;
+  font-weight: 750;
+}
+.page-thumbnail canvas {
+  position: relative;
+  z-index: 1;
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.page-thumbnail[data-state='error'] {
+  background: var(--studio-surface);
+}
+.page-preview-thumbnail .react-pdf__Document,
+.page-preview-thumbnail .react-pdf__Page {
+  width: 100%;
+  min-width: 0;
+}
+.page-preview-thumbnail .react-pdf__Page {
+  display: grid;
+  place-items: start center;
+  overflow: hidden;
+}
+.page-preview-thumbnail canvas {
+  display: block;
+  width: 100% !important;
+  height: auto !important;
+}
+.page-thumbnail-placeholder {
+  padding: 8px;
+  color: var(--studio-text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  text-align: center;
+}
 .save-status {
   min-width: 58px;
   color: var(--studio-text-muted);
@@ -3234,4 +3289,99 @@ button:disabled {
   .template-column .required-toggle {
     grid-column: 1 / -1;
   }
+}
+
+/* Highlight tool panel */
+.source-status-highlight.is-border-only {
+  background: transparent;
+  border-width: 2px;
+}
+.source-status-highlight.is-border-only span {
+  opacity: 0;
+}
+.source-status-highlight.is-border-only:is(.is-selected, .is-checked, :hover, :focus-visible) span {
+  opacity: 1;
+}
+
+.highlight-tool-panel select,
+.highlight-tool-panel input[type='number'] {
+  min-width: 0;
+  width: 100%;
+}
+.highlight-tool-panel {
+  display: grid;
+  gap: 14px;
+  padding: 4px 2px 2px;
+}
+.highlight-tool-measurements {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.highlight-tool-measurements caption {
+  margin-bottom: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: left;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.75;
+}
+.highlight-tool-measurements th,
+.highlight-tool-measurements td {
+  padding: 3px 6px;
+  text-align: right;
+  border-bottom: 1px solid var(--border-subtle, #e2e5ea);
+}
+.highlight-tool-measurements thead th {
+  font-size: 11px;
+  opacity: 0.75;
+}
+.highlight-tool-measurements tbody th {
+  text-align: left;
+  font-weight: 600;
+}
+.highlight-tool-group {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--border-subtle, #d8dce3);
+  border-radius: 8px;
+}
+.highlight-tool-group legend {
+  padding: 0 6px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.highlight-tool-group label {
+  display: grid;
+  grid-template-columns: 1fr minmax(0, 160px);
+  align-items: center;
+  gap: 10px;
+  font-size: 13px;
+}
+.highlight-tool-panel .highlight-tool-check {
+  grid-template-columns: auto 1fr;
+  justify-content: start;
+}
+.highlight-tool-panel .highlight-tool-check input {
+  width: auto;
+}
+.highlight-tool-hint {
+  margin: 0;
+  font-size: 12px;
+  opacity: 0.8;
+}
+.highlight-tool-panel input[aria-invalid='true'] {
+  border-color: #c23a2a;
+  outline-color: #c23a2a;
+}
+.highlight-tool-status {
+  margin: 0;
+  min-height: 1em;
+  font-size: 12px;
 }

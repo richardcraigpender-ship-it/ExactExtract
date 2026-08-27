@@ -143,7 +143,7 @@ export const ExportPanel = React.memo(function ExportPanel({
             type="button"
             disabled={isSaving || snapshot.summary.keptCount === 0}
             onClick={() => onSave('entry-images')}
-            title="Create a folder of fixed-size PNG crops, using the first kept source region as the crop size"
+            title="Create a folder of fixed-size PNG crops, sized to the largest kept source region so nothing is clipped"
           >
             <Images size={13} /> Save kept entry PNGs
           </button>

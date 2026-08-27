@@ -25,6 +25,7 @@ import 'react-pdf/dist/Page/TextLayer.css'
 import '../lib/pdf'
 import {
   describeViewerHighlight,
+  describeViewerHighlightCount,
   projectViewerRegion,
   type NormalizedViewerRegion,
   type ViewerHighlight,
@@ -46,9 +47,13 @@ interface PdfViewerProps {
   highlight?: ViewerHighlight
   highlights?: ViewerHighlight[]
   requestedPage?: number
+  highlightsVisible?: boolean
+  highlightEditMode?: boolean
+  highlightStyleMode?: 'filled' | 'border'
   onPageChange?: (page: number) => void
   onSelectHighlight?: (entryId: string) => void
   onChangeHighlight?: (entryId: string, regionIndex: number, region: NormalizedViewerRegion) => void
+  onToggleHighlights?: () => void
 }
 
 export const PdfViewer = memo(
@@ -59,21 +64,29 @@ export const PdfViewer = memo(
       highlight,
       highlights = [],
       requestedPage,
+      highlightsVisible,
+      highlightEditMode = true,
+      highlightStyleMode = 'filled',
       onPageChange,
       onSelectHighlight,
-      onChangeHighlight
+      onChangeHighlight,
+      onToggleHighlights
     },
     ref
   ) {
     const viewportRef = useRef<HTMLDivElement>(null)
     const highlightDescriptionId = useId()
+    const highlightCountId = useId()
     const [pageCount, setPageCount] = useState(0)
     const [pageNumber, setPageNumber] = useState(1)
     const [rotation, setRotation] = useState<ViewerRotation>(0)
     const [zoom, setZoom] = useState(1)
     const [availableWidth, setAvailableWidth] = useState(700)
     const [pageAspectRatio, setPageAspectRatio] = useState(8.5 / 11)
-    const [showStatusOverlay, setShowStatusOverlay] = useState(true)
+    const [internalOverlayVisible, setInternalOverlayVisible] = useState(true)
+    // The tool panel owns visibility when it supplies a value; otherwise the viewer keeps its
+    // own toggle so the component stays usable standalone (and in existing tests).
+    const showStatusOverlay = highlightsVisible ?? internalOverlayVisible
     const [draftRegion, setDraftRegion] = useState<
       (NormalizedViewerRegion & { entryId: string; regionIndex: number }) | null
     >(null)
@@ -94,7 +107,7 @@ export const PdfViewer = memo(
     }
 
     useImperativeHandle(ref, () => ({
-      toggleOverlay: () => setShowStatusOverlay((current) => !current),
+      toggleOverlay: () => setInternalOverlayVisible((current) => !current),
       zoomIn: () => zoomBy(0.1),
       zoomOut: () => zoomBy(-0.1)
     }))
@@ -128,13 +141,26 @@ export const PdfViewer = memo(
     const displayedHighlights = highlights.filter((candidate) => candidate.page === displayedPage)
     const renderedPageWidth = Math.min(availableWidth, 820) * zoom
     const renderedPageAspectRatio = rotation % 180 === 0 ? pageAspectRatio : 1 / pageAspectRatio
+    const showHighlightCount = showStatusOverlay && displayedHighlights.length > 0
+    const viewerDescribedBy =
+      [
+        showHighlightCount ? highlightCountId : null,
+        activeHighlight ? highlightDescriptionId : null
+      ]
+        .filter(Boolean)
+        .join(' ') || undefined
 
     return (
       <section
         className="pdf-viewer"
         aria-label={`PDF viewer for ${fileName}`}
-        aria-describedby={activeHighlight ? highlightDescriptionId : undefined}
+        aria-describedby={viewerDescribedBy}
       >
+        {showHighlightCount && (
+          <p className="sr-only" id={highlightCountId}>
+            {describeViewerHighlightCount(displayedHighlights, displayedPage)}
+          </p>
+        )}
         {activeHighlight && (
           <p className="sr-only" id={highlightDescriptionId}>
             {describeViewerHighlight(activeHighlight)}
@@ -196,7 +222,10 @@ export const PdfViewer = memo(
                 : 'Show keep/maybe/exclude overlay'
             }
             aria-pressed={showStatusOverlay}
-            onClick={() => setShowStatusOverlay((current) => !current)}
+            onClick={() => {
+              if (onToggleHighlights) onToggleHighlights()
+              else setInternalOverlayVisible((current) => !current)
+            }}
           >
             {showStatusOverlay ? <Eye size={17} /> : <EyeOff size={17} />}
           </button>
@@ -261,6 +290,7 @@ export const PdfViewer = memo(
                 displayedHighlights.map((candidate, index) => {
                   const isClickable = Boolean(onSelectHighlight && candidate.entryId)
                   const isEditable = Boolean(
+                    highlightEditMode &&
                     candidate.selected &&
                     candidate.entryId &&
                     candidate.regionIndex !== undefined &&
@@ -354,7 +384,7 @@ export const PdfViewer = memo(
                   }
                   return (
                     <div
-                      className={`source-status-highlight source-status-${candidate.status ?? 'maybe'} ${candidate.selected ? 'is-selected' : ''} ${candidate.checked ? 'is-checked' : ''} ${isClickable ? 'is-clickable' : ''} ${isEditable ? 'is-editable' : ''}`}
+                      className={`source-status-highlight source-status-${candidate.status ?? 'maybe'} ${highlightStyleMode === 'border' ? 'is-border-only' : ''} ${candidate.selected ? 'is-selected' : ''} ${candidate.checked ? 'is-checked' : ''} ${isClickable ? 'is-clickable' : ''} ${isEditable ? 'is-editable' : ''}`}
                       key={`${candidate.page}-${candidate.x}-${candidate.y}-${index}`}
                       role={isClickable ? 'button' : undefined}
                       tabIndex={isClickable ? 0 : undefined}

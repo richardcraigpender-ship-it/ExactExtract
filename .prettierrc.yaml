@@ -2,3 +2,6 @@ singleQuote: true
 semi: false
 printWidth: 100
 trailingComma: none
+# core.autocrlf checks files out with CRLF on Windows; "auto" keeps Prettier from
+# flagging every line while Git still stores LF.
+endOfLine: auto

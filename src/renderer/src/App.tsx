@@ -24,9 +24,20 @@ import { ExportPanel, type PdfExportFormat } from './components/ExportPanel'
 import { HeaderBar } from './components/HeaderBar'
 import { SourcesRail } from './components/SourcesRail'
 import { PagePreviewStrip } from './components/PagePreviewStrip'
+import { PageThumbnail } from './components/PageThumbnail'
 import { RecentProjectsPanel } from './components/RecentProjectsPanel'
 import { ProductUpdatesPanel } from './components/ProductUpdatesPanel'
 import { RemovePagesPanel } from './components/RemovePagesPanel'
+import { HighlightToolPanel } from './components/HighlightToolPanel'
+import {
+  applyHighlightGeometry,
+  measureHighlight,
+  resolveHighlightTargets,
+  type HighlightGeometryField,
+  type HighlightScope,
+  type HighlightStyleMode,
+  type HighlightUnit
+} from './lib/highlightGeometry'
 import {
   DEFAULT_KEPT_ENTRIES_LAYOUT,
   createDefaultKeptEntriesLayout
@@ -202,6 +213,15 @@ function restorePreflight(project: ProjectState): Record<string, PdfPreflightRes
   )
 }
 
+const INTERACTIVE_SHORTCUT_SELECTOR =
+  'button, input, textarea, select, [role="button"], [role="dialog"], [role="tab"], [role="menu"], [contenteditable="true"], .command-popup, .shortcuts-help'
+
+/** Shortcuts are suppressed while focus sits on an interactive control. */
+function isFocusableShortcutTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false
+  return target.closest(INTERACTIVE_SHORTCUT_SELECTOR) !== null
+}
+
 function App(): React.JSX.Element {
   const screenHeadingRef = useRef<HTMLHeadingElement>(null)
   const undoStackRef = useRef<ProjectState['entries'][]>([])
@@ -241,6 +261,7 @@ function App(): React.JSX.Element {
   const [tableHeaderLabels, setTableHeaderLabels] = useState('Description, Amount')
   const [tableTopY, setTableTopY] = useState('')
   const [tableBottomY, setTableBottomY] = useState('')
+  const [tableTemplateStatus, setTableTemplateStatus] = useState<string | null>(null)
   const [tableColumns, setTableColumns] = useState<TableColumnDefinition[]>([
     { name: 'Description', type: 'text', xStart: 36, xEnd: 300, required: true },
     { name: 'Amount', type: 'currency', xStart: 300, xEnd: 576, required: true }
@@ -384,13 +405,24 @@ function App(): React.JSX.Element {
         Number(tableTopY) <= Number(tableBottomY)))
 
   const saveTableTemplate = (): void => {
-    if (tableTemplateInvalid || !tableTemplate) return
+    if (tableTemplateInvalid || !tableTemplate) {
+      setTableTemplateStatus('Fix the template fields before saving.')
+      return
+    }
+
+    const nextTemplate = structuredClone(tableTemplate)
     setSavedTableTemplates((current) => {
       const next = [
-        ...current.filter((template) => template.name !== tableTemplate.name),
-        structuredClone(tableTemplate)
+        ...current.filter((template) => template.name !== nextTemplate.name),
+        nextTemplate
       ].sort((left, right) => left.name.localeCompare(right.name))
-      localStorage.setItem(TABLE_TEMPLATES_STORAGE_KEY, JSON.stringify(next))
+      try {
+        localStorage.setItem(TABLE_TEMPLATES_STORAGE_KEY, JSON.stringify(next))
+        setTableTemplateStatus(`Saved “${nextTemplate.name}”.`)
+      } catch {
+        setTableTemplateStatus('Could not save the template in this app session.')
+        return current
+      }
       return next
     })
   }
@@ -470,8 +502,9 @@ function App(): React.JSX.Element {
       reviewStatus
     ]
   )
+  const projectEntries = useMemo(() => project?.entries ?? [], [project?.entries])
   const filteredEntries = useIncrementalReviewFilter(
-    project?.entries ?? [],
+    projectEntries,
     debouncedReviewFilterKey,
     matchesReviewEntry
   )
@@ -705,6 +738,76 @@ function App(): React.JSX.Element {
     },
     []
   )
+
+  const [highlightsVisible, setHighlightsVisible] = useState(true)
+  const [highlightEditMode, setHighlightEditMode] = useState(false)
+  const [highlightStyleMode, setHighlightStyleMode] = useState<HighlightStyleMode>('filled')
+  const [highlightScope, setHighlightScope] = useState<HighlightScope>('entry')
+  const [highlightResult, setHighlightResult] = useState<string | null>(null)
+
+  const highlightTargets = useMemo(
+    () =>
+      resolveHighlightTargets(project?.entries ?? [], {
+        scope: highlightScope,
+        documentId: activeDocumentId,
+        // Keep-scope edits span the whole document; the other scopes stay on the page in
+        // view so a bulk edit can't silently reach highlights the user cannot see.
+        pageNumber: highlightScope === 'keep' ? undefined : requestedPdfPage,
+        selectedEntryId,
+        selectedEntryIds: selectedReviewIds
+      }),
+    [
+      activeDocumentId,
+      highlightScope,
+      project?.entries,
+      requestedPdfPage,
+      selectedEntryId,
+      selectedReviewIds
+    ]
+  )
+
+  const highlightMeasurements = useMemo(() => {
+    const target = resolveHighlightTargets(project?.entries ?? [], {
+      scope: 'entry',
+      documentId: activeDocumentId,
+      pageNumber: requestedPdfPage,
+      selectedEntryId
+    })[0]
+    return measureHighlight(project?.entries ?? [], target, project?.pages ?? [])
+  }, [activeDocumentId, project?.entries, project?.pages, requestedPdfPage, selectedEntryId])
+
+  const applyHighlightEdit = useCallback(
+    (
+      field: HighlightGeometryField,
+      mode: 'absolute' | 'delta',
+      value: number,
+      unit: HighlightUnit
+    ): void => {
+      setProject((current) => {
+        if (!current) return current
+        const updatedAt = new Date().toISOString()
+        const result = applyHighlightGeometry(
+          current.entries,
+          highlightTargets,
+          { field, mode, value, unit },
+          current.pages,
+          updatedAt
+        )
+        if (result.changedRegionCount === 0) {
+          setHighlightResult('No highlights were changed.')
+          return current
+        }
+        setHighlightResult(
+          `Updated ${result.changedRegionCount} highlight${
+            result.changedRegionCount === 1 ? '' : 's'
+          } across ${result.changedEntryCount} entr${result.changedEntryCount === 1 ? 'y' : 'ies'}.`
+        )
+        return { ...current, updatedAt, entries: result.entries }
+      })
+    },
+    [highlightTargets]
+  )
+
   const projectSnapshot = useMemo<ProjectState | null>(() => {
     if (!project) return null
     const analysisEvent = {
@@ -2007,7 +2110,7 @@ function App(): React.JSX.Element {
         }
         if (lowerKey === 'h') {
           event.preventDefault()
-          pdfViewerRef.current?.toggleOverlay()
+          setHighlightsVisible((current) => !current)
           return
         }
         if (lowerKey === 'r') {
@@ -2074,6 +2177,8 @@ function App(): React.JSX.Element {
     screen,
     selectedEntryId,
     selectedReviewIds,
+    commandPopup,
+    setEntryStatus,
     showShortcutsHelp,
     undoReview
   ])
@@ -2087,13 +2192,6 @@ function App(): React.JSX.Element {
       if (Number.isFinite(page)) navigateToReviewPage(page)
     }
     setCommandPopup(null)
-  }
-
-  const isFocusableShortcutTarget = (target: EventTarget | null): boolean => {
-    if (!(target instanceof HTMLElement)) return false
-    const interactiveSelector =
-      'button, input, textarea, select, [role="button"], [role="dialog"], [role="tab"], [role="menu"], [contenteditable="true"], .command-popup, .shortcuts-help'
-    return target.closest(interactiveSelector) !== null
   }
 
   const customSettingsInvalid =
@@ -2126,7 +2224,6 @@ function App(): React.JSX.Element {
       else if (command === 'zoom-in') pdfViewerRef.current?.zoomIn()
       else if (command === 'import') void choosePdfs()
       else if (command === 'save') void retrySave()
-      else if (command === 'highlights') pdfViewerRef.current?.toggleOverlay()
       else {
         setCommandPopup({
           kind: 'goto',
@@ -2437,6 +2534,7 @@ function App(): React.JSX.Element {
     [
       addBulkTag,
       bulkTag,
+      clearReviewSelection,
       filteredEntries,
       hasSearchQuery,
       historyState.redoCount,
@@ -2450,9 +2548,13 @@ function App(): React.JSX.Element {
       reviewQuery,
       reviewSource,
       reviewStatus,
+      resetReviewFilters,
       selectedEntry,
       selectedReviewEntries,
       selectedReviewIds,
+      selectAllFilteredEntries,
+      selectCurrentPageEntries,
+      selectVisibleEntries,
       setBulkEntryStatus,
       sourcePageEntries,
       splitSelectedReviewEntry,
@@ -2643,6 +2745,11 @@ function App(): React.JSX.Element {
                 Extract, verify, reconcile, and export difficult PDFs without sending source files
                 off-device.
               </p>
+              {error && (
+                <div className="error-banner" role="alert">
+                  {error}
+                </div>
+              )}
               <div className="onboarding-actions">
                 <button
                   className="primary-button"
@@ -3004,6 +3111,11 @@ function App(): React.JSX.Element {
                     >
                       <X size={15} />
                     </button>
+                    {tableTemplateStatus && (
+                      <small className="template-status" role="status">
+                        {tableTemplateStatus}
+                      </small>
+                    )}
                   </div>
                   <div className="template-basics">
                     <label>
@@ -3279,6 +3391,10 @@ function App(): React.JSX.Element {
                   onPageChange={handlePdfPageChange}
                   onSelectHighlight={selectHighlightEntry}
                   onChangeHighlight={changeViewerHighlight}
+                  highlightsVisible={highlightsVisible}
+                  highlightEditMode={highlightEditMode}
+                  highlightStyleMode={highlightStyleMode}
+                  onToggleHighlights={() => setHighlightsVisible((current) => !current)}
                 />
               </div>
               <div
@@ -3301,6 +3417,7 @@ function App(): React.JSX.Element {
               <RightWorkspace
                 mode={workspaceMode}
                 warningCount={reviewIssues.length}
+                highlightsVisible={highlightsVisible}
                 onModeChange={setWorkspaceMode}
                 onCommand={handleRightWorkspaceCommand}
                 entries={
@@ -3429,6 +3546,9 @@ function App(): React.JSX.Element {
                       pageCount={sourcePageCount}
                       currentPage={reviewSourcePage}
                       onSelectPage={navigateToReviewPage}
+                      renderThumbnail={(pageNumber) => (
+                        <PageThumbnail data={pdfData} pageNumber={pageNumber} />
+                      )}
                     />
                   ),
                   warnings: (
@@ -3464,6 +3584,22 @@ function App(): React.JSX.Element {
                       onUndo={undoPageRemoval}
                       onRedo={redoPageRemoval}
                       onRemovePages={handleRemovePagesAction}
+                    />
+                  ),
+                  marks: (
+                    <HighlightToolPanel
+                      visible={highlightsVisible}
+                      editMode={highlightEditMode}
+                      styleMode={highlightStyleMode}
+                      scope={highlightScope}
+                      affectedCount={highlightTargets.length}
+                      measurements={highlightMeasurements}
+                      lastResult={highlightResult}
+                      onChangeVisible={setHighlightsVisible}
+                      onChangeEditMode={setHighlightEditMode}
+                      onChangeStyleMode={setHighlightStyleMode}
+                      onChangeScope={setHighlightScope}
+                      onApply={applyHighlightEdit}
                     />
                   )
                 }}

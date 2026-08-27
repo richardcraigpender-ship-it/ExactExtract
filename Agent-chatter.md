@@ -1,4 +1,4 @@
-# Agent Chatter
+ddddddddddddddddddddddddddddddddddddd# Agent Chatter
 
 Shared coordination log for all agents working on PDF Extract Review Studio.
 
@@ -548,9 +548,17 @@ Ownership notes:
 
 ## Active ownership (highlight panel)
 
-- Pending kickoff: Agent A/B/C may start when prompted, using the implementation board above as the working contract.
+- Delivered 2026-08-27: the Highlight Tool Panel MVP is implemented on `main`. Agent A/B/C scopes were completed in a single pass; the board above now describes shipped behaviour rather than pending work.
 
 ## Handoff log
+
+- 2026-08-27T00:00:00+01:00 — Highlight Tool Panel MVP implemented. New `src/renderer/src/lib/highlightGeometry.ts` provides the pure geometry engine (clamping, min-size, normalized↔pdf-points round-trip, scope resolution, identity preservation for untouched entries). New `src/renderer/src/components/HighlightToolPanel.tsx` renders the panel inside the existing `WorkspaceToolWindow` (focus trap, Escape, focus restore come for free). `PdfViewer` gained `highlightsVisible` / `highlightEditMode` / `highlightStyleMode` / `onOpenHighlightTools`; the eye button now opens the panel, drag-and-resize is gated behind explicit edit mode, and a border-only style mode was added. `App.tsx` owns panel state; the `h` shortcut and `highlights` command now toggle panel-owned visibility instead of viewer-internal state. Gates: typecheck clean, 303/303 tests pass (15 new), production build succeeds, app boots.
+
+- 2026-08-27T18:45:00+01:00 — Lint restored. Added the missing `eslint.config.mjs` (ESLint 9 flat config) wiring the already-installed `@electron-toolkit` TS/prettier configs plus the react, react-hooks, and react-refresh plugins; the repo had the dependencies but no config file, so `eslint` had been failing outright. Also set `endOfLine: auto` in `.prettierrc.yaml` (Git checks out CRLF here via `core.autocrlf=true`, which Prettier was flagging on ~25k lines), ignored the generated Tesseract WASM bundles under `src/renderer/public/ocr/`, and allowed `require()` in `.cjs` files. Fixed the two real errors surfaced: a ref written during render in `useIncrementalReviewFilter.ts` (now committed in its own effect) and `isFocusableShortcutTarget` being used before declaration in `App.tsx` (hoisted to module scope). `npm run lint` now exits 0 with 12 pre-existing `react-hooks/exhaustive-deps` warnings remaining.
+
+- 2026-08-27T21:30:00+01:00 — Highlight tools relocated from a modal into the right panel, per user request. The viewer toolbar eye button is now a plain visibility toggle again (`onToggleHighlights`), the right-strip Marks command switches the right panel to a new `marks` context tab, and the panel body (visibility toggle, edit-mode gate, style mode, scope, bulk geometry) lives in that tab. The marks tab icon switches to `EyeOff` and its accessible name gains "(highlights hidden)" so overlay state is readable from the strip without opening the tools. Added a `HighlightUnit` ('percent' | 'points') to `HighlightGeometryEdit`: point edits are applied in the PDF's bottom-up user space and converted back, so setting Y in points matches the coordinates stored in the file. Added `measureHighlight` plus a read-only table showing the selected highlight's current X/Y/W/H in both percent and PDF points. `WorkspaceToolWindow` is untouched and still used by Export and Recent Projects.
+
+- 2026-08-27T22:30:00+01:00 — Removed a duplicate Marks button. The previous change added the `marks` context tab but left the older `highlights` quick command in place, so the right strip rendered two eye-icon "Marks" buttons that both opened the panel. Dropped the `highlights` member from `EntryActionCommand`, its entry in the `commands` list, and the now-dead branch in `handleRightWorkspaceCommand`. The tab is the single Marks control (it can show selected state, which a quick command cannot). Added a regression test asserting exactly one `>Marks<` label renders in the strip.
 
 - 2026-08-25T15:05:00+01:00 — Planning handoff added for Highlight Tool Panel MVP. Ownership split intentionally kept as-is per coordinator direction. Added scoped MVP goals, per-agent file ownership, task lists, test IDs, execution order, and quality gates so parallel agents can start immediately.
 
@@ -2525,6 +2533,170 @@ Only Agent A may edit central product integration files (`App.tsx`, shared contr
 |   4 | Fix only release-candidate product defects   | Fresh NSIS installer and clean-profile workflow         | Independent RC happy/failure paths                       | Release candidate accepted or blocked |
 |   5 | Contingency fixes and final handoff          | Rebuild, hashes, docs, reinstall/uninstall              | Final accessibility/security/recovery report             | Go/no-go decision                     |
 
+## 2026-08-27 Pages Menu Thumbnail Preview - Three-Agent Sprint
+
+### Sprint objective
+
+Show small visual previews of the active PDF pages in the right-panel Pages menu. Clicking a preview must navigate the main PDF viewer to the selected page without changing existing Review, extraction, source-selection, or entry-highlight behavior.
+
+**Total estimate:** 13 SP  
+**Timebox:** 1 working day, maximum 8 hours  
+**4-hour checkpoint:** A usable thumbnail preview must be visible and clickable.  
+**6-hour cutoff:** Production implementation stops; the remaining time is reserved for tests, build verification, and handoff.
+
+### Current implementation anchors
+
+- `src/renderer/src/components/PagePreviewStrip.tsx` already renders page buttons, current-page state, empty state, and an optional `renderThumbnail` callback.
+- `src/renderer/src/App.tsx` already mounts `PagePreviewStrip` in the `pages` context and owns `pdfData`, `sourcePageCount`, `reviewSourcePage`, and `navigateToReviewPage`.
+- `react-pdf` and the existing `PdfViewer` provide the established PDF rendering path.
+- `src/renderer/src/components/RightWorkspaceShells.test.tsx` already covers the Pages preview strip contract.
+
+### Agent A - Thumbnail component and rendering contract
+
+**Owner:** New thumbnail component and `PagePreviewStrip` rendering contract  
+**Estimate:** 5 SP  
+**Timebox:** 3 hours  
+**Files:** New `src/renderer/src/components/PageThumbnail.tsx`, `PagePreviewStrip.tsx`, focused component tests, narrowly related CSS
+
+#### Tasks
+
+1. Create a focused `PageThumbnail` component accepting PDF bytes, page number, fixed width, and optional page metadata.
+2. Use `react-pdf` with text and annotation layers disabled for compact rendering.
+3. Provide loading, rendering-error, and missing-data fallbacks. The page number must remain visible in every state.
+4. Use a fixed thumbnail width and stable aspect-ratio wrapper so loading cannot resize the panel.
+5. Preserve the existing `renderThumbnail` prop and all page-button accessibility attributes.
+6. Add tests for renderer invocation, loading/fallback markup, empty data, and current-page semantics.
+
+#### Agent A acceptance
+
+- The component has a small, documented prop surface.
+- It does not create viewer controls, overlays, or full-size text layers.
+- It can render independently of `App.tsx`.
+- Focused tests and web typecheck pass.
+
+#### Agent A handoff
+
+Report the final component props, thumbnail dimensions, loading/error behavior, and any PDF.js worker assumptions to Agent B. Do not edit `App.tsx`.
+
+### Agent B - App and Pages menu integration
+
+**Owner:** Active PDF data flow and right-panel integration  
+**Estimate:** 5 SP  
+**Timebox:** 3 hours  
+**Files:** `src/renderer/src/App.tsx`, narrowly related Pages CSS, only the required integration portion of `PagePreviewStrip.tsx`
+
+#### Tasks
+
+1. Re-read the current `App.tsx` before editing because it has concurrent changes.
+2. Pass the active `pdfData` into Agent A's thumbnail renderer from the existing `pages` context.
+3. Use the existing `sourcePageCount`, `reviewSourcePage`, and `navigateToReviewPage` values.
+4. Confirm thumbnails refresh when the active source changes or edited PDF bytes replace the original bytes after page removal.
+5. Preserve the existing fallback when no PDF is loaded.
+6. Keep thumbnail buttons isolated from parent workspace handlers using the existing propagation guards.
+7. Add only the CSS required for fixed dimensions, selected-page styling, narrow-panel layout, and overflow control.
+
+#### Agent B acceptance
+
+- Opening Pages displays previews for the active PDF.
+- Clicking page 3 calls the existing page-navigation path with page 3.
+- Changing source documents replaces the displayed thumbnails.
+- Page removal does not leave stale thumbnails or an invalid selected page.
+- No unrelated `App.tsx` refactor is included.
+
+#### Agent B handoff
+
+List the exact integration files and confirm that the Pages menu works with loaded, missing, edited, and changed PDF data. Release the central UI changes to Agent C for validation.
+
+### Agent C - QA, accessibility, and performance acceptance
+
+**Owner:** Independent verification and release-risk assessment  
+**Estimate:** 3 SP  
+**Timebox:** 2 hours, starting as soon as Agent A's contract is available  
+**Files:** Focused Pages tests and acceptance notes; production edits only for confirmed defects
+
+#### Tasks
+
+1. Extend `RightWorkspaceShells.test.tsx` or add `PageThumbnail.test.tsx` for:
+   - Three page buttons and three thumbnail render calls.
+   - Correct `aria-current` on the selected page.
+   - Page selection callback receiving the clicked page number.
+   - Empty page state.
+   - Missing PDF data and thumbnail render failure.
+2. Test 1-page, 29-page, and a larger representative PDF where available.
+3. Verify that text and annotation layers are disabled and thumbnails do not instantiate full viewer controls.
+4. Check desktop and narrow right-panel widths for overflow, clipping, and stable layout.
+5. Verify keyboard operation and accessible names for every page button.
+6. Run the focused tests, `npm run typecheck`, `npm test`, and `npm run build`.
+7. Classify remaining issues as Verified, Partial, Blocked, or Deferred.
+
+#### Agent C acceptance
+
+- No critical navigation or accessibility regression is found.
+- Thumbnail rendering remains bounded and does not make the Pages menu unusable for a normal multi-page PDF.
+- Any need for virtualization or caching is recorded as follow-up work, not introduced late in the sprint.
+
+### Dependency and ownership rules
+
+1. Agent A owns the thumbnail component contract and may work without waiting for App integration.
+2. Agent B owns the central `App.tsx` integration and must preserve current user changes.
+3. Agent C may add tests in parallel but does not modify production code without a confirmed defect and coordination note.
+4. No agent changes extraction, OCR, export, or unrelated Review behavior.
+5. Shared coordination notes are appended only after a completed handoff or verified blocker.
+
+### Schedule and gates
+
+| Time | Agent A | Agent B | Agent C | Gate |
+| ---: | --- | --- | --- | --- |
+| 0-1 hr | Component contract and fixed shell | Inspect current App integration | Prepare test matrix | Props and ownership agreed |
+| 1-3 hr | Renderer, fallbacks, focused tests | Wire active PDF data and navigation | Add contract tests | Minimum preview path works |
+| 3-4 hr | Fix component defects | Finish responsive CSS | Run first integration checks | Usable clickable preview visible |
+| 4-6 hr | Release component | Resolve integration defects | Run accessibility and large-PDF checks | Production implementation frozen |
+| 6-8 hr | Handoff only | Handoff only | Full gates and acceptance report | Go/no-go for merge |
+
+### Exit criteria
+
+- [ ] Pages menu shows actual miniature previews of the active PDF.
+- [ ] Preview clicks navigate the main viewer to the correct page.
+- [ ] Current page is visibly and accessibly selected.
+- [ ] Loading, missing-data, and render-error states are usable.
+- [ ] The panel has no horizontal overflow at narrow widths.
+- [ ] Existing source, Review, highlight, and page-removal behavior remains intact.
+- [ ] Focused tests, full typecheck, full tests, and production build pass.
+
+### Explicitly deferred
+
+- Thumbnail virtualization.
+- Persistent thumbnail caching.
+- Entry highlight overlays inside thumbnails.
+- OCR-specific thumbnail annotations.
+- Multi-document thumbnail grouping.
+- New PDF rendering infrastructure.
+
+### Agent B handoff - Pages menu thumbnail integration (2026-08-28)
+
+- Integrated `PageThumbnail` into the existing `pages` context in `src/renderer/src/App.tsx` using the active `pdfData`, `sourcePageCount`, `reviewSourcePage`, and `navigateToReviewPage` flow.
+- Preserved the existing page-button event guards and current-page accessibility state in `src/renderer/src/components/PagePreviewStrip.tsx`.
+- Added fixed-size thumbnail, canvas, loading, and fallback styling in `src/renderer/src/assets/main.css`.
+- Preserved Agent A's richer `PageThumbnail` contract and lazy-loaded `react-pdf` from `src/renderer/src/components/PageThumbnail.tsx` so no-data static rendering does not import browser-only PDF code.
+- Validation passed: focused Pages suite 5/5, `npm run typecheck:web`, and `npm run build`.
+- Build reports only the expected Vite chunking warning because `react-pdf` is also statically used by the main PDF viewer; no build failure resulted.
+
+### Agent C acceptance handoff - Pages menu thumbnail preview (2026-08-28)
+
+- Added focused acceptance coverage in `src/renderer/src/components/RightWorkspaceShells.test.tsx` for one rendered-preview marker per page while preserving page-button and current-page semantics.
+- Verified missing PDF data remains visible as a numbered empty thumbnail without creating a PDF viewer.
+- Focused Pages suite: 5/5 passed.
+- Full regression suite: 337/337 tests passed.
+- `npm run typecheck`: passed for Node and Web targets.
+- `npm run build`: passed. Vite emitted one existing non-fatal chunking warning for the statically and dynamically imported `PdfViewer` module.
+- Manual visual inspection of a loaded multi-page PDF and narrow-panel responsive behavior remains the only unautomated acceptance item.
+
+### Manual runtime acceptance attempt - 2026-08-28
+
+- Development server responded successfully at `http://localhost:5173/` with HTTP 200 and the expected root markup.
+- Integrated browser inspection was blocked by the editor network policy for localhost, so thumbnail rendering, click navigation, and narrow-panel overflow could not be observed programmatically in this session.
+- Manual acceptance remains **Blocked by tooling**, not reported as a product failure. The required check is to open the running Electron app, load a multi-page PDF, open Pages, click a thumbnail, and narrow the right panel.
+
 ### Dependency chain
 
 1. Agent A real-OCR baseline unlocks Agent C's authoritative OCR acceptance.
@@ -4377,3 +4549,45 @@ No edits to `src/export/compact.ts` or `src/export/pdf.ts` — staying inside th
 - Blockers or risks:
 - Remaining work / recommended next action:
 ```
+
+### Handoff - highlight scope "All keep entries"
+- Added `'keep'` to `HighlightScope` in `src/renderer/src/lib/highlightGeometry.ts`; `isInScope` now receives the whole `ProjectEntry` (was `entryId: string`) so it can read `entry.status`.
+- `HighlightToolPanel` gained the `All keep entries` option plus a hint line clarifying scope reach.
+- Design decision: keep scope is document-wide (`pageNumber: undefined` in the `highlightTargets` memo in `App.tsx`); every other scope stays limited to the page in view so a bulk edit cannot reach offscreen highlights. `resolveHighlightTargets` still honours `pageNumber` for keep if a caller passes one.
+- Tests: HT-A-014..017 (engine scope resolution) and HT-C-011..012 (panel option + hint wording).
+- Gates: typecheck 0, tests 322/322, lint exit 0 (12 pre-existing warnings), build OK.
+
+### Handoff - PNG export crop sizing
+- User reported exported PNG slices being taller than the on-screen highlight boxes.
+- Root cause: `buildEntryImageCrops` in `src/export/entryImages.ts` took `width`/`height` from the **first** kept PDF-points region and applied them to every crop, while using each entry's own `x`/`y`. If entry #1 was taller than the rest, every PNG inherited that height. No minimum height or padding exists anywhere in the pipeline; `entryImageExport.ts` crops exactly what it is told.
+- Fix: new `uniformCropSize` helper takes the max width and max height across all kept regions (each axis independently). Tiles stay uniform, which was the original design intent, but nothing is clipped.
+- Note: PDF points are bottom-up, so the crop anchors at the entry `y` and extends upward; an oversized shared height therefore also shifts what is captured vertically, not just how much.
+- Also updated the misleading `ExportPanel` button tooltip.
+- Tests: renamed the existing sizing test and added two - largest box wins when it is not first, and non-kept entries do not influence sizing.
+- Gates: typecheck 0, tests 324/324, lint exit 0 (12 pre-existing warnings), build OK.
+
+### 2026-08-27 - Agent A, Pages menu thumbnail component complete
+
+- **Ownership completed:** `PageThumbnail` component and the `PagePreviewStrip` rendering contract. `App.tsx` was NOT touched; it remains Agent B's.
+- **Found on arrival:** a partial `PageThumbnail.tsx` draft already existed (untracked) and `App.tsx` already imported it at line ~3543. The draft failed two acceptance points - the page number was replaced by "Loading..." / "No preview" text rather than staying visible in every state, and there was no fixed aspect-ratio wrapper, so a slow render resized the panel. Rewritten rather than extended.
+
+**Component contract for Agent B**
+
+- Props: `data: Uint8Array | null`, `pageNumber: number`, `width?: number` (default `PAGE_THUMBNAIL_WIDTH` = 96), `aspectRatio?: number` (width / height).
+- Exports `PAGE_THUMBNAIL_WIDTH` (96) and `PAGE_THUMBNAIL_ASPECT_RATIO` (0.707, A4 portrait fallback).
+- Renders a single `div.page-thumbnail` carrying `data-state` of `loading` | `ready` | `error` | `empty`, plus `data-page`.
+- The page number is always present as `div.page-thumbnail-label`, layered behind the canvas via z-index, so it shows through during load and after a render failure. No separate error string is rendered.
+- The wrapper sets inline `width` and `aspect-ratio` up front, so the box is reserved before the page loads. Once the page reports real dimensions the measured ratio replaces the fallback.
+- Null data and zero-length data both yield `data-state="empty"` and no `Document` is mounted.
+- Text and annotation layers are disabled (`renderTextLayer={false}`, `renderAnnotationLayer={false}`). No viewer controls, overlays, or zoom.
+- A change of `data` or `pageNumber` resets state and the measured ratio.
+
+**PDF worker assumption:** the component imports `../lib/pdf` for its side effect, which sets `pdfjs.GlobalWorkerOptions.workerSrc`. This is the same path `PdfViewer` uses, so no new worker infrastructure is introduced. A `lazy`/`Suspense` variant was tried and reverted: `react-pdf` is statically imported by `PdfViewer`, `entryImageExport`, and `lib/pdf`, so deferring it moved nothing between chunks and only added two Vite warnings.
+
+**PagePreviewStrip change (minimal):** the thumbnail slot gains an `is-rendered` class when a `renderThumbnail` prop is supplied, letting CSS drop the placeholder `aspect-ratio`/border so the real thumbnail supplies its own shape. The fallback plain-number path, all page buttons, `aria-label`, `aria-current`, `aria-hidden` on the slot, and the propagation guards are unchanged.
+
+- **Files changed:** `src/renderer/src/components/PageThumbnail.tsx` (rewritten), `src/renderer/src/components/PageThumbnail.test.tsx` (new, 10 tests PT-A-001..010), `src/renderer/src/components/PagePreviewStrip.tsx` (one class), `src/renderer/src/assets/main.css` (`.page-thumbnail`, `.page-thumbnail-label`, canvas layering, `.is-rendered`).
+- **Coordination note for Agent C:** their `RightWorkspaceShells.test.tsx` additions already assert `data-state="empty"`, `class="page-thumbnail"`, and a visible page number. That matches the delivered contract and passes. Some coverage overlaps with mine, which is fine as independent verification.
+- **Validation:** focused suite 10/10; full `npm test` 337/337; `npm run typecheck` node + web clean; `npm run lint` exit 0 with the 12 pre-existing warnings; `npm run build` passed. Only the one long-standing `PdfViewer` chunking warning remains.
+- **Not claimed (Agent B/C scope):** live App integration, thumbnail refresh on source change or after page removal, narrow-panel visual acceptance, and large-PDF performance. Rendering is currently unbounded - one `Document` per visible page - so the deferred virtualization/caching item stays a real follow-up for a large PDF.
+- **Ownership:** released.

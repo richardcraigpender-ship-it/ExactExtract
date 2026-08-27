@@ -38,9 +38,14 @@ export function PagePreviewStrip({
               }
             }}
           >
-            <span className="page-preview-thumbnail" aria-hidden="true">
+            <div
+              className={
+                renderThumbnail ? 'page-preview-thumbnail is-rendered' : 'page-preview-thumbnail'
+              }
+              aria-hidden="true"
+            >
               {renderThumbnail?.(pageNumber) ?? pageNumber}
-            </span>
+            </div>
             <span>Page {pageNumber}</span>
           </button>
         ))}

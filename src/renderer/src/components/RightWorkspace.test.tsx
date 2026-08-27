@@ -13,7 +13,8 @@ const contexts: Record<RightWorkspaceMode, React.ReactNode> = {
   export: <p>Export controls</p>,
   pages: <p>Page thumbnails</p>,
   warnings: <p>Warning details</p>,
-  'remove-pages': <p>Remove pages</p>
+  'remove-pages': <p>Remove pages</p>,
+  marks: <p>Highlight tools</p>
 }
 
 test('keeps entries visible while exposing one accessible context panel', () => {
@@ -41,7 +42,7 @@ test('keeps entries visible while exposing one accessible context panel', () => 
   assert.match(markup, /aria-label="3 warnings"/)
 })
 
-test('marks the highlight command pressed without relying on color', () => {
+test('signals hidden highlights on the marks tool without relying on color', () => {
   const markup = renderToStaticMarkup(
     <RightWorkspace
       mode="review"
@@ -53,5 +54,36 @@ test('marks the highlight command pressed without relying on color', () => {
     />
   )
 
-  assert.match(markup, /aria-label="Toggle source highlights"[^>]*aria-pressed="false"/)
+  assert.match(markup, /role="tab"[^>]*aria-label="Highlight tools \(highlights hidden\)"/)
+  // The tab is the only Marks control; there is no duplicate quick command.
+  assert.doesNotMatch(markup, /aria-label="Open highlight tools"/)
+})
+
+test('exposes exactly one Marks control in the strip', () => {
+  const markup = renderToStaticMarkup(
+    <RightWorkspace
+      mode="review"
+      entries={<p>Entries</p>}
+      contexts={contexts}
+      onModeChange={() => {}}
+      onCommand={() => {}}
+    />
+  )
+
+  assert.equal(markup.match(/>Marks</g)?.length, 1)
+})
+
+test('opens the marks context panel when that tool is selected', () => {
+  const markup = renderToStaticMarkup(
+    <RightWorkspace
+      mode="marks"
+      entries={<p>Entries</p>}
+      contexts={contexts}
+      onModeChange={() => {}}
+      onCommand={() => {}}
+    />
+  )
+
+  assert.match(markup, /role="tabpanel"[^>]*aria-label="Highlight tools"/)
+  assert.match(markup, />Highlight tools</)
 })

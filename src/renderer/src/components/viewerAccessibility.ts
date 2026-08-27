@@ -63,3 +63,26 @@ export function describeViewerHighlight(highlight: ViewerHighlight): string {
   const percent = (value: number): number => Math.round(value * 100)
   return `Selected source region on page ${highlight.page}: ${percent(highlight.x)}% from the left, ${percent(highlight.y)}% from the top, ${percent(highlight.width)}% wide, and ${percent(highlight.height)}% high.`
 }
+
+/**
+ * Summarizes how many source regions are marked on the displayed page, and how they are
+ * split by review status, so assistive technology is not limited to the single selected
+ * region while the visual overlay is hidden from it.
+ */
+export function describeViewerHighlightCount(
+  highlights: readonly ViewerHighlight[],
+  page: number
+): string {
+  const onPage = highlights.filter((highlight) => highlight.page === page)
+  if (onPage.length === 0) return `No marked source regions on page ${page}.`
+
+  const counts = { keep: 0, maybe: 0, exclude: 0 }
+  for (const highlight of onPage) counts[highlight.status ?? 'maybe'] += 1
+
+  const breakdown = (['keep', 'maybe', 'exclude'] as const)
+    .filter((status) => counts[status] > 0)
+    .map((status) => `${counts[status]} ${status}`)
+    .join(', ')
+
+  return `${onPage.length} marked source region${onPage.length === 1 ? '' : 's'} on page ${page}: ${breakdown}.`
+}

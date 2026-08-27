@@ -4,6 +4,7 @@ import {
   BarChart3,
   Download,
   Eye,
+  EyeOff,
   FileSearch,
   Images,
   ListChecks,
@@ -14,8 +15,9 @@ import {
   ZoomOut
 } from 'lucide-react'
 
-export type ContextMode = 'review' | 'analysis' | 'export' | 'pages' | 'warnings' | 'remove-pages'
-export type EntryActionCommand = 'zoom-in' | 'zoom-out' | 'import' | 'save' | 'highlights' | 'jump'
+export type ContextMode =
+  'review' | 'analysis' | 'export' | 'pages' | 'warnings' | 'remove-pages' | 'marks'
+export type EntryActionCommand = 'zoom-in' | 'zoom-out' | 'import' | 'save' | 'jump'
 
 const contextModes = [
   { id: 'review', label: 'Review and bulk actions', shortLabel: 'Review', icon: ListChecks },
@@ -23,7 +25,8 @@ const contextModes = [
   { id: 'export', label: 'Export', shortLabel: 'Export', icon: Download },
   { id: 'pages', label: 'Page previewer', shortLabel: 'Pages', icon: Images },
   { id: 'warnings', label: 'Warnings and duplicates', shortLabel: 'Issues', icon: AlertTriangle },
-  { id: 'remove-pages', label: 'Remove pages', shortLabel: 'Remove', icon: Trash2 }
+  { id: 'remove-pages', label: 'Remove pages', shortLabel: 'Remove', icon: Trash2 },
+  { id: 'marks', label: 'Highlight tools', shortLabel: 'Marks', icon: Eye }
 ] as const
 
 const commands = [
@@ -31,7 +34,6 @@ const commands = [
   { id: 'zoom-in', label: 'Zoom in', shortLabel: 'Zoom +', icon: ZoomIn },
   { id: 'import', label: 'Add PDFs', shortLabel: 'Add', icon: Upload },
   { id: 'save', label: 'Save project', shortLabel: 'Save', icon: Save },
-  { id: 'highlights', label: 'Toggle source highlights', shortLabel: 'Marks', icon: Eye },
   { id: 'jump', label: 'Jump to page', shortLabel: 'Jump', icon: FileSearch }
 ] as const
 
@@ -53,39 +55,46 @@ export const EntryActionsStrip = React.memo(function EntryActionsStrip({
   return (
     <nav className="right-workspace-strip" aria-label="Workspace tools">
       <div role="tablist" aria-label="Context panel">
-        {contextModes.map(({ id, label, shortLabel, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            role="tab"
-            aria-label={label}
-            aria-selected={mode === id}
-            aria-controls={`right-workspace-context-${id}`}
-            title={label}
-            onClick={(event) => {
-              event.stopPropagation()
-              onModeChange(id)
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
+        {contextModes.map(({ id, label, shortLabel, icon: Icon }) => {
+          // The marks tab mirrors overlay visibility so the current state is readable
+          // without opening the panel.
+          const isMarks = id === 'marks'
+          const TabIcon = isMarks && !highlightsVisible ? EyeOff : Icon
+          const tabLabel = isMarks && !highlightsVisible ? `${label} (highlights hidden)` : label
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-label={tabLabel}
+              aria-selected={mode === id}
+              aria-controls={`right-workspace-context-${id}`}
+              title={tabLabel}
+              onClick={(event) => {
                 event.stopPropagation()
-              }
-            }}
-          >
-            <Icon size={17} aria-hidden="true" />
-            <span className="right-workspace-tool-label" aria-hidden="true">
-              {shortLabel}
-            </span>
-            {id === 'warnings' && warningCount > 0 && (
-              <span
-                className="right-workspace-command-count"
-                aria-label={`${warningCount} warnings`}
-              >
-                {warningCount > 99 ? '99+' : warningCount}
+                onModeChange(id)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.stopPropagation()
+                }
+              }}
+            >
+              <TabIcon size={17} aria-hidden="true" />
+              <span className="right-workspace-tool-label" aria-hidden="true">
+                {shortLabel}
               </span>
-            )}
-          </button>
-        ))}
+              {id === 'warnings' && warningCount > 0 && (
+                <span
+                  className="right-workspace-command-count"
+                  aria-label={`${warningCount} warnings`}
+                >
+                  {warningCount > 99 ? '99+' : warningCount}
+                </span>
+              )}
+            </button>
+          )
+        })}
       </div>
       <div className="right-workspace-commands" aria-label="Quick commands">
         {commands.map(({ id, label, shortLabel, icon: Icon }) => (
@@ -93,7 +102,6 @@ export const EntryActionsStrip = React.memo(function EntryActionsStrip({
             key={id}
             type="button"
             aria-label={label}
-            aria-pressed={id === 'highlights' ? highlightsVisible : undefined}
             title={label}
             onClick={(event) => {
               event.stopPropagation()

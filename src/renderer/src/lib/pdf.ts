@@ -17,7 +17,7 @@ import {
 import type { ExtractionSettings } from '../../../shared/contracts'
 import { withPdfDocument } from './pdfResourceLifecycle'
 
-pdfjs.GlobalWorkerOptions.workerSrc = pdfWorker
+pdfjs.GlobalWorkerOptions.workerSrc = typeof pdfWorker === 'string' ? pdfWorker : ''
 
 export interface PdfPreflightResult {
   pageCount: number

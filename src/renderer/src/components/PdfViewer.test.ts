@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import {
   describeViewerHighlight,
+  describeViewerHighlightCount,
   projectViewerRegion,
   unprojectViewerRegion,
   type ViewerRotation
@@ -29,4 +30,32 @@ test('projects source regions through viewer rotation and reverses edits', () =>
     assert.deepEqual(projected, expected[rotation])
     assert.deepEqual(unprojectViewerRegion(projected, rotation), source)
   }
+})
+
+test('summarizes marked source regions on the displayed page by status', () => {
+  const highlights = [
+    { page: 2, x: 0.1, y: 0.1, width: 0.2, height: 0.1, status: 'keep' as const },
+    { page: 2, x: 0.1, y: 0.3, width: 0.2, height: 0.1, status: 'keep' as const },
+    { page: 2, x: 0.1, y: 0.5, width: 0.2, height: 0.1, status: 'exclude' as const },
+    { page: 5, x: 0.1, y: 0.7, width: 0.2, height: 0.1, status: 'maybe' as const }
+  ]
+
+  assert.equal(
+    describeViewerHighlightCount(highlights, 2),
+    '3 marked source regions on page 2: 2 keep, 1 exclude.'
+  )
+})
+
+test('treats regions without an explicit status as maybe and uses singular wording', () => {
+  assert.equal(
+    describeViewerHighlightCount([{ page: 1, x: 0, y: 0, width: 0.1, height: 0.1 }], 1),
+    '1 marked source region on page 1: 1 maybe.'
+  )
+})
+
+test('reports pages that have no marked source regions', () => {
+  assert.equal(
+    describeViewerHighlightCount([{ page: 4, x: 0, y: 0, width: 0.1, height: 0.1 }], 9),
+    'No marked source regions on page 9.'
+  )
 })

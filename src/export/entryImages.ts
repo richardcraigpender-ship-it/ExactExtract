@@ -41,9 +41,25 @@ function imageDateLabel(value: string | undefined): string {
   }).format(date)
 }
 
+/**
+ * Crops share one size so the exported tiles line up, and that size is the largest kept box in
+ * each axis independently. Anything smaller is padded out rather than clipped.
+ */
+function uniformCropSize(kept: readonly ProjectEntry[]): { width: number; height: number } | null {
+  let width = 0
+  let height = 0
+  for (const entry of kept) {
+    const box = validPdfBox(entry)
+    if (!box) continue
+    width = Math.max(width, box.width)
+    height = Math.max(height, box.height)
+  }
+  return width > 0 && height > 0 ? { width, height } : null
+}
+
 export function buildEntryImageCrops(entries: readonly ProjectEntry[]): EntryImageCrop[] {
   const kept = entries.filter((entry) => entry.status === 'keep')
-  const referenceBox = kept.map(validPdfBox).find((box) => box !== null)
+  const referenceBox = uniformCropSize(kept)
   if (!referenceBox) throw new Error('A kept entry with a PDF-coordinate region is required.')
 
   const dateCounts = new Map<string, number>()

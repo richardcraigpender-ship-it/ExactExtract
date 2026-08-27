@@ -34,7 +34,7 @@ function entry(
   }
 }
 
-test('uses the first kept entry size for every crop and numbers matching dates', () => {
+test('uses the largest kept entry size for every crop and numbers matching dates', () => {
   const crops = buildEntryImageCrops([
     entry('first', 'keep', '2026-03-26', 40, 400, 220, 18),
     entry('excluded', 'exclude', '2026-03-26', 40, 370, 900, 90),
@@ -82,4 +82,34 @@ test('uses the first kept entry size for every crop and numbers matching dates',
 
 test('rejects projects without a usable kept PDF region', () => {
   assert.throws(() => buildEntryImageCrops([]), /PDF-coordinate region/)
+})
+
+test('takes the crop size from the largest kept box even when it is not the first', () => {
+  const crops = buildEntryImageCrops([
+    entry('first', 'keep', '2026-03-26', 40, 400, 180, 12),
+    entry('tallest', 'keep', '2026-03-26', 60, 340, 150, 40),
+    entry('widest', 'keep', '2026-03-27', 80, 300, 260, 15)
+  ])
+
+  assert.deepEqual(
+    crops.map(({ width, height }) => ({ width, height })),
+    [
+      { width: 260, height: 40 },
+      { width: 260, height: 40 },
+      { width: 260, height: 40 }
+    ]
+  )
+})
+
+test('ignores non-kept entries when sizing crops', () => {
+  const crops = buildEntryImageCrops([
+    entry('kept', 'keep', '2026-03-26', 40, 400, 180, 12),
+    entry('excluded', 'exclude', '2026-03-26', 40, 370, 900, 90),
+    entry('maybe', 'maybe', '2026-03-26', 40, 360, 800, 80)
+  ])
+
+  assert.deepEqual(
+    crops.map(({ width, height }) => ({ width, height })),
+    [{ width: 180, height: 12 }]
+  )
 })

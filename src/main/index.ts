@@ -104,12 +104,16 @@ function registerDocumentHandlers(projectStore: ProjectStore, payeeStore: PayeeS
     closeGuardStates.set(event.sender.id, state as CloseGuardState)
   })
 
-  ipcMain.handle('studio:documents:choose-pdfs', async () => {
-    const result = await dialog.showOpenDialog({
+  ipcMain.handle('studio:documents:choose-pdfs', async (event) => {
+    const owner = BrowserWindow.fromWebContents(event.sender)
+    const options = {
       title: 'Import PDF documents',
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'PDF documents', extensions: ['pdf'] }]
-    })
+    } satisfies Electron.OpenDialogOptions
+    const result = owner
+      ? await dialog.showOpenDialog(owner, options)
+      : await dialog.showOpenDialog(options)
 
     if (result.canceled) return []
 
@@ -203,7 +207,7 @@ function registerDocumentHandlers(projectStore: ProjectStore, payeeStore: PayeeS
     await projectStore.removeRecent(projectId)
   })
 
-  ipcMain.handle('studio:projects:locate-sources', async (_event, projectId: unknown) => {
+  ipcMain.handle('studio:projects:locate-sources', async (event, projectId: unknown) => {
     if (typeof projectId !== 'string') throw new Error('A project ID is required.')
     const project = await projectStore.load(projectId)
     const missingDocuments = (
@@ -223,11 +227,15 @@ function registerDocumentHandlers(projectStore: ProjectStore, payeeStore: PayeeS
       }
     }
 
-    const result = await dialog.showOpenDialog({
+    const owner = BrowserWindow.fromWebContents(event.sender)
+    const locateOptions = {
       title: 'Locate missing PDF sources',
       properties: ['openFile', 'multiSelections'],
       filters: [{ name: 'PDF documents', extensions: ['pdf'] }]
-    })
+    } satisfies Electron.OpenDialogOptions
+    const result = owner
+      ? await dialog.showOpenDialog(owner, locateOptions)
+      : await dialog.showOpenDialog(locateOptions)
     if (result.canceled) {
       return {
         project,
