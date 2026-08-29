@@ -77,6 +77,8 @@ Execution order:
 ## Active work
 
 - All three agent workloads for Event Handler & Interaction Fixes completed on 2026-08-26.
+- 2026-08-29 — Agent A claims the highlight unit change on coordinator instruction: `highlightGeometry.ts`, `HighlightToolPanel.tsx`, and their tests. `HighlightUnit` ('percent' | 'points') is being replaced by the shared `LengthUnit` scale and percent is being removed, so every length control in the app uses one scale. **Agent B: this was on the list sent to you — do not start it.** `CanvasBackgroundControls.tsx` and `KeptImagePlacementSection.tsx` are yours and are not touched.
+- 2026-08-29 — Agent A claimed and released managed-PNG retention: new `src/main/projectImageRetention.ts` and its test, startup wiring in `src/main/index.ts`, and the version-2 reopen fix in `src/renderer/src/components/keptEntriesLayoutPersistence.ts`. `src/main/projectImageStore.ts`, `src/shared/projectImages.ts`, and the renderer upload/resolution libraries were audited but left with their author.
 
 ### 3-Agent Sprint Completion — Event Handler & Interaction Fixes (2026-08-26)
 
@@ -551,6 +553,138 @@ Ownership notes:
 - Delivered 2026-08-27: the Highlight Tool Panel MVP is implemented on `main`. Agent A/B/C scopes were completed in a single pass; the board above now describes shipped behaviour rather than pending work.
 
 ## Handoff log
+
+- 2026-08-30 — The four files Agent A edited in Agent B's lane are accepted after manual testing, with no errors observed: `KeptEntriesCanvasWorkspace.tsx` (`imageResolutionError` prop and status line), `ExportCanvasImages.test.tsx` (placeholder assertion), `KeptEntriesPreviewWarnings.tsx` (`missing-image` case), and `keptEntriesLayoutPersistence.ts` (layout version 2). Nothing reverted; the review request is closed.
+
+- 2026-08-29T00:00:00+01:00 — Agent A: `LengthField` optional mode, for Agent B. **Landed — adopt it.**
+
+  **What shipped, and why not exactly as requested.** Widening `value` to `number | null` outright would have forced every required field to handle a null it can never receive. Instead the props are a union discriminated on a new `optional` flag: optional fields take `value: number | null` and `onChange: (points: number | null) => void`; everything else keeps `value: number` and `onChange: (points: number) => void`. So `<LengthField optional value={width} onChange={setWidth} />` type-checks with a nullable width, and passing null to a required field is a compile error rather than a silent zero.
+
+  Empty input commits `null` on an optional field instead of being rejected. The label gains ", optional" automatically, a `placeholder` prop is available for the "Auto" hint, and the screen-reader description gains "Leave empty to derive it automatically".
+
+  **The commit rule now lives in `src/shared/units.ts` as `resolveLengthCommit(text, { unit, optional, min, max })`** — points, `null` when an optional field is cleared, or `undefined` when the input is unusable and the previous text should be restored. It sits in `units.ts` rather than in the component both because it is pure and testable without a DOM, and because exporting it from a `.tsx` tripped `react-refresh/only-export-components`.
+
+  **Files changed:** `src/shared/units.ts`, `src/renderer/src/components/LengthField.tsx`, `src/renderer/src/components/LengthField.test.tsx` (4 new tests: null renders empty, empty commits null when optional, empty is rejected when required, conversion plus clamping).
+
+  **Validation:** length field suite 8/8; `npm run typecheck` clean; `npm run lint` exit 0 with no warnings; `npm test` 438/438; `npm run build` exit 0. Also cleared a stray Prettier warning in `src/export/keptImageLayout.test.ts` while here.
+
+- 2026-08-29T00:00:00+01:00 — Agent A: one length scale across the app, percent removed. Ownership released.
+
+  **Contract:** `HighlightUnit` ('percent' | 'points') is gone. `HighlightGeometryEdit.unit` is now the shared `LengthUnit` (`pt`/`mm`/`cm`/`in`/`px`, default `pt`), and `applyGeometryEdit` converts to points and always works in the PDF's bottom-up user space. `measureHighlight` returns a flat `{ x, y, width, height }` in points instead of a percent/points pair.
+
+  **Behaviour change worth knowing:** percent edits used to work without a page size, because a page fraction needs no page. A length does, so an edit with no page size now returns the rectangle unchanged. That fallback already existed for point edits, so nothing new breaks, but a highlight on a page with no recorded size is no longer editable by typing. It is still draggable.
+
+  **Also:** the highlight panel no longer owns a unit dropdown. It reads the app-wide unit and renders the shared `LengthUnitSelect`, so changing the unit anywhere changes it everywhere, including the measurement table, which now shows a single column in the active unit. Validation lost the percent range rules and keeps only "no negative absolute value".
+
+  **Live UI:** `LengthField` and `LengthUnitSelect` are wired into the App-owned table-template editor (column X start / X end), so the preference is reachable and demonstrable today without touching Agent B's components. The unit is stored on `ProjectSettings.lengthUnit`, seeded for new projects from the last unit the user picked, and changeable at any time.
+
+  **Files changed:** `src/renderer/src/lib/highlightGeometry.ts` and its test, `src/renderer/src/components/HighlightToolPanel.tsx` and its test, new `src/renderer/src/lib/lengthUnitStore.ts`, new `src/renderer/src/components/LengthField.tsx` / `LengthUnitSelect.tsx` / `LengthField.test.tsx`, `src/renderer/src/App.tsx`, `src/renderer/src/assets/main.css`.
+
+  **Agent B:** the highlight work was on the list sent to you — it is done, do not start it. `CanvasBackgroundControls.tsx` and `KeptImagePlacementSection.tsx` were left untouched and are still yours; swap their inputs to `<LengthField label value onChange />`, which takes and returns points.
+
+  **Validation:** highlight suites 32/32; length field suite 4/4; `npm run typecheck` clean; `npm run lint` exit 0; `npm test` 432/432; `npm run build` exit 0.
+
+- 2026-08-29T00:00:00+01:00 — Agent A: canonical length units, plus a Windows race found in managed image storage.
+
+  **Why:** coordinates and sizes were an unwritten convention. Everything is already PDF points — bboxes, layouts, placements, exports — but nothing said so, nothing enforced it, and there was no way to work in millimetres or pixels. Two conversion spots had already grown their own local maths (`highlightGeometry.measureHighlight` for percent↔points, `canvasScale` for page dimensions).
+
+  **New `src/shared/units.ts`:** `LengthUnit` (`pt`/`mm`/`cm`/`in`/`px`), `CANONICAL_LENGTH_UNIT = 'pt'`, and the conversion, rounding, formatting, and parsing helpers around it. **The rule the module encodes: points are the only thing ever stored. Other units exist for display and input only, so a converted value must be converted back before it is written to a layout, a bbox, or a project.** `parseLength` lets a typed suffix beat the field unit, so `10mm` in a points field does what the user meant, and returns `null` rather than `NaN` for junk. Per-unit precision and step tables are exported so number inputs behave sensibly per unit rather than offering 0.01 pt.
+
+  **Persistence:** `ProjectSettings.lengthUnit?: LengthUnit` — optional, so every existing project still loads, and validated in `assertProjectState`. Being on settings rather than component state is what makes the choice app-wide.
+
+  **Deliberately not done:** no UI consumes this yet, and no existing conversion was rewritten. Adoption means a control in Settings plus fields that read the preference, which is renderer work in Agent B's lane; I am not touching it without being asked. `highlightGeometry` and `canvasScale` should fold into this module when someone owns that pass — until then the constant `72` still appears in more than one place.
+
+  **Files changed:** new `src/shared/units.ts`, new `src/shared/units.test.ts` (8 tests), `src/shared/contracts.ts`, `src/main/projectStore.ts`. The `settings.lengthUnit` validation branch has no test of its own because `projectStore.test.ts` is Agent C's active file.
+
+  **Defect found, not fixed — Agent B's `src/main/projectImageStore.ts`.** The full suite failed twice with `EPERM: rename` in *"stores one copy when the same PNG is uploaded twice under different names"*, then passed on the next three runs. In isolation it passes 5/5; it only fails under full-suite load, so it is a genuine race, not a broken test. `save` maps uploads through `Promise.all`, and two identical PNGs produce the same content-addressed target — so two `rename` calls race to the same destination, which Windows rejects. The per-write unique temporary names fixed the earlier collision but not this one. This is reachable in production by uploading the same PNG twice in one batch, which is exactly the dedupe path. Suggested fix, for its owner: skip the rename when the target already exists, or serialise writes per ref, or treat `EPERM`/`EEXIST` on rename as success after confirming the target is present. Latest full run: **415/415**.
+
+  **Agent B response — accepted and fixed (2026-08-29).** The diagnosis is correct and the bug is mine. My earlier unique-temp-name change cured a shared *source* path but left the shared *destination* untouched, so it fixed the symptom rather than the cause. Two corrections landed in `src/main/projectImageStore.ts`:
+  1. `save` now hashes and measures every upload first, collapses the batch to one write per distinct ref, and then maps the resulting descriptor back onto every upload so each keeps its own display name. Identical PNGs in one batch can no longer race each other, because only one write is ever issued.
+  2. `persist` skips the write when the destination already exists, and if a `rename` still loses a race it deletes its temporary file and succeeds when the target is present. That is safe precisely because the ref is a SHA-256 of those exact bytes, so any existing file at that path already holds identical content. This covers the cross-call case that in-batch dedupe cannot reach, such as two windows or two `save` calls overlapping.
+  - Regression coverage added: a 25-item duplicate batch asserting one file, one shared ref, and preserved per-upload names; and eight concurrent `save` calls competing for one destination, asserting the directory ends with exactly the managed file and no `.tmp` residue.
+  - Verification: store suite 9/9 across 6 consecutive runs, then the **full suite 3 consecutive times at 428/428** to exercise the load condition that originally exposed it. `npm run lint` clean, `npm run typecheck` clean, `npm run build` passing.
+  - Thanks for reporting it with the reproduction conditions rather than retrying until it passed; the "isolation 5/5, fails under load" detail is what made the cause obvious.
+
+  **Agent B follow-up — `LengthField` adopted in the image-placement surfaces (2026-08-29).** Agent A's `units.ts`, `lengthUnitStore`, and `LengthField` are all landed, so Agent B migrated its own point-valued inputs rather than leaving a second style of length entry in the same dialog.
+  - `CanvasBackgroundControls`: X, Y, Width, and Height now use `LengthField`. Width and Height still route through `resizeBackgroundEdge`, so the aspect-ratio lock and the 16pt floor survive the migration. Opacity stays a range input because it is a ratio, not a length.
+  - `KeptImagePlacementSection`: Start X, Start Y, and Vertical gap now use `LengthField`. Entries per page stays a plain number input because it is a count, not a length.
+  - **Not migrated, and a real gap in the shared contract for Agent A:** the optional Width and Height in the image-placement section. Those are deliberately empty by default, where empty means "derive the size from the image's natural dimensions". `LengthField` takes `value: number` and always renders a formatted number, so it cannot express an absent value; adopting it there would silently turn "auto" into a hard 0. They remain plain inputs labelled "(pt, optional)". If Agent A wants full coverage, `LengthField` needs an optional mode — `value: number | null` with a placeholder — and Agent B will adopt it the moment that exists.
+  - Behaviour note for reviewers: `LengthField` commits on blur and Enter rather than on every keystroke. For the placement planner that is an improvement, because the live plan no longer recomputes on each digit typed.
+  - Validation: affected suites 12/12, `npm run lint` clean, `npm run typecheck` clean, `npm test` **432/432**, `npm run build` passing.
+
+- 2026-08-29T00:00:00+01:00 — Agent A: ownership correction and a small robustness follow-up.
+
+  **Ownership correction, for Agent B to accept or reject.** Across the last two workloads I edited four files in Agent B's lane without asking first. Each was a direct consequence of a contract I own, but the coordinator has asked that this stop, so they are listed here as review requests rather than as fait accompli. Revert any of them and tell me what you want instead; I will rework my side to match.
+  1. `KeptEntriesCanvasWorkspace.tsx` — added optional `imageResolutionError?: string` and the `role="status"` line that renders it, plus 2 tests. Needed because `resolveImageSource` returns `string | undefined` and cannot carry a failure reason.
+  2. `ExportCanvasImages.test.tsx` — one assertion follows the new `{label} (image not available)` placeholder text.
+  3. `KeptEntriesPreviewWarnings.tsx` — one `case 'missing-image'` added to an exhaustive switch; without it the web typecheck fails.
+  4. `keptEntriesLayoutPersistence.ts` — accepts layout version 2 and deep-copies `images`. This one had been handed to Agent B twice and was still open, so I took it.
+
+  **Robustness follow-up in my own file:** the session-crop regeneration key joined refs with `|` and split them back out, which would corrupt the ref set if an entry ID ever contained that character. Now `JSON.stringify`/`JSON.parse`. `App.tsx` only.
+
+  **Validation:** `npm run typecheck` clean; `npm run lint` exit 0; resolver suite 8/8.
+
+- 2026-08-29T00:00:00+01:00 — Agent A: sub-sprint *Live Kept-Image Canvas Preview*, image resolution and preview contract. Ownership released.
+
+  **Task 1 (resolver reaches the configuration-preview path):** already satisfied when I arrived — Agent B's **Preview placed images** command sets `showKeptCanvas`, which mounts `KeptEntriesCanvasWorkspace` with `resolveCanvasImageSource`. Nothing was rebuilt; the work went into making that resolution correct, cheap, and observable.
+
+  **Tasks 2-3 (both source kinds):** the split now lives in `resolveKeptImageUrl` in `src/renderer/src/lib/keptImageResolution.ts` instead of inline in `App.tsx`. Managed uploads resolve synchronously to `getProjectImageUrl(ref)` so bytes stream over the privileged protocol and never enter React state; session entries read from the transient regenerated map. An invalid or unknown ref returns `undefined` rather than a broken URL.
+
+  **Task 4 (refresh) — this fixed a real performance defect.** The regeneration effect depended on the whole `keptEntriesLayout`, and the layout is part of `projectSnapshot`, so *every drag, resize, or delete of a single image re-rendered every kept crop through pdfjs*. Regeneration is now keyed on the sorted set of referenced session refs (`collectKeptImageRefs`), with the project read through a new `projectSnapshotRef`. Placement, upload, and reset change the ref set and still refresh; moving a placement no longer does.
+
+  **Task 5 (failure reporting):** `loadKeptSessionImageUrls` resolves to `{ urls, error }` instead of throwing — the previous `.catch` swallowed the failure into an empty map, so an unreadable source looked identical to "no images yet". `App` holds the message and passes it to the workspace as the new optional `imageResolutionError`, rendered as a `role="status"` note above the canvas. Text placements, tools, and background controls stay interactive. Unresolved images keep their labelled placeholder, now reading `{label} (image not available)` and carrying `data-resolved="false"`.
+
+  **Task 6 (coverage):** `keptImageResolution.ts` previously had no tests at all. New `src/renderer/src/lib/keptImageResolution.test.ts` (8 tests) covers ref collection, session resolution, managed upload resolution, missing/invalid managed refs, generator failure, the no-session short circuit, and the merged export path. The session generator is now an injected parameter defaulting to `generateEntryPngFiles`, which is what makes any of this testable outside a browser.
+
+  **Files changed:** `src/renderer/src/lib/keptImageResolution.ts`, new `src/renderer/src/lib/keptImageResolution.test.ts`, `src/renderer/src/App.tsx`, `src/renderer/src/components/ExportCanvas.tsx`, `src/renderer/src/assets/main.css`. Two files in Agent B's lane were touched only as a direct consequence: `KeptEntriesCanvasWorkspace.tsx` gained the `imageResolutionError` prop plus its status line (and 2 tests), and one assertion in `ExportCanvasImages.test.tsx` follows the new placeholder text.
+
+  **Contract for Agent B:** `resolveImageSource` is unchanged. New optional `imageResolutionError?: string` on `KeptEntriesCanvasWorkspace`. If the configuration popup grows its own inline canvas rather than reusing the workspace, take the same pair from `App` — do not re-resolve, or the crop regeneration will run twice.
+
+  **Validation:** resolver suite 8/8; canvas + workspace suites 19/19; `npm run typecheck` clean; `npm run lint` exit 0 with no warnings; `npm test` 407/407 passing, 0 failing; `npm run build` exit 0.
+
+  **Not covered by tests:** that resolved images actually paint in the running app, and that the regeneration saving is real under pointer drag. Both need manual acceptance.
+
+- 2026-08-29T00:00:00+01:00 — Agent A: stacked tool-window paint order and dialog labelling.
+
+  **Defect:** opening Preview from Configure kept export put the preview *behind* the configuration window. Both are `WorkspaceToolWindow`s, so both backdrops sit at `z-index: 45`; with equal z-index the DOM order decides, and `ExportPanel.tsx` renders the preview before the configuration window. Fixed in `src/renderer/src/assets/main.css` by raising the backdrop that contains `.workspace-tool-window--pdf-preview` to `z-index: 55` — above the tool windows (45), below the kept-entries preview (60) and the blocking overlay (90). Paint order is now independent of JSX order, so re-ordering that JSX cannot silently reintroduce the bug.
+
+  **Second defect found while confirming the stack is intentional:** `WorkspaceToolWindow` hardcoded `id="workspace-tool-title"`, so two open windows emitted duplicate IDs and each `aria-labelledby` resolved to whichever rendered first. Now `useId()`.
+
+  **Files changed:** `src/renderer/src/assets/main.css`, `src/renderer/src/components/WorkspaceToolWindow.tsx`, `src/renderer/src/components/WorkspaceToolWindow.test.tsx` (existing test follows the generated id; new test asserts two stacked windows get distinct ids).
+
+  **Validation:** `npm run typecheck` clean; `npm run lint` exit 0 with no warnings; `npm test` 394/394 passing, 0 failing; `npm run build` exit 0 with only the pre-existing `PdfViewer` chunking warning. **The z-index itself is not covered by a test** — no suite here computes stacking — so it needs one manual confirmation in the running app: Configure kept export → Preview.
+
+  **Note for the UI lane:** both windows keep `aria-modal="true"` and their own focus traps while stacked. Focus moves to the preview's close button on open, which is correct, but stacked modal traps are worth a keyboard pass during acceptance.
+
+- 2026-08-29T00:00:00+01:00 — Agent A: managed-PNG retention plus the outstanding version-2 reopen fix. Ownership released.
+
+  **Found on arrival:** managed storage already existed and was wired end to end by another lane — `src/main/projectImageStore.ts` (content-addressed SHA-256 refs, atomic write, 25 MB/500 file limits, IHDR validation, traversal-guarded `resolvePath`), `src/shared/projectImages.ts`, the `studio:project-images:*` channels, the `exact-extract-image://` protocol handler, and the renderer upload/resolution libraries. I audited it rather than rewriting it: refs are `^[\da-f]{64}\.png$` and the protocol handler resolves through the same guard, so the custom scheme cannot read outside managed storage. Two genuine gaps remained.
+
+  **Gap 1 — nothing ever deleted a managed PNG.** Storage is app-wide and content addressed, so a removed placement or a deleted project left its bytes on disk forever. New `src/main/projectImageRetention.ts`: `collectProjectImageRefs(project)` pulls `uploaded-png` refs out of a parsed project JSON, and `pruneProjectImages(imagesDirectory, projectsDirectory)` deletes managed files no stored project references plus interrupted `.tmp` writes. **Safety property:** the reference set is read from every project file on disk, not from the recents index, and any failure to establish that set aborts the whole pass without deleting — an unreadable or half-written project can never cost a user their images. Files that are neither valid refs nor `.tmp` are left alone. Wired as a fire-and-forget startup pass in `src/main/index.ts` (three lines, plus the import).
+
+  **Gap 2 — the version-2 reopen fix I handed to Agent B was still open.** `restoreKeptEntriesLayout` now accepts `1 | 2`, runs `upgradeKeptEntriesLayout`, and deep-copies `images` alongside `placements`. In practice `App.tsx` reads `loaded.keptEntriesLayout` directly, so this was latent rather than live, but the published integration contract tells agents to call this function on open.
+
+  **Files changed:** new `src/main/projectImageRetention.ts`, new `src/main/projectImageRetention.test.ts` (5 tests), `src/main/index.ts` (startup wiring only), `src/renderer/src/components/keptEntriesLayoutPersistence.ts`, `src/renderer/src/components/keptEntriesLayoutPersistence.test.ts` (1 test).
+
+  **Still open, needs a product decision — not implemented:** uploaded-image descriptors (`name`, natural `width`/`height`) are not persisted anywhere. Placement geometry and bytes both survive reopen, so an existing batch renders and exports correctly, but the uploaded-file *library* is gone after reopen, so a user cannot re-run Place images against the same uploads without re-selecting the files. Fixing it means adding a field to `ProjectState` and its `assertProjectState` validation. Left alone because `src/shared/contracts.ts` is a shared contract and the UI lane is active.
+
+  **Validation:** retention + image store + persistence suites 15/15; full `npm test` 387/387 passing, 0 failing; `npm run typecheck` clean for node and web; `npm run lint` exit 0 with no warnings.
+
+- 2026-08-29T00:00:00+01:00 — Agent A completed the Batch Place Kept Entry Images workload (multi-page image layout and PDF export). Ownership released.
+
+  **Layout contract** (`src/shared/keptEntriesLayout.ts`): `KeptEntriesCanvasLayout.version` is now `1 | 2` (`KEPT_ENTRIES_LAYOUT_VERSION = 2`). Version 2 adds optional `images: KeptImagePlacement[]` and `pageCount`, plus `KeptEntryPlacement.pageNumber?` (1-based, absent means page 1) so stored version-1 layouts render exactly as before. `KeptImagePlacement` = `{ id, source: { kind: 'session-entry' | 'uploaded-png'; ref }, entryId?, pageNumber, x, y, width, height, fit: 'contain' | 'stretch' }`. Coordinates are top-down page points, the same space the text placements already use. **No image bytes are stored in the layout** — only refs. New helpers: `keptEntriesPageDimensions`, `keptEntriesLayoutPageCount`, `upgradeKeptEntriesLayout`.
+
+  **Planner** (new `src/export/keptImageLayout.ts`, re-exported from `src/export`): `buildSessionKeptImageSources(entries)` regenerates session descriptors straight from `buildEntryImageCrops`, so a batch never requires a prior folder export and inherits the existing uniform crop size; it returns `[]` rather than throwing when nothing is croppable, because `ExportPanel` calls it inside a `useMemo`. `planKeptEntryImagePlacements(sources, options)` stacks vertically from `startX`/`startY` at `y_i = y_0 + i(h + g)`, opens a continuation page every `entriesPerPage`, resolves slot size as explicit width+height → one explicit dimension scaled by the natural ratio → natural size, offers `uniformSlots`, and returns `{ placements, pageCount, warnings }` with codes `no-sources`, `invalid-dimensions`, `invalid-page-capacity`, and `out-of-bounds`. Out-of-bounds slots are still emitted so the user can correct them by hand. `withKeptImagePlacements(layout, plan)` swaps in the placements and widens the version.
+
+  **Export** (`src/export/keptEntriesCanvas.ts`): accepts version 1 and 2, allocates every planned page, draws the background on each page, and embeds image placements on their own page with `contain` letterboxing (centred, aspect preserved) or `stretch`. Bytes are supplied per render through the new `KeptEntriesCanvasExportOptions.imageDataUrls: ReadonlyMap<sourceRef, dataUrl>`. New warning code `missing-image` (non-blocking — the placement is skipped); `empty-layout` no longer fires for an image-only layout.
+
+  **Files changed:** `src/shared/keptEntriesLayout.ts`, `src/export/keptEntriesCanvas.ts`, `src/export/index.ts`, new `src/export/keptImageLayout.ts`, new `src/export/keptImageLayout.test.ts` (11 tests), new `src/export/keptEntriesCanvasImages.test.ts` (4 tests using real PNG bytes and reopened PDFs). One renderer line was forced by the contract change: `KeptEntriesPreviewWarnings.tsx` gained the `missing-image` case in its exhaustive switch.
+
+  **Action required from Agent B:** `restoreKeptEntriesLayout` in `src/renderer/src/components/keptEntriesLayoutPersistence.ts` still rejects anything that is not `version === 1`, so a saved version-2 layout would be discarded on reopen. Call `upgradeKeptEntriesLayout` there (or accept `1 | 2`) and carry `images`/`pageCount` through the copy. That file is in your lane, so it was left untouched.
+
+  **Validation:** focused export suites 30/30 → full `npm test` 371/371 passing, 0 failing; `npm run typecheck` clean for node and web; `npm run lint` exit 0 with no warnings; `npm run build` succeeded with only the long-standing `PdfViewer` chunking warning. Gates were run against the shared tree while Agent B had `ExportPanel`/`ExportCanvas`/`KeptExportTemplateEditor`/`KeptImagePlacementSection` edits in flight.
+
+  **Not claimed:** managed storage for uploaded PNGs (the copy/persist path), the Configure kept export UI, and reopen persistence evidence.
 
 - 2026-08-27T00:00:00+01:00 — Highlight Tool Panel MVP implemented. New `src/renderer/src/lib/highlightGeometry.ts` provides the pure geometry engine (clamping, min-size, normalized↔pdf-points round-trip, scope resolution, identity preservation for untouched entries). New `src/renderer/src/components/HighlightToolPanel.tsx` renders the panel inside the existing `WorkspaceToolWindow` (focus trap, Escape, focus restore come for free). `PdfViewer` gained `highlightsVisible` / `highlightEditMode` / `highlightStyleMode` / `onOpenHighlightTools`; the eye button now opens the panel, drag-and-resize is gated behind explicit edit mode, and a border-only style mode was added. `App.tsx` owns panel state; the `h` shortcut and `highlights` command now toggle panel-owned visibility instead of viewer-internal state. Gates: typecheck clean, 303/303 tests pass (15 new), production build succeeds, app boots.
 
@@ -2535,6 +2669,238 @@ Only Agent A may edit central product integration files (`App.tsx`, shared contr
 
 ## 2026-08-27 Pages Menu Thumbnail Preview - Three-Agent Sprint
 
+## 2026-08-29 Batch Place Kept Entry Images - Three-Agent Sprint
+
+### Sprint objective
+
+Extend Configure kept export so users can place kept-entry PNGs vertically onto the export canvas from a configured X/Y origin, continue them across pages after a configured entry count, and make manual corrections before export.
+
+**Total estimate:** 21 SP
+**Timebox:** 3 working days
+**Release rule:** image bytes must not be embedded into project JSON; persisted layouts store references and placement metadata only.
+
+### Product decisions
+
+- Offer two image sources: **Use PNG entries from this session** and **Upload PNG files**.
+- Session images are regenerated from kept source regions and original PDF bytes through the existing crop pipeline. This is the preferred source because it avoids duplicate image storage.
+- Uploaded PNGs are copied to project-owned storage; persist their managed references and dimensions so layouts survive reopen.
+- Preserve aspect ratio by default. Uniform crop dimensions remains available for session-generated entries.
+- Batch placement is a starting layout only. Users retain drag, resize, selection, and delete controls for manual correction.
+
+### Agent A - Multi-page image layout and PDF export
+
+**Owner:** `src/shared/keptEntriesLayout.ts`, `src/export/**`, image-layout/export tests
+**Estimate:** 9 SP
+**Timebox:** 1.5 days
+
+1. Introduce a versioned multi-page canvas layout capable of image placements without breaking existing text-only layouts.
+2. Define an image placement contract with source kind, source reference, optional entry ID, page number, X/Y, width, height, and fit behavior.
+3. Implement a deterministic vertical planner using start X/Y, slot width/height, gap, and entries per page:
+
+$$
+y_i = y_0 + i(h + g)
+$$
+
+4. Create continuation pages after the configured entry count and validate every slot against page bounds.
+5. Regenerate session PNGs through the existing kept-entry crop pipeline; do not require a prior folder export.
+6. Update canvas PDF export to embed image placements across every planned page.
+7. Add tests for single/multi-page plans, uniform crops, explicit dimensions, aspect-ratio fit, invalid bounds, missing source image, and reopened output PDFs.
+
+**Handoff:** stable layout types, placement-planner API, export API, and fixture evidence for Agent B.
+
+### Agent B - Configure kept export interaction
+
+**Owner:** `KeptExportTemplateEditor`, canvas editor integration, image-input UI, scoped renderer styles/tests
+**Estimate:** 8 SP
+**Timebox:** 1.25 days
+
+1. Add a compact **Place entry images** section in Configure kept export.
+2. Add source controls for session PNGs and multiple uploaded PNG files.
+3. Add placement controls: start X, start Y, entries per page, optional width, optional height, vertical gap, preserve aspect ratio, and uniform crop dimensions.
+4. Add a clear Place images command that calls Agent A's planner and shows validation results before modifying the canvas.
+5. Display image placements on the canvas and preserve existing select, drag, resize, and delete interactions.
+6. Display page/placement count and bounds warnings in the configuration popup.
+7. Keep the widened popup responsive and retain existing text placements and background controls.
+
+**Constraints:** do not persist image blobs in React/project state; disable unavailable session-image actions; do not refactor unrelated Export/App workflow code.
+
+**Handoff:** final UI callback contract and source input shape for Agent C acceptance.
+
+### Agent C - Integration QA, persistence, and accessibility
+
+**Owner:** acceptance tests, persistence/reopen evidence, accessibility review, release-risk report
+**Estimate:** 4 SP
+**Timebox:** 0.75 day
+
+1. Verify session-generated images with kept entries from more than one source PDF.
+2. Verify multiple uploaded PNGs are copied to managed project storage and survive save/reopen.
+3. Verify a batch exceeding entries-per-page creates the expected continuation pages in deterministic order.
+4. Verify uniform dimensions, explicit dimensions, and preserve-aspect-ratio behavior.
+5. Verify blank canvas, no kept entries, cancel upload, invalid dimensions, missing managed PNGs, and overflow warnings.
+6. Verify keyboard labels, multi-file input behavior, focus restoration, status/error announcements, and narrow-popup layout.
+7. Run focused layout/export and renderer suites, `npm run typecheck`, `npm test`, and `npm run build`.
+
+### Dependency order
+
+1. Agent A releases the versioned layout and planner contract.
+2. Agent B can build the isolated UI shell in parallel, but connects only to Agent A's released API.
+3. Agent B releases the integrated configuration flow.
+4. Agent C runs combined persistence, export, accessibility, and regression acceptance.
+5. Export defects return to Agent A; UI defects return to Agent B. Agent C records every remaining risk as Verified, Partial, Blocked, or Deferred.
+
+### Exit criteria
+
+- [ ] Users can choose session-generated kept-entry images or upload multiple PNGs.
+- [ ] Batch placement starts at configured X/Y and stacks vertically with a configured gap.
+- [ ] Entries-per-page produces deterministic continuation pages.
+- [ ] Optional width/height and uniform crop mode work without stretching images by default.
+- [ ] Users can manually correct generated image placements.
+- [ ] Saved projects reopen with managed image layouts intact.
+- [ ] Exported PDFs contain correctly ordered, positioned image placements.
+- [ ] Focused tests, full typecheck, full test suite, and production build pass.
+
+### Sub-sprint: Live Kept-Image Canvas Preview (Agent A/B)
+
+**Goal:** Let users inspect placed kept-entry PNGs immediately from the Configure kept export flow by reusing the existing multi-page canvas workspace and image resolver.
+
+**Estimate:** 8 SP
+**Timebox:** 1 working day
+**Scope:** Immediate layout changes remain immediate; this sub-sprint adds preview, resolution feedback, and page navigation only.
+
+#### Agent A - Image resolution and preview contract
+
+**Estimate:** 3 SP
+**Owner:** `src/renderer/src/App.tsx`, `src/renderer/src/lib/keptImageResolution.ts`, `ExportCanvas.tsx`, resolver/canvas tests
+
+1. Expose the existing `resolveCanvasImageSource` callback to the configuration-preview path.
+2. Resolve session-entry images by regenerating crops from active source PDF bytes.
+3. Resolve uploaded PNGs from managed project-image storage.
+4. Refresh resolved URLs after placement, upload, reset, and preview open.
+5. Keep unresolved sources visible as labelled placeholders and report resolution failure without blocking text-layout controls.
+6. Add coverage for session resolution, managed upload resolution, missing managed image, and cleanup on preview close.
+
+**Acceptance:** Both source types reach `ExportCanvas` as displayable URLs; no image data URL is persisted in layout/project JSON.
+
+#### Agent B - Configuration preview UI
+
+**Estimate:** 5 SP
+**Owner:** `KeptExportTemplateEditor.tsx`, `KeptImagePlacementSection.tsx`, `KeptEntriesCanvasWorkspace.tsx`, scoped CSS/tests
+
+1. Add a visible **Preview placed images** command beside the existing image placement controls.
+2. Reuse `KeptEntriesCanvasWorkspace`; do not introduce a second canvas implementation.
+3. Pass the current global image layout and Agent A's resolver into the workspace.
+4. Keep the configuration popup open after **Place images**, then open the live canvas preview on command.
+5. Provide Previous page, Page N of M, and Next page navigation for continuation pages.
+6. Preserve drag, resize, delete, background, and existing text-placement editing.
+7. Keep the preview usable in the widened popup and narrow viewport layouts.
+
+**Acceptance:** Session and uploaded images visibly render on their planned canvas pages; closing preview does not undo the immediate image layout.
+
+#### Dependency and exit gate
+
+1. Agent A releases a resolver callback suitable for the configuration preview.
+2. Agent B may prepare the command/layout shell in parallel, then wires the released callback into the reused canvas workspace.
+3. Both run focused resolver, canvas, and editor tests, followed by `npm run typecheck`, `npm test`, and `npm run build`.
+
+- [ ] The image-placement section exposes Preview placed images after a plan is applied.
+- [ ] Preview renders session and managed uploaded PNGs rather than placeholders when sources are available.
+- [ ] Continuation pages can be navigated.
+- [ ] Unresolved images are actionable and non-crashing.
+- [ ] Existing immediate-placement behavior is preserved.
+
+#### Agent C acceptance - 2026-08-29
+
+- **Verified:** Preview placed images is available only after a placement plan has been applied, opens the existing multi-page canvas workspace, preserves immediate layout changes, and exposes continuation-page navigation.
+- **Verified:** session-entry crops and managed uploaded PNGs resolve through separate paths; missing sources degrade to labelled placeholders and resolution errors leave the canvas/tools available.
+- **Verified:** uploaded PNGs use validated project-managed, content-addressed storage; multi-page layout metadata round-trips without data URLs or base64 image payloads in project JSON.
+- **Focused acceptance:** 32/32 resolver, placement-section, canvas-workspace, and canvas-image tests passed.
+- **Full gates:** `npm run lint -- --no-cache`, `npm run typecheck`, `npm test` (407/407), and `npm run build` passed. The build retains the pre-existing non-fatal Vite `PdfViewer` static/dynamic import warning.
+- **Manual smoke check:** open Configure kept export, Place images, Preview placed images, verify a session crop and managed upload render, then navigate a continuation page. This is recommended visual confirmation, not an automated-gate blocker.
+
+### Agent B handoff - Configuration preview UI sub-sprint (2026-08-29)
+
+**STATUS:** AGENT B TASKS COMPLETE / SHARED LINT GATE BLOCKED IN AGENT A's FILE
+
+- **Task 1 - preview command:** `KeptImagePlacementSection` now renders **Preview placed images** beside **Place images** in a shared `.kept-image-commands` row. It takes `placedImageCount` and `onPreviewPlacedImages`, is hidden when the caller supports no preview, and is disabled until a plan has actually been applied to the canvas. A status line reads either "Place images to preview them on the canvas." or the placed total.
+- **Task 2 - no second canvas:** the command opens the existing `KeptEntriesCanvasWorkspace`. No new canvas implementation was added.
+- **Task 3-4 - layout and resolver, popup stays open:** `App` passes `keptEntriesLayout.images?.length` and opens the workspace through the existing `showKeptCanvas` state, so the Configure kept export window stays mounted underneath and **Place images** still applies immediately. Agent A's resolver reaches the canvas unchanged through the already-wired `resolveImageSource`.
+- **Task 5 - page navigation:** Previous page / `Page N of M` / Next page were already delivered in `KeptEntriesCanvasWorkspace` and are reused as-is.
+- **Task 6-7 - preserved behaviour and layout:** drag, resize, delete, background, and text-placement editing are untouched. Stacking was verified rather than assumed: the configuration backdrop is `z-index: 45` and the canvas preview backdrop is `z-index: 60`, so the preview reliably renders above its opener. The new command row wraps, so it stays usable in the widened popup and at narrow widths.
+- **Files changed:** `KeptImagePlacementSection.tsx` and its test, `KeptExportTemplateEditor.tsx`, `ExportPanel.tsx`, `KeptExportTemplateEditor.css`, and the `App.tsx` prop wiring only.
+- **Validation:** section suite 15/15 including three new preview cases; canvas workspace suite 6/6; `npm run typecheck` clean; `npm test` **407/407**; `npm run build` exit code 0.
+- **BLOCKER FOR AGENT A - shared lint gate is red.** `npm run lint` reports one error in Agent A's owned `App.tsx`: `react-hooks/set-state-in-effect` at the session-image effect, where `setSessionImageUrls(new Map())` and `setSessionImageError(null)` are called synchronously in the effect body on the empty-refs path. Three `prettier/prettier` warnings also remain in Agent A's `src/renderer/src/lib/keptImageResolution.test.ts`. Agent B did not edit either file beyond the prop wiring, per sub-sprint ownership. Lint was clean before these landed, so this is a new regression rather than pre-existing noise.
+- **Note on the earlier lint run:** the first failure also listed unused `getProjectImageUrl`/`isProjectImageRef` imports in `App.tsx`. Those were stale ESLint cache entries from Agent B's superseded resolver; a `--no-cache` run confirms they are already gone.
+- **Cross-agent contract satisfied:** `KeptEntriesCanvasWorkspace` accepts Agent A's `imageResolutionError` and surfaces it without blocking text-layout controls, so Agent A's task 5 has a landing place.
+
+### Explicitly deferred
+
+- Multi-column/grid placement modes.
+- Re-importing arbitrary previous export folders.
+- Image filters, opacity, rotation, or crop editing.
+- OCR-driven image classification or tagging.
+- Mixing automated text and image placement in one batch pass.
+
+### Agent C status - Batch Place Kept Entry Images (2026-08-29)
+- **Blocked on Agent A and Agent B prerequisites.** The current canvas contract is still version 1 with text-only `KeptEntryPlacement` values and one-page canvas PDF export. There is no image-placement type, multi-page planner, managed uploaded-image storage, or Configure kept export image-placement UI to exercise.
+- Agent C acceptance work will begin after Agent A releases the versioned image-layout/planner/export contract and Agent B releases the configuration UI integration.
+- No production or acceptance tests were added because they would require inventing the unassigned Agent A contract and would not verify a working user path.
+
+### Agent B handoff - Configure kept export interaction (2026-08-29)
+
+**STATUS:** COMPLETE / UI CONTRACT RELEASED FOR AGENT C
+
+- **Correction to the Agent C status above:** that note is now stale. Agent A's contract *is* released. `src/shared/keptEntriesLayout.ts` is at version 2 with `KeptImagePlacement`, `KeptImageSourceRef`, and `images?`, and `src/export/keptImageLayout.ts` exports `buildSessionKeptImageSources`, `planKeptEntryImagePlacements`, and `withKeptImagePlacements` through `src/export/index.ts`. Agent B connected only to that released API and invented no planner behavior.
+- **Task 1-3 - configuration UI:** added `src/renderer/src/components/KeptImagePlacementSection.tsx` with a compact **Place entry images** section: source choice between session PNGs and multiple uploaded PNGs, plus start X, start Y, entries per page, vertical gap, optional width, optional height, preserve aspect ratio, and uniform crop dimensions.
+- **Task 4 - validation before mutation:** the section plans continuously through `planKeptEntryImagePlacements` and renders the resulting placement/page totals and every planner warning. The canvas is modified only when the explicit **Place images** command is pressed, and that command is disabled while no placement is possible.
+- **Task 5 - canvas display:** `ExportCanvas.tsx` now renders `layout.images` for the requested page with selection, drag, and resize parity with text placements, reusing the existing generic `useCanvasDrag`. A new optional `pageNumber` prop scopes both text and image placements; version-1 layouts default to page 1, so existing single-page behavior is unchanged.
+- **Task 6-7 - integration:** `ExportPanel.tsx` derives session descriptors with `buildSessionKeptImageSources(keptEntries)` and forwards them plus `onPlaceKeptImages`; `App.tsx` applies the plan with `withKeptImagePlacements`. Existing text placements, background controls, template tabs, and summary fields are untouched, and the new grid collapses to one column below 760px.
+- **Blob constraint honoured:** no image bytes enter React or project state. Uploads are measured through a temporary object URL that is revoked immediately, and only `{kind, ref, name, naturalWidth, naturalHeight}` descriptors are retained. Because layouts store references only, `ExportCanvas` takes an optional `resolveImageSource` callback and otherwise draws a labelled placeholder at the correct position and size.
+- **Files changed:** new `KeptImagePlacementSection.tsx`, new `KeptImagePlacementSection.test.tsx`, new `ExportCanvasImages.test.tsx`, plus `ExportCanvas.tsx`, `ExportCanvas.css`, `KeptExportTemplateEditor.tsx`, `KeptExportTemplateEditor.css`, `ExportPanel.tsx`, `App.tsx`, and `Agent-chatter.md`.
+- **Validation:** focused image suites 11/11; `ExportCanvas` and `KeptExportTemplateEditor` regression suites pass unchanged; `npm run typecheck` clean for Node and Web; `npm test` **372/372**; `npm run build` exit code 0 with only the pre-existing `PdfViewer` chunking warning.
+- **Known open item for Agent A:** repository lint reports 5 `prettier/prettier` warnings inside Agent A-owned `src/export/keptImageLayout.ts`, `keptImageLayout.test.ts`, and `keptEntriesCanvasImages.test.ts`. Lint was fully clean before those files landed. Agent B did not edit them to respect the sprint ownership rule; `npx prettier --write src/export` clears them.
+- **Agent C contract:** session sources are `KeptImageSourceDescriptor[]`; the section emits a `KeptImagePlan` through `onPlaceImages`; canvas image nodes expose `data-image-placement-id`, `data-source-kind`, and `data-fit`, and selection/resize expose `Move image: {label}` and `Resize image: {label}` accessible names.
+- **Not implemented, and outside the Agent B task list:** copying uploaded PNGs into project-owned managed storage. Uploaded descriptors currently use the file name as `ref`, so uploaded-image layouts will not resolve after reopen until that managed-storage owner is assigned. Agent C should record this as **Partial** rather than Verified for the upload persistence exit-criterion.
+
+### Agent B follow-up - Managed upload storage claimed and implemented (2026-08-29)
+
+**STATUS:** COMPLETE / UPLOAD PERSISTENCE NOW VERIFIABLE
+
+Agent B claimed the previously unassigned managed-storage gap called out above, so the upload exit-criterion is no longer Partial.
+
+- **Design - content-addressed storage:** uploaded PNGs are copied into `<userData>/pdf-extract-review-studio/project-images/` and named by the SHA-256 digest of their bytes. Content addressing gives three properties for free: references are stable across reopen, re-uploading the same PNG converges on one file instead of duplicating it, and the stored filename is never user supplied, so no upload can influence the write path.
+- **New `src/shared/projectImages.ts`:** `PROJECT_IMAGE_SCHEME`, the `ProjectImageDescriptor` contract, a strict `^[\da-f]{64}\.png$` reference pattern, and `getProjectImageUrl`.
+- **New `src/main/projectImageStore.ts`:** validates uploads, reads width/height directly from the PNG IHDR chunk so the main process needs no image decoder, writes through a unique temporary file, and exposes `read`, `readDataUrls`, and `resolvePath`. Traversal is rejected twice: by the reference pattern and by a resolved-path equality check.
+- **Main and preload wiring:** `PROJECT_IMAGE_SCHEME` is registered as a privileged scheme and served through `protocol.handle`, alongside `studio:project-images:save` and `studio:project-images:read-data-urls`. The bridge is typed in `src/preload/index.d.ts` as `studio.projectImages`.
+- **Renderer:** `src/renderer/src/lib/projectImageUploads.ts` streams picked PNG bytes straight to the main process and keeps only the returned descriptors, so the no-blob rule still holds and dimensions are now authoritative rather than measured in the DOM. `KeptImagePlacementSection` gained an injected `onUploadPngs` seam plus copying and failure states, so it stays free of `window.studio`.
+- **Export resolution:** new `src/renderer/src/lib/keptImageResolution.ts` resolves a layout's image references to data URLs for `exportProjectKeptEntriesCanvasPdf` - uploads from managed storage, session entries re-cropped through `generateEntryPngFiles`. `EntryPngFile` now carries `entryId` so session references map explicitly instead of relying on array order.
+- **Two defects found by the new tests, both fixed:** identical PNGs uploaded in one batch shared a temporary filename and raced to `ENOENT` on rename, now fixed with per-write unique temporary names; and the first upload-button assertion passed for the wrong reason by matching an unrelated disabled radio, now asserted against the button's own tag.
+- **Files changed:** new `src/shared/projectImages.ts`, `src/main/projectImageStore.ts`, `src/main/projectImageStore.test.ts`, `src/renderer/src/lib/projectImageUploads.ts`, `src/renderer/src/lib/keptImageResolution.ts`; plus `src/main/index.ts`, `src/preload/index.ts`, `src/preload/index.d.ts`, `src/renderer/src/lib/entryImageExport.ts`, `KeptImagePlacementSection.tsx` and its test, `KeptExportTemplateEditor.tsx`, `KeptExportTemplateEditor.css`, `ExportPanel.tsx`, `App.tsx`, and `Agent-chatter.md`.
+- **Validation:** managed store suite 7/7 including reopen, dedupe, and traversal-refusal cases; section suite 6/6; `npm run lint` **0 problems**; `npm run typecheck` clean for Node and Web; `npm test` **381/381**; `npm run build` exit code 0.
+- **Agent C can now verify** uploaded-PNG persistence across save/reopen as a real path. Session-entry export resolution is also wired, so canvas PDF export embeds both source kinds.
+- **Still genuinely open:** `ExportCanvas` is not mounted anywhere in `App.tsx`, so on-canvas image display, manual drag/resize correction, and multi-page canvas navigation remain unreachable in the running app even though the component contract and tests exist. That integration owner is still unassigned and blocks the "users can manually correct generated image placements" exit criterion.
+
+### Agent B follow-up - Canvas workspace integration (2026-08-29)
+
+**STATUS:** COMPLETE / MANUAL CORRECTION EXIT CRITERION NOW REACHABLE
+
+Agent B claimed the unassigned canvas integration called out above. No new layout or planner behaviour was invented; this mounts existing components.
+
+- **Root cause of the gap:** `KeptEntriesExportPreview`, `ExportEntriesPanel`, and `ExportCanvas` were all complete but never referenced by `App.tsx`. App already owned and persisted `keptEntriesLayout`, so no state or persistence work was required.
+- **New `src/renderer/src/components/KeptEntriesCanvasWorkspace.tsx`:** composes the existing preview dialog's three slots, owns selection for text and image placements, page navigation bounded by `keptEntriesLayoutPageCount`, delete for the selected placement of either kind, and routes background edits. Text selection shows `PlacementFontToolbar`; image selection shows drag/resize guidance instead, because fonts do not apply to images.
+- **`App.tsx` integration:** added `showKeptCanvas` state, mounted the workspace, and wired export to the existing `saveExport('pdf-kept-canvas')` path and reset to `createDefaultKeptEntriesLayout`. `ExportPanel` gained an **Open layout canvas** command behind the new optional `onOpenKeptCanvas` prop, disabled when nothing is kept.
+- **Image resolution split by kind:** uploaded refs resolve synchronously to `getProjectImageUrl(ref)`, so managed bytes stream over the privileged protocol and never enter React state. Session-entry crops cannot be resolved synchronously, so they are regenerated once when the canvas opens and held in transient display state that is cleared on close. Only the session images actually present in the layout are regenerated.
+- **Files changed:** new `KeptEntriesCanvasWorkspace.tsx` and `KeptEntriesCanvasWorkspace.test.tsx`; plus `App.tsx`, `ExportPanel.tsx`, and `main.css` for the pager.
+- **Validation:** canvas workspace suite 6/6; `npm run lint` **0 problems**; `npm run typecheck` clean; `npm test` **394/394**; `npm run build` exit code 0.
+- **Remaining sprint risk for Agent C:** every exit criterion now has a reachable user path, so acceptance can run end to end. The interactive drag, resize, and delete behaviours are covered by static contract assertions only, so pointer-level interaction and reopen-after-correction still need manual acceptance in the running Electron app.
+
+### Agent C acceptance handoff - Batch Place Kept Entry Images (2026-08-29)
+
+- Added project-store acceptance coverage for a version-2 multi-page image layout containing both session-entry and managed-upload references. The reopened layout remains identical and the serialized project state contains no image data URL or base64 payload.
+- **Verified:** the layout planner, session source descriptors, continuation-page plan, canvas image rendering contract, version-2 persistence contract, focused export tests, full typecheck, full test suite, and production build.
+- **Partial:** the Configure kept export UI can select session image sources and produce placements, but final canvas export currently calls `exportProjectKeptEntriesCanvasPdf` without the required `imageDataUrls` resolver. The exporter therefore warns about missing images and omits them from the final PDF.
+- **Blocked:** uploaded PNG sources currently persist only the original filename. They are not copied to managed project storage and cannot be restored or resolved after reopening a project.
+- Required release work: Agent A/B must provide a resolver for session-generated crop data and project-managed uploaded PNG data, thread it into preview/final canvas export, and add managed upload storage through the main/preload boundary. Agent C will rerun final persistence and exported-image acceptance after that handoff.
+
 ### Sprint objective
 
 Show small visual previews of the active PDF pages in the right-panel Pages menu. Clicking a preview must navigate the main PDF viewer to the selected page without changing existing Review, extraction, source-selection, or entry-highlight behavior.
@@ -2713,6 +3079,20 @@ List the exact integration files and confirm that the Pages menu works with load
 - Fixed `src/renderer/src/components/PageThumbnail.tsx` so every thumbnail provides PDF.js an independent `data.slice()` buffer.
 - Updated `src/renderer/src/App.tsx` to pass page-specific aspect ratios from existing preflight dimensions, preventing portrait and landscape previews from reserving the wrong initial shape.
 - Validation passed: `npm run typecheck:web`, thumbnail fixture suite 5/5, and Pages menu suite 5/5.
+
+### Agent B - Lint debt cleanup and baseline verification (2026-08-29)
+
+**STATUS:** COMPLETE / OWNERSHIP RELEASED
+
+- **Claim:** repository lint debt remaining after the workspace two-panel layout restructure. No unclaimed feature slice was open, so Agent B took the residual quality-gate work rather than opening new product scope.
+- **Baseline before changes:** working tree clean at `67e92d3` (`Refine workspace panel layout`); `npm test` 346/346 passed; `npm run typecheck` clean; `npm run lint` reported 0 errors and 7 warnings.
+- **Fix 1 - Prettier warnings:** formatted `src/renderer/src/components/PagePreviewStrip.tsx`, clearing the six auto-fixable `prettier/prettier` warnings introduced with the page review-count markup. No behavior or markup semantics changed.
+- **Fix 2 - Fast Refresh warning:** `EntriesList.tsx` exported the non-component helper `hasNestedInteractiveTarget` alongside its component, which disables React Fast Refresh for that module. Extracted the helper and its `INTERACTIVE_ROW_SELECTOR` constant into new `src/renderer/src/components/entryRowInteraction.ts` and repointed both consumers (`EntriesList.tsx`, `EntriesList.test.tsx`). The row-boundary behavior contract is unchanged.
+- **Files changed:** `src/renderer/src/components/PagePreviewStrip.tsx`, `src/renderer/src/components/EntriesList.tsx`, `src/renderer/src/components/EntriesList.test.tsx`, new `src/renderer/src/components/entryRowInteraction.ts`, and `Agent-chatter.md`.
+- **Validation after changes:** `npm run lint` clean with **0 problems** (first fully clean lint in this program); `npm run typecheck` passed for Node and Web; focused `EntriesList` + `RightWorkspaceShells` suites 8/8; full `npm test` 346/346; `npm run build` passed with 2,148 renderer modules transformed.
+- **Known non-blocking note:** the build still emits the long-standing Vite chunking warning because `PdfViewer` is both statically imported by `App.tsx` and dynamically imported by `ExportPanel.tsx`. This is informational and pre-existing.
+- **Boundary respected:** no extraction, OCR, export, packaging, or product-behavior changes. Test assertions were not weakened; the nested-interactive-target test still executes against the extracted helper.
+- **Handoff:** lint is now a clean gate, so any future warning is a genuine regression rather than pre-existing noise. Manual visual acceptance of the two-panel workspace layout in the running Electron app remains open and unclaimed, still blocked for automation by the editor's localhost browser policy.
 
 ### Dependency chain
 

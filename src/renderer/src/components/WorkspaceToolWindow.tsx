@@ -1,4 +1,4 @@
-import React, { type ReactNode, useEffect, useRef } from 'react'
+import React, { type ReactNode, useEffect, useId, useRef } from 'react'
 import { X } from 'lucide-react'
 import { useModalFocusTrap } from './useModalFocusTrap'
 
@@ -17,6 +17,8 @@ export function WorkspaceToolWindow({
 }: WorkspaceToolWindowProps): React.JSX.Element {
   const closeButtonRef = useRef<HTMLButtonElement>(null)
   const { dialogRef, onKeyDown: trapFocus } = useModalFocusTrap()
+  // Tool windows stack, so the title id cannot be a constant.
+  const titleId = useId()
 
   useEffect(() => {
     closeButtonRef.current?.focus()
@@ -35,14 +37,14 @@ export function WorkspaceToolWindow({
         className={`workspace-tool-window${className ? ` ${className}` : ''}`}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="workspace-tool-title"
+        aria-labelledby={titleId}
         onKeyDown={(event) => {
           if (event.key === 'Escape') onClose()
           else trapFocus(event)
         }}
       >
         <header>
-          <h2 id="workspace-tool-title">{title}</h2>
+          <h2 id={titleId}>{title}</h2>
           <button
             ref={closeButtonRef}
             type="button"

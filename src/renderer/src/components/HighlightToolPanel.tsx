@@ -3,11 +3,13 @@ import React, { useState } from 'react'
 import {
   describeHighlightScope,
   type HighlightGeometryField,
-  type HighlightMeasurements,
+  type HighlightMeasurement,
   type HighlightScope,
-  type HighlightStyleMode,
-  type HighlightUnit
+  type HighlightStyleMode
 } from '../lib/highlightGeometry'
+import { LENGTH_UNIT_STEP, formatLength, type LengthUnit } from '../../../shared/units'
+import { useLengthUnit } from '../lib/lengthUnitStore'
+import { LengthUnitSelect } from './LengthUnitSelect'
 
 const FIELDS: { id: HighlightGeometryField; label: string }[] = [
   { id: 'x', label: 'X' },
@@ -29,7 +31,7 @@ export interface HighlightToolPanelProps {
   styleMode: HighlightStyleMode
   scope: HighlightScope
   affectedCount: number
-  measurements?: HighlightMeasurements | null
+  measurements?: HighlightMeasurement | null
   lastResult?: string | null
   onChangeVisible: (visible: boolean) => void
   onChangeEditMode: (editMode: boolean) => void
@@ -39,7 +41,7 @@ export interface HighlightToolPanelProps {
     field: HighlightGeometryField,
     mode: 'absolute' | 'delta',
     value: number,
-    unit: HighlightUnit
+    unit: LengthUnit
   ) => void
 }
 
@@ -47,12 +49,6 @@ function parseValue(raw: string): number | null {
   if (raw.trim() === '') return null
   const parsed = Number(raw)
   return Number.isFinite(parsed) ? parsed : null
-}
-
-function formatNumber(value: number): string {
-  return Math.round(value * 10) / 10 === Math.round(value)
-    ? String(Math.round(value))
-    : value.toFixed(1)
 }
 
 export function HighlightToolPanel({
@@ -71,38 +67,28 @@ export function HighlightToolPanel({
 }: HighlightToolPanelProps): React.JSX.Element {
   const [field, setField] = useState<HighlightGeometryField>('x')
   const [mode, setMode] = useState<'absolute' | 'delta'>('absolute')
-  const [unit, setUnit] = useState<HighlightUnit>('percent')
+  const unit = useLengthUnit()
   const [rawValue, setRawValue] = useState('0')
 
   const parsed = parseValue(rawValue)
-  // Percent values are bounded by the page; point values are bounded by the page size,
-  // which the engine clamps, so only reject clearly nonsensical input here.
-  const outOfRange =
-    parsed !== null &&
-    unit === 'percent' &&
-    (mode === 'absolute' ? parsed < 0 || parsed > 100 : parsed < -100 || parsed > 100)
-  const negativeAbsolutePoints =
-    parsed !== null && unit === 'points' && mode === 'absolute' && parsed < 0
-  const invalid = parsed === null || outOfRange || negativeAbsolutePoints
-  const canApply = !invalid && affectedCount > 0
+  // The engine clamps to the page, so only clearly nonsensical input is rejected here.
+  const negativeAbsolute = parsed !== null && mode === 'absolute' && parsed < 0
+  const missingPageSize = measurements?.status === 'no-page-size'
+  const invalid = parsed === null || negativeAbsolute
+  const canApply = !invalid && !missingPageSize && affectedCount > 0
 
-  const validationMessage =
-    parsed === null
+  const validationMessage = missingPageSize
+    ? 'This page has no recorded size, so highlights on it can only be adjusted by dragging.'
+    : parsed === null
       ? 'Enter a number.'
-      : outOfRange
-        ? mode === 'absolute'
-          ? 'Enter a percentage between 0 and 100.'
-          : 'Enter an offset between -100 and 100.'
-        : negativeAbsolutePoints
-          ? 'Enter a point value of 0 or more.'
-          : null
+      : negativeAbsolute
+        ? `Enter a value of 0 ${unit} or more.`
+        : null
 
   const apply = (): void => {
     if (!canApply || parsed === null) return
-    onApply(field, mode, unit === 'percent' ? parsed / 100 : parsed, unit)
+    onApply(field, mode, parsed, unit)
   }
-
-  const unitLabel = unit === 'percent' ? '% of page' : 'pt'
 
   return (
     <div className="highlight-tool-panel">
@@ -141,7 +127,7 @@ export function HighlightToolPanel({
       <fieldset className="highlight-tool-group">
         <legend>Position and size</legend>
 
-        {measurements ? (
+        {measurements?.status === 'measured' ? (
           <table className="highlight-tool-measurements">
             <caption>Selected highlight</caption>
             <thead>
@@ -149,20 +135,23 @@ export function HighlightToolPanel({
                 <th scope="col">
                   <span className="sr-only">Property</span>
                 </th>
-                <th scope="col">% of page</th>
-                <th scope="col">PDF points</th>
+                <th scope="col">{unit}</th>
               </tr>
             </thead>
             <tbody>
               {FIELDS.map(({ id, label }) => (
                 <tr key={id}>
                   <th scope="row">{label}</th>
-                  <td>{formatNumber(measurements.percent[id])}</td>
-                  <td>{measurements.points ? formatNumber(measurements.points[id]) : '—'}</td>
+                  <td>{formatLength(measurements[id], unit)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
+        ) : missingPageSize ? (
+          <p className="highlight-tool-hint">
+            This page has no recorded size, so its highlights cannot be measured or set numerically.
+            Drag or resize them on the page instead.
+          </p>
         ) : (
           <p className="highlight-tool-hint">
             Select an entry with a highlight to see its current position.
@@ -210,19 +199,13 @@ export function HighlightToolPanel({
             <option value="delta">Adjust by</option>
           </select>
         </label>
+        <LengthUnitSelect />
         <label>
-          <span>Units</span>
-          <select value={unit} onChange={(event) => setUnit(event.target.value as HighlightUnit)}>
-            <option value="percent">Percent of page</option>
-            <option value="points">PDF points</option>
-          </select>
-        </label>
-        <label>
-          <span>Value ({unitLabel})</span>
+          <span>Value ({unit})</span>
           <input
             type="number"
             value={rawValue}
-            step={unit === 'percent' ? 1 : 5}
+            step={LENGTH_UNIT_STEP[unit]}
             aria-invalid={invalid || undefined}
             aria-describedby="highlight-tool-validation"
             onChange={(event) => setRawValue(event.target.value)}

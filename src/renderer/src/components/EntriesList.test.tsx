@@ -6,7 +6,8 @@ import { renderToStaticMarkup } from 'react-dom/server'
 void React
 
 import type { ProjectEntry } from '../../../shared/contracts'
-import { EntriesList, hasNestedInteractiveTarget } from './EntriesList'
+import { EntriesList } from './EntriesList'
+import { hasNestedInteractiveTarget } from './entryRowInteraction'
 
 const entry: ProjectEntry = {
   id: 'entry-1',

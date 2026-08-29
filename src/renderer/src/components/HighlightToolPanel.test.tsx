@@ -4,11 +4,9 @@ import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
 import { HighlightToolPanel, type HighlightToolPanelProps } from './HighlightToolPanel'
+import { setLengthUnit } from '../lib/lengthUnitStore'
 
-const measurements = {
-  percent: { x: 10, y: 20, width: 30, height: 10 },
-  points: { x: 20, y: 280, width: 60, height: 40 }
-}
+const measurements = { status: 'measured' as const, x: 20, y: 280, width: 60, height: 40 }
 
 function render(overrides: Partial<HighlightToolPanelProps> = {}): string {
   const props: HighlightToolPanelProps = {
@@ -28,6 +26,8 @@ function render(overrides: Partial<HighlightToolPanelProps> = {}): string {
   }
   return renderToStaticMarkup(React.createElement(HighlightToolPanel, props))
 }
+
+test.afterEach(() => setLengthUnit('pt'))
 
 // HT-C-001
 test('renders visibility, edit mode, and style controls', () => {
@@ -74,35 +74,42 @@ test('associates the value input with its validation message', () => {
 })
 
 // HT-C-007
-test('offers percent and PDF point units', () => {
+test('offers the shared unit scale and no percent option', () => {
   const markup = render()
-  assert.match(markup, /Percent of page/)
-  assert.match(markup, /PDF points/)
-  assert.match(markup, /Value \(% of page\)/)
+  assert.match(markup, /aria-label="Coordinate and size units"/)
+  for (const unit of ['pt', 'mm', 'cm', 'in', 'px']) {
+    assert.match(markup, new RegExp(`value="${unit}"`))
+  }
+  assert.doesNotMatch(markup, /Percent of page/)
+  assert.match(markup, /Value \(pt\)/)
 })
 
 // HT-C-008
-test('shows the selected highlight position in both units', () => {
-  const markup = render()
-  assert.match(markup, /Selected highlight/)
-  // percent x=10 and points x=20 / y=280 should both be readable
-  assert.match(markup, /<td>10<\/td>/)
-  assert.match(markup, /<td>280<\/td>/)
+test('shows the selected highlight position in the active unit', () => {
+  const points = render()
+  setLengthUnit('mm')
+  const millimetres = render()
+
+  assert.match(points, /Selected highlight/)
+  assert.match(points, /<td>280\.0<\/td>/)
+  // 280pt is 98.8mm
+  assert.match(millimetres, /<td>98\.8<\/td>/)
+  assert.doesNotMatch(millimetres, /<td>280\.0<\/td>/)
 })
 
 // HT-C-009
 test('prompts to select an entry when no highlight is measured', () => {
-  const markup = render({ measurements: null })
+  const markup = render({ measurements: { status: 'no-selection' } })
   assert.match(markup, /Select an entry with a highlight to see its current position\./)
   assert.doesNotMatch(markup, /Selected highlight/)
 })
 
-// HT-C-010
-test('falls back to a dash when points cannot be derived', () => {
-  const markup = render({
-    measurements: { percent: { x: 10, y: 20, width: 30, height: 10 }, points: null }
-  })
-  assert.match(markup, /<td>\u2014<\/td>/)
+test('explains a missing page size and blocks numeric edits rather than silently ignoring them', () => {
+  const markup = render({ measurements: { status: 'no-page-size' } })
+
+  assert.match(markup, /This page has no recorded size/)
+  assert.doesNotMatch(markup, /Select an entry with a highlight/)
+  assert.match(markup, /<button[^>]*disabled[^>]*>Apply<\/button>/)
 })
 
 // HT-C-011

@@ -43,40 +43,42 @@ function entry(
 // HT-A-006
 test('clamps absolute geometry edits inside the page bounds', () => {
   const rect = { x: 0.1, y: 0.2, width: 0.3, height: 0.1 }
+  const page = { width: 200, height: 400 }
 
-  assert.deepEqual(applyGeometryEdit(rect, { field: 'x', mode: 'absolute', value: 5 }), {
-    x: 0.7,
-    y: 0.2,
-    width: 0.3,
-    height: 0.1
-  })
-  assert.deepEqual(applyGeometryEdit(rect, { field: 'x', mode: 'absolute', value: -5 }), {
-    x: 0,
-    y: 0.2,
-    width: 0.3,
-    height: 0.1
-  })
+  const far = applyGeometryEdit(rect, { field: 'x', mode: 'absolute', value: 1000 }, page)
+  const negative = applyGeometryEdit(rect, { field: 'x', mode: 'absolute', value: -1000 }, page)
+
+  assert.ok(Math.abs(far.x - 0.7) < 1e-9)
+  assert.ok(Math.abs(negative.x) < 1e-9)
+  for (const result of [far, negative]) {
+    assert.ok(Math.abs(result.y - 0.2) < 1e-9)
+    assert.ok(Math.abs(result.width - 0.3) < 1e-9)
+    assert.ok(Math.abs(result.height - 0.1) < 1e-9)
+  }
 })
 
 // HT-A-006
 test('keeps resized rectangles on the page and enforces a minimum size', () => {
   const rect = { x: 0.8, y: 0.8, width: 0.1, height: 0.1 }
+  const page = { width: 200, height: 400 }
 
-  const widened = applyGeometryEdit(rect, { field: 'width', mode: 'absolute', value: 0.9 })
+  const widened = applyGeometryEdit(rect, { field: 'width', mode: 'absolute', value: 180 }, page)
   assert.ok(widened.x + widened.width <= 1 + Number.EPSILON)
 
-  const collapsed = applyGeometryEdit(rect, { field: 'height', mode: 'absolute', value: 0 })
+  const collapsed = applyGeometryEdit(rect, { field: 'height', mode: 'absolute', value: 0 }, page)
   assert.equal(collapsed.height, 0.01)
 })
 
 // HT-A-005
 test('applies delta edits relative to the current value', () => {
+  // PDF y is bottom-up, so a positive delta moves the box up and lowers the top-down fraction.
   const result = applyGeometryEdit(
     { x: 0.1, y: 0.2, width: 0.3, height: 0.1 },
-    { field: 'y', mode: 'delta', value: 0.05 }
+    { field: 'y', mode: 'delta', value: 20 },
+    { width: 200, height: 400 }
   )
 
-  assert.ok(Math.abs(result.y - 0.25) < 1e-9)
+  assert.ok(Math.abs(result.y - 0.15) < 1e-9)
   assert.equal(result.x, 0.1)
   assert.equal(result.width, 0.3)
   assert.equal(result.height, 0.1)
@@ -134,13 +136,14 @@ test('updates only targeted regions and reports the affected counts', () => {
   const result = applyHighlightGeometry(
     entries,
     [{ entryId: 'a', regionIndex: 0 }],
-    { field: 'x', mode: 'absolute', value: 0.5 },
+    { field: 'x', mode: 'absolute', value: 100 },
     pages,
     '2026-02-02T00:00:00.000Z'
   )
 
   assert.equal(result.changedRegionCount, 1)
   assert.equal(result.changedEntryCount, 1)
+  // 100pt across a 200pt page is half way.
   assert.equal(result.entries[0]?.regions[0]?.bbox?.x, 0.5)
   assert.equal(result.entries[0]?.updatedAt, '2026-02-02T00:00:00.000Z')
   // Untouched entries keep their original identity so React can skip re-rendering them.
@@ -200,7 +203,7 @@ test('sets geometry in PDF points using the bottom-up page space', () => {
   // Page is 200x400. A box at normalized y=0.2 height=0.1 sits at pdf y = (1-0.2-0.1)*400 = 280.
   const result = applyGeometryEdit(
     { x: 0.1, y: 0.2, width: 0.3, height: 0.1 },
-    { field: 'y', mode: 'absolute', value: 100, unit: 'points' },
+    { field: 'y', mode: 'absolute', value: 100, unit: 'pt' },
     { width: 200, height: 400 }
   )
 
@@ -215,25 +218,42 @@ test('sets geometry in PDF points using the bottom-up page space', () => {
 test('sets width in PDF points and converts back to a page fraction', () => {
   const result = applyGeometryEdit(
     { x: 0.1, y: 0.2, width: 0.3, height: 0.1 },
-    { field: 'width', mode: 'absolute', value: 50, unit: 'points' },
+    { field: 'width', mode: 'absolute', value: 50, unit: 'pt' },
     { width: 200, height: 400 }
   )
 
   assert.ok(Math.abs(result.width - 0.25) < 1e-9)
 })
 
+test('accepts any supported unit and converts it to points first', () => {
+  const inches = applyGeometryEdit(
+    { x: 0.1, y: 0.2, width: 0.3, height: 0.1 },
+    { field: 'width', mode: 'absolute', value: 1, unit: 'in' },
+    { width: 200, height: 400 }
+  )
+  const millimetres = applyGeometryEdit(
+    { x: 0.1, y: 0.2, width: 0.3, height: 0.1 },
+    { field: 'width', mode: 'absolute', value: 25.4, unit: 'mm' },
+    { width: 200, height: 400 }
+  )
+
+  // One inch is 72 points on a 200 point page.
+  assert.ok(Math.abs(inches.width - 0.36) < 1e-9)
+  assert.ok(Math.abs(millimetres.width - inches.width) < 1e-9)
+})
+
 // HT-A-009
 test('applies point deltas and still clamps to the page', () => {
   const nudged = applyGeometryEdit(
     { x: 0.1, y: 0.2, width: 0.3, height: 0.1 },
-    { field: 'x', mode: 'delta', value: 20, unit: 'points' },
+    { field: 'x', mode: 'delta', value: 20, unit: 'pt' },
     { width: 200, height: 400 }
   )
   assert.ok(Math.abs(nudged.x - 0.2) < 1e-9)
 
   const clamped = applyGeometryEdit(
     { x: 0.1, y: 0.2, width: 0.3, height: 0.1 },
-    { field: 'x', mode: 'absolute', value: 9999, unit: 'points' },
+    { field: 'x', mode: 'absolute', value: 9999, unit: 'pt' },
     { width: 200, height: 400 }
   )
   assert.ok(Math.abs(clamped.x - 0.7) < 1e-9)
@@ -244,7 +264,7 @@ test('leaves geometry untouched when a point edit has no page size', () => {
   assert.deepEqual(
     applyGeometryEdit(
       { x: 0.1, y: 0.2, width: 0.3, height: 0.1 },
-      { field: 'x', mode: 'absolute', value: 50, unit: 'points' },
+      { field: 'x', mode: 'absolute', value: 50, unit: 'pt' },
       undefined
     ),
     { x: 0.1, y: 0.2, width: 0.3, height: 0.1 }
@@ -266,7 +286,7 @@ test('applies point edits through applyHighlightGeometry for pdf-points regions'
   const result = applyHighlightGeometry(
     entries,
     [{ entryId: 'a', regionIndex: 0 }],
-    { field: 'x', mode: 'absolute', value: 50, unit: 'points' },
+    { field: 'x', mode: 'absolute', value: 50, unit: 'pt' },
     pages,
     '2026-02-02T00:00:00.000Z'
   )
@@ -278,24 +298,41 @@ test('applies point edits through applyHighlightGeometry for pdf-points regions'
 })
 
 // HT-A-012
-test('measures a highlight in both percent and points', () => {
+test('measures a highlight in canonical points', () => {
   const entries = [entry('a')]
   const measured = measureHighlight(entries, { entryId: 'a', regionIndex: 0 }, pages)
 
-  assert.ok(measured)
-  assert.ok(Math.abs(measured.percent.x - 10) < 1e-9)
-  assert.ok(Math.abs(measured.percent.y - 20) < 1e-9)
-  // normalized y=0.2 height=0.1 on a 400pt page -> pdf y = (1-0.3)*400 = 280
-  assert.ok(measured.points && Math.abs(measured.points.y - 280) < 1e-9)
-  assert.ok(measured.points && Math.abs(measured.points.width - 60) < 1e-9)
+  assert.equal(measured.status, 'measured')
+  assert.ok(measured.status === 'measured')
+  // normalized x=0.1 on a 200pt page, and y=0.2 height=0.1 -> pdf y = (1-0.3)*400 = 280
+  assert.ok(Math.abs(measured.x - 20) < 1e-9)
+  assert.ok(Math.abs(measured.y - 280) < 1e-9)
+  assert.ok(Math.abs(measured.width - 60) < 1e-9)
+  assert.ok(Math.abs(measured.height - 40) < 1e-9)
+})
+
+test('reports a missing page size separately from a missing selection', () => {
+  const entries = [entry('a')]
+  const sizeless = [{ ...pages[0], width: 0, height: 0 }]
+
+  assert.deepEqual(measureHighlight(entries, { entryId: 'a', regionIndex: 0 }, sizeless), {
+    status: 'no-page-size'
+  })
+  assert.deepEqual(measureHighlight(entries, undefined, pages), { status: 'no-selection' })
 })
 
 // HT-A-013
 test('returns no measurement for a missing target or region', () => {
   const entries = [entry('a')]
-  assert.equal(measureHighlight(entries, undefined, pages), null)
-  assert.equal(measureHighlight(entries, { entryId: 'nope', regionIndex: 0 }, pages), null)
-  assert.equal(measureHighlight(entries, { entryId: 'a', regionIndex: 5 }, pages), null)
+  assert.equal(measureHighlight(entries, undefined, pages).status, 'no-selection')
+  assert.equal(
+    measureHighlight(entries, { entryId: 'nope', regionIndex: 0 }, pages).status,
+    'no-selection'
+  )
+  assert.equal(
+    measureHighlight(entries, { entryId: 'a', regionIndex: 5 }, pages).status,
+    'no-selection'
+  )
 })
 
 // HT-A-014

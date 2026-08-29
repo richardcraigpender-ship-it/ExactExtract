@@ -66,6 +66,12 @@ const studio = {
       suggestedFolderName: string
       files: Array<{ name: string; content: string }>
     }) => ipcRenderer.invoke('studio:exports:save-entry-images', request)
+  },
+  projectImages: {
+    save: (files: Array<{ name: string; content: string }>) =>
+      ipcRenderer.invoke('studio:project-images:save', files),
+    readDataUrls: (refs: string[]) =>
+      ipcRenderer.invoke('studio:project-images:read-data-urls', refs)
   }
 }
 

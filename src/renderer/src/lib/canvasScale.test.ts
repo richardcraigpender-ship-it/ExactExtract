@@ -11,8 +11,8 @@ import {
 test('returns PDF-point dimensions for each page size and orientation', () => {
   assert.deepEqual(getCanvasPageDimensions('letter', 'portrait'), { width: 612, height: 792 })
   assert.deepEqual(getCanvasPageDimensions('letter', 'landscape'), { width: 792, height: 612 })
-  assert.deepEqual(getCanvasPageDimensions('a4', 'portrait'), { width: 595, height: 842 })
-  assert.deepEqual(getCanvasPageDimensions('a4', 'landscape'), { width: 842, height: 595 })
+  assert.deepEqual(getCanvasPageDimensions('a4', 'portrait'), { width: 595.28, height: 841.89 })
+  assert.deepEqual(getCanvasPageDimensions('a4', 'landscape'), { width: 841.89, height: 595.28 })
 })
 
 test('converts reversibly between canvas pixels and PDF points', () => {

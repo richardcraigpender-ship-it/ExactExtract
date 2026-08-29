@@ -1,10 +1,12 @@
 import React, { useState } from 'react'
 import { Check, FileOutput, Plus, RotateCcw, Trash2 } from 'lucide-react'
 
+import type { KeptImagePlan, KeptImageSourceDescriptor } from '../../../export'
 import type { KeptEntriesFontRef } from '../../../shared/keptEntriesLayout'
 import { getCanvasPageDimensions } from '../lib/canvasScale'
 import { CanvasBackgroundControls } from './CanvasBackgroundControls'
 import { FontPicker } from './FontPicker'
+import { KeptImagePlacementSection } from './KeptImagePlacementSection'
 import {
   applyTextStyle,
   cloneKeptExportPageTemplate,
@@ -33,6 +35,11 @@ interface KeptExportTemplateEditorProps {
   onPreview?: (draft: KeptExportTemplateDraft) => void
   onCancel?: () => void
   isExporting?: boolean
+  sessionImageSources?: readonly KeptImageSourceDescriptor[]
+  onPlaceImages?: (plan: KeptImagePlan) => void
+  onUploadPngs?: (files: File[]) => Promise<KeptImageSourceDescriptor[]>
+  placedImageCount?: number
+  onPreviewPlacedImages?: () => void
 }
 
 const STANDARD_FONTS: Array<Extract<KeptEntriesFontRef, { kind: 'standard-14' }>['family']> = [
@@ -88,7 +95,12 @@ export function KeptExportTemplateEditor({
   onExport,
   onPreview,
   onCancel,
-  isExporting = false
+  isExporting = false,
+  sessionImageSources,
+  onPlaceImages,
+  onUploadPngs,
+  placedImageCount,
+  onPreviewPlacedImages
 }: KeptExportTemplateEditorProps): React.JSX.Element {
   const [draft, setDraft] = useState<KeptExportTemplateDraft>(() =>
     cloneKeptExportTemplateDraft(initialDraft ?? createDefaultKeptExportTemplateDraft())
@@ -513,6 +525,18 @@ export function KeptExportTemplateEditor({
           defaultHeight={dimensions.height}
           onChange={(background) => setTemplate((current) => ({ ...current, background }))}
         />
+
+        {onPlaceImages && (
+          <KeptImagePlacementSection
+            pageSize={template.pageSize}
+            orientation={template.orientation}
+            sessionSources={sessionImageSources}
+            onPlaceImages={onPlaceImages}
+            onUploadPngs={onUploadPngs}
+            placedImageCount={placedImageCount}
+            onPreviewPlacedImages={onPreviewPlacedImages}
+          />
+        )}
 
         <section className="kept-template-section" aria-labelledby="kept-template-summary-title">
           <h3 id="kept-template-summary-title">Final-page financial summary</h3>

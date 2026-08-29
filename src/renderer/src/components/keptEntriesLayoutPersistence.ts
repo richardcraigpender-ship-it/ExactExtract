@@ -1,4 +1,5 @@
 import type { ProjectState } from '../../../shared/contracts'
+import { upgradeKeptEntriesLayout } from '../../../shared/keptEntriesLayout'
 import {
   DEFAULT_KEPT_ENTRIES_LAYOUT,
   type KeptEntriesCanvasLayout,
@@ -9,10 +10,13 @@ export function restoreKeptEntriesLayout(
   project: Pick<ProjectState, 'keptEntriesLayout'>
 ): KeptEntriesCanvasLayout {
   const layout = project.keptEntriesLayout
-  if (!layout || layout.version !== 1) return { ...DEFAULT_KEPT_ENTRIES_LAYOUT, placements: [] }
+  if (!layout || (layout.version !== 1 && layout.version !== 2)) {
+    return { ...DEFAULT_KEPT_ENTRIES_LAYOUT, placements: [] }
+  }
   return {
-    ...layout,
+    ...upgradeKeptEntriesLayout(layout),
     placements: layout.placements.map((placement) => ({ ...placement })),
+    images: layout.images?.map((placement) => ({ ...placement })),
     background: layout.background ? { ...layout.background } : undefined
   }
 }

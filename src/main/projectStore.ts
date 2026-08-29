@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 
 import { PROJECT_SCHEMA_VERSION, type ProjectState, type RecentProject } from '../shared/contracts'
+import { isLengthUnit } from '../shared/units'
 
 const PROJECT_ID_PATTERN = /^[A-Za-z0-9_-]+$/
 const EXTRACTION_MODES = new Set(['fast', 'balanced', 'maximum', 'custom'])
@@ -170,6 +171,9 @@ export function assertProjectState(value: unknown): asserts value is ProjectStat
   }
   requireExtractionSettings(project.settings.extraction, 'settings.extraction')
   requireFiniteNumber(project.settings.splitPanePercent, 'settings.splitPanePercent')
+  if (project.settings.lengthUnit !== undefined && !isLengthUnit(project.settings.lengthUnit)) {
+    throw new Error('Invalid project field: settings.lengthUnit')
+  }
 }
 
 async function readJson(path: string): Promise<unknown> {

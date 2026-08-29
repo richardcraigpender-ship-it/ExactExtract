@@ -1,23 +1,19 @@
-import type { KeptEntriesOrientation, KeptEntriesPageSize } from '../../../shared/keptEntriesLayout'
+import {
+  keptEntriesPageDimensions,
+  type KeptEntriesOrientation,
+  type KeptEntriesPageSize
+} from '../../../shared/keptEntriesLayout'
 
 export interface CanvasPageDimensions {
   width: number
   height: number
 }
 
-const PAGE_DIMENSIONS: Record<KeptEntriesPageSize, CanvasPageDimensions> = {
-  letter: { width: 612, height: 792 },
-  a4: { width: 595, height: 842 }
-}
-
 export function getCanvasPageDimensions(
   pageSize: KeptEntriesPageSize,
   orientation: KeptEntriesOrientation
 ): CanvasPageDimensions {
-  const dimensions = PAGE_DIMENSIONS[pageSize]
-  return orientation === 'portrait'
-    ? { ...dimensions }
-    : { width: dimensions.height, height: dimensions.width }
+  return keptEntriesPageDimensions(pageSize, orientation)
 }
 
 export function getPixelsPerPdfPoint(canvasWidthPixels: number, pageWidthPoints: number): number {

@@ -1,6 +1,15 @@
-import React, { useRef } from 'react'
-import { ImagePlus, Trash2 } from 'lucide-react'
+import React, { useRef, useState } from 'react'
+import { ImagePlus, Maximize2, Minus, Plus, Trash2 } from 'lucide-react'
 import type { KeptEntriesBackground } from '../../../shared/keptEntriesLayout'
+import {
+  fitBackgroundToPage,
+  MIN_BACKGROUND_SIZE,
+  resizeBackgroundEdge,
+  scaleBackground
+} from '../lib/canvasBackground'
+import { LengthField } from './LengthField'
+
+const SCALE_STEP = 0.1
 
 interface CanvasBackgroundControlsProps {
   background?: KeptEntriesBackground
@@ -18,6 +27,7 @@ export function CanvasBackgroundControls({
   defaultHeight = 792
 }: CanvasBackgroundControlsProps): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null)
+  const [lockAspectRatio, setLockAspectRatio] = useState(true)
 
   const selectImage = (): void => {
     inputRef.current?.click()
@@ -77,25 +87,34 @@ export function CanvasBackgroundControls({
             </button>
           </div>
           <div className="canvas-background-fields">
-            {(['x', 'y', 'width', 'height'] as const).map((field) => (
-              <label key={field}>
-                <span>{field === 'x' || field === 'y' ? field.toUpperCase() : field}</span>
-                <input
-                  type="number"
-                  min={field === 'width' || field === 'height' ? 16 : 0}
-                  value={background[field]}
-                  onChange={(event) =>
-                    onChange({
-                      ...background,
-                      [field]: Math.max(
-                        field === 'width' || field === 'height' ? 16 : 0,
-                        Number(event.target.value) || 0
-                      )
-                    })
-                  }
-                />
-              </label>
-            ))}
+            <LengthField
+              label="X"
+              value={background.x}
+              min={0}
+              onChange={(points) => onChange({ ...background, x: Math.max(0, points) })}
+            />
+            <LengthField
+              label="Y"
+              value={background.y}
+              min={0}
+              onChange={(points) => onChange({ ...background, y: Math.max(0, points) })}
+            />
+            <LengthField
+              label="Width"
+              value={background.width}
+              min={MIN_BACKGROUND_SIZE}
+              onChange={(points) =>
+                onChange(resizeBackgroundEdge(background, 'width', points, lockAspectRatio))
+              }
+            />
+            <LengthField
+              label="Height"
+              value={background.height}
+              min={MIN_BACKGROUND_SIZE}
+              onChange={(points) =>
+                onChange(resizeBackgroundEdge(background, 'height', points, lockAspectRatio))
+              }
+            />
             <label>
               <span>Opacity</span>
               <input
@@ -109,6 +128,41 @@ export function CanvasBackgroundControls({
                 }
               />
             </label>
+          </div>
+          <div className="canvas-background-scale">
+            <label className="canvas-background-lock">
+              <input
+                type="checkbox"
+                checked={lockAspectRatio}
+                onChange={(event) => setLockAspectRatio(event.target.checked)}
+              />
+              <span>Lock aspect ratio</span>
+            </label>
+            <button
+              className="icon-button"
+              type="button"
+              title="Scale background down"
+              aria-label="Scale background down"
+              onClick={() => onChange(scaleBackground(background, 1 - SCALE_STEP))}
+            >
+              <Minus size={15} aria-hidden="true" />
+            </button>
+            <button
+              className="icon-button"
+              type="button"
+              title="Scale background up"
+              aria-label="Scale background up"
+              onClick={() => onChange(scaleBackground(background, 1 + SCALE_STEP))}
+            >
+              <Plus size={15} aria-hidden="true" />
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={() => onChange(fitBackgroundToPage(background, defaultWidth, defaultHeight))}
+            >
+              <Maximize2 size={14} aria-hidden="true" /> Fit to page
+            </button>
           </div>
         </div>
       ) : (

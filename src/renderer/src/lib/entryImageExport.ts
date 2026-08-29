@@ -5,6 +5,7 @@ import type { ProjectState } from '../../../shared/contracts'
 export interface EntryPngFile {
   name: string
   content: string
+  entryId?: string
 }
 
 export async function generateEntryPngFiles(
@@ -79,6 +80,7 @@ export async function generateEntryPngFiles(
       )
       files.push({
         name: crop.fileName,
+        entryId: crop.entryId,
         content: outputCanvas.toDataURL('image/png').replace(/^data:image\/png;base64,/, '')
       })
     }

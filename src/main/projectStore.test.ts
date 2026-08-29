@@ -85,6 +85,48 @@ test('round-trips persisted analysis and kept-entry layout state', async () => {
   })
 })
 
+test('round-trips a multi-page kept-image layout without embedding image bytes', async () => {
+  await withStore(async (store, directory) => {
+    const project = store.create('Image layout', 'image-layout')
+    project.keptEntriesLayout = {
+      version: 2,
+      pageSize: 'letter',
+      orientation: 'portrait',
+      placements: [],
+      pageCount: 2,
+      images: [
+        {
+          id: 'image-1',
+          source: { kind: 'session-entry', ref: 'entry-1' },
+          entryId: 'entry-1',
+          pageNumber: 1,
+          x: 48,
+          y: 48,
+          width: 240,
+          height: 36,
+          fit: 'contain'
+        },
+        {
+          id: 'image-2',
+          source: { kind: 'uploaded-png', ref: 'managed/image-2.png' },
+          pageNumber: 2,
+          x: 48,
+          y: 48,
+          width: 240,
+          height: 36,
+          fit: 'stretch'
+        }
+      ]
+    }
+
+    await store.save(project)
+    const reopened = await new ProjectStore(directory).load(project.id)
+
+    assert.deepEqual(reopened.keptEntriesLayout, project.keptEntriesLayout)
+    assert.doesNotMatch(JSON.stringify(reopened.keptEntriesLayout), /data:image|base64/i)
+  })
+})
+
 test('persists removed source pages across project reopen', async () => {
   await withStore(async (store, directory) => {
     const project = store.create('Removed pages', 'removed-pages')

@@ -34,12 +34,34 @@ test('renders precise placement and opacity controls for a selected background',
 
   assert.match(markup, /Later pages background/)
   assert.match(markup, /Selected canvas background/)
-  assert.match(markup, />X</)
-  assert.match(markup, />Y</)
-  assert.match(markup, />width</)
-  assert.match(markup, />height</)
+  assert.match(markup, /X \(pt\)/)
+  assert.match(markup, /Y \(pt\)/)
+  assert.match(markup, /Width \(pt\)/)
+  assert.match(markup, /Height \(pt\)/)
   assert.match(markup, />Opacity</)
   assert.match(markup, /type="range" min="0" max="1" step="0.05" value="0.65"/)
   assert.match(markup, /title="Remove background image"/)
   assert.match(markup, /title="Replace background image"/)
+})
+
+test('offers proportional scaling commands for a selected background', () => {
+  const markup = renderToStaticMarkup(
+    <CanvasBackgroundControls
+      background={{
+        dataUrl: 'data:image/png;base64,preview',
+        x: 0,
+        y: 0,
+        width: 300,
+        height: 400,
+        opacity: 1
+      }}
+      onChange={() => {}}
+    />
+  )
+
+  assert.match(markup, /Lock aspect ratio/)
+  assert.match(markup, /aria-label="Scale background down"/)
+  assert.match(markup, /aria-label="Scale background up"/)
+  assert.match(markup, /Fit to page/)
+  assert.match(markup, /type="checkbox" checked=""/)
 })

@@ -9,8 +9,11 @@ import { saveEntryImageRequest } from './entryImageSave'
 import { PayeeStore } from './payeeLibraryStore'
 import { ProjectStore } from './projectStore'
 import { resolveOcrAssetPath } from './ocrAssets'
+import { ProjectImageStore } from './projectImageStore'
+import { pruneProjectImages } from './projectImageRetention'
 import type { ProjectState } from '../shared/contracts'
 import { OCR_ASSET_SCHEME } from '../shared/ocrAssets'
+import { PROJECT_IMAGE_SCHEME } from '../shared/projectImages'
 import type { PayeeObservation } from '../shared/payees'
 import { removePdfPages } from '../renderer/src/lib/removePdfPages'
 import {
@@ -27,6 +30,10 @@ const closeGuardStates = new Map<number, CloseGuardState>()
 protocol.registerSchemesAsPrivileged([
   {
     scheme: OCR_ASSET_SCHEME,
+    privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true }
+  },
+  {
+    scheme: PROJECT_IMAGE_SCHEME,
     privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true }
   }
 ])
@@ -384,7 +391,35 @@ app.whenReady().then(() => {
 
   const projectStore = new ProjectStore(join(app.getPath('userData'), 'pdf-extract-review-studio'))
   const payeeStore = new PayeeStore(join(app.getPath('userData'), 'pdf-extract-review-studio'))
+  const projectImageStore = new ProjectImageStore(
+    join(app.getPath('userData'), 'pdf-extract-review-studio', 'project-images')
+  )
   registerDocumentHandlers(projectStore, payeeStore)
+
+  void pruneProjectImages(
+    join(app.getPath('userData'), 'pdf-extract-review-studio', 'project-images'),
+    join(app.getPath('userData'), 'pdf-extract-review-studio', 'projects')
+  ).catch(() => undefined)
+
+  ipcMain.handle('studio:project-images:save', (_event, value: unknown) =>
+    projectImageStore.save(value)
+  )
+  ipcMain.handle('studio:project-images:read-data-urls', (_event, refs: unknown) =>
+    projectImageStore.readDataUrls(
+      Array.isArray(refs) ? refs.filter((ref) => typeof ref === 'string') : []
+    )
+  )
+
+  protocol.handle(PROJECT_IMAGE_SCHEME, (request) => {
+    try {
+      const ref = decodeURIComponent(new URL(request.url).pathname).replace(/^[/\\]+/, '')
+      return net.fetch(pathToFileURL(projectImageStore.resolvePath(ref)).toString(), {
+        method: request.method
+      })
+    } catch {
+      return new Response('Project image not found.', { status: 404 })
+    }
+  })
 
   const ocrAssetRoot = is.dev
     ? join(app.getAppPath(), 'src', 'renderer', 'public', 'ocr')

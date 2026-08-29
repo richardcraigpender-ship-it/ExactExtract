@@ -1,5 +1,6 @@
 import type { ProjectState, RecentProject } from '../shared/contracts'
 import type { PayeeObservation, PayeeRecord } from '../shared/payees'
+import type { ProjectImageDescriptor } from '../shared/projectImages'
 import type { CloseGuardState, RecentProjectRecoveryItem } from '../recovery'
 import type { RemovedPdfPages } from '../renderer/src/lib/removePdfPages'
 
@@ -56,6 +57,10 @@ export interface StudioBridge {
       suggestedFolderName: string
       files: Array<{ name: string; content: string }>
     }) => Promise<{ status: 'cancelled' } | { status: 'saved'; path: string; fileCount: number }>
+  }
+  projectImages: {
+    save: (files: Array<{ name: string; content: string }>) => Promise<ProjectImageDescriptor[]>
+    readDataUrls: (refs: string[]) => Promise<Record<string, string>>
   }
 }
 

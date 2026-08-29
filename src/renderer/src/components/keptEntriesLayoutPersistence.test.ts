@@ -38,6 +38,34 @@ test('restores a defensive copy and falls back for missing layouts', () => {
   assert.notEqual(layout.placements[0], placement)
 })
 
+test('restores version-2 image placements and page count', () => {
+  const image = {
+    id: 'kept-image-1',
+    source: { kind: 'uploaded-png' as const, ref: `${'a'.repeat(64)}.png` },
+    pageNumber: 2,
+    x: 48,
+    y: 60,
+    width: 200,
+    height: 100,
+    fit: 'contain' as const
+  }
+  const layout = restoreKeptEntriesLayout({
+    keptEntriesLayout: {
+      version: 2,
+      pageSize: 'letter',
+      orientation: 'portrait',
+      placements: [placement],
+      images: [image],
+      pageCount: 2
+    }
+  })
+
+  assert.equal(layout.version, 2)
+  assert.equal(layout.pageCount, 2)
+  assert.deepEqual(layout.images, [image])
+  assert.notEqual(layout.images?.[0], image)
+})
+
 test('moves and nudges placements within page bounds', () => {
   const moved = updatePlacementPosition(placement, 1000, 1000, 612, 792)
   assert.equal(moved.x, 512)

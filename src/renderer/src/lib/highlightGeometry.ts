@@ -1,17 +1,11 @@
 import type { ProjectEntry, ProjectPage } from '../../../shared/contracts'
+import { CANONICAL_LENGTH_UNIT, toPoints, type LengthUnit } from '../../../shared/units'
 
 export type HighlightGeometryField = 'x' | 'y' | 'width' | 'height'
 
 export type HighlightScope = 'entry' | 'selected' | 'keep' | 'all'
 
 export type HighlightStyleMode = 'filled' | 'border'
-
-/**
- * Percent edits are page fractions in the top-down normalized space the overlay uses.
- * Point edits are PDF user-space points in the bottom-up space stored on disk, so a point
- * edit round-trips through that space to keep Y measured from the bottom of the page.
- */
-export type HighlightUnit = 'percent' | 'points'
 
 export interface PageSize {
   width: number
@@ -22,12 +16,9 @@ export interface HighlightGeometryEdit {
   field: HighlightGeometryField
   /** Absolute edits set the value outright; delta edits offset the current value. */
   mode: 'absolute' | 'delta'
-  /**
-   * Normalized page fraction in the range 0-1 (or a signed offset when mode is 'delta'),
-   * or a measurement in PDF points when `unit` is 'points'.
-   */
+  /** A length in `unit`, converted to PDF points before it is applied. */
   value: number
-  unit?: HighlightUnit
+  unit?: LengthUnit
 }
 
 export interface HighlightScopeTarget {
@@ -57,37 +48,32 @@ function clampRect(rect: { x: number; y: number; width: number; height: number }
  * Applies one geometry edit to a normalized rectangle, keeping the result inside the page.
  * Width/height edits shrink toward the origin rather than pushing the box off-page.
  *
- * Point edits are applied in PDF user space so that `y` is measured from the bottom of the
- * page, matching what the numbers in a PDF actually mean; percent edits stay in the
- * top-down overlay space.
+ * Edits are applied in PDF user space so `y` is measured from the bottom of the page, matching
+ * what the numbers in a PDF actually mean. Without a page size there is nothing to convert
+ * against, so the rectangle is returned unchanged.
  */
 export function applyGeometryEdit(
   rect: { x: number; y: number; width: number; height: number },
   edit: HighlightGeometryEdit,
   page?: PageSize
 ): { x: number; y: number; width: number; height: number } {
-  if (edit.unit === 'points') {
-    if (!page || page.width <= 0 || page.height <= 0) return clampRect(rect)
-    const pdfRect = {
-      x: rect.x * page.width,
-      y: (1 - rect.y - rect.height) * page.height,
-      width: rect.width * page.width,
-      height: rect.height * page.height
-    }
-    const currentPoints = pdfRect[edit.field]
-    const nextPoints = edit.mode === 'absolute' ? edit.value : currentPoints + edit.value
-    const edited = { ...pdfRect, [edit.field]: nextPoints }
-    return clampRect({
-      x: edited.x / page.width,
-      y: 1 - (edited.y + edited.height) / page.height,
-      width: edited.width / page.width,
-      height: edited.height / page.height
-    })
+  if (!page || page.width <= 0 || page.height <= 0) return clampRect(rect)
+  const points = toPoints(edit.value, edit.unit ?? CANONICAL_LENGTH_UNIT)
+  const pdfRect = {
+    x: rect.x * page.width,
+    y: (1 - rect.y - rect.height) * page.height,
+    width: rect.width * page.width,
+    height: rect.height * page.height
   }
-
-  const current = rect[edit.field]
-  const next = edit.mode === 'absolute' ? edit.value : current + edit.value
-  return clampRect({ ...rect, [edit.field]: next })
+  const currentPoints = pdfRect[edit.field]
+  const nextPoints = edit.mode === 'absolute' ? points : currentPoints + points
+  const edited = { ...pdfRect, [edit.field]: nextPoints }
+  return clampRect({
+    x: edited.x / page.width,
+    y: 1 - (edited.y + edited.height) / page.height,
+    width: edited.width / page.width,
+    height: edited.height / page.height
+  })
 }
 
 /**
@@ -226,48 +212,51 @@ export function describeHighlightScope(count: number): string {
   return `${count} highlight${count === 1 ? '' : 's'} will be updated.`
 }
 
+/** A highlight's geometry in canonical PDF points. */
 export interface HighlightMeasurements {
-  percent: { x: number; y: number; width: number; height: number }
-  points: { x: number; y: number; width: number; height: number } | null
+  x: number
+  y: number
+  width: number
+  height: number
 }
 
 /**
- * Reads a region's current geometry in both units so the panel can show what a "set to"
- * edit would be replacing. Points are reported in the PDF's own bottom-up user space.
+ * `no-page-size` is reported separately because every unit is now a real length: without page
+ * dimensions there is nothing to convert against, so numeric edits cannot be applied and the
+ * panel has to say so rather than appear to work.
+ */
+export type HighlightMeasurement =
+  | ({ status: 'measured' } & HighlightMeasurements)
+  | { status: 'no-selection' }
+  | { status: 'no-page-size' }
+
+/**
+ * Reads a region's current geometry so the panel can show what a "set to" edit would be
+ * replacing, in the PDF's own bottom-up user space.
  */
 export function measureHighlight(
   entries: readonly ProjectEntry[],
   target: HighlightScopeTarget | undefined,
   pages: readonly ProjectPage[]
-): HighlightMeasurements | null {
-  if (!target) return null
+): HighlightMeasurement {
+  if (!target) return { status: 'no-selection' }
   const entry = entries.find((candidate) => candidate.id === target.entryId)
   const region = entry?.regions[target.regionIndex]
-  if (!region?.bbox) return null
+  if (!region?.bbox) return { status: 'no-selection' }
 
   const page = pages.find(
     (candidate) =>
       candidate.documentId === region.documentId && candidate.pageNumber === region.pageNumber
   )
   const normalized = toNormalized(region.bbox, page)
-  if (!normalized) return null
-
-  const percent = {
-    x: normalized.x * 100,
-    y: normalized.y * 100,
-    width: normalized.width * 100,
-    height: normalized.height * 100
-  }
-
-  if (!page || page.width <= 0 || page.height <= 0) return { percent, points: null }
+  if (!normalized) return { status: 'no-selection' }
+  if (!page || page.width <= 0 || page.height <= 0) return { status: 'no-page-size' }
 
   return {
-    percent,
-    points: {
-      x: normalized.x * page.width,
-      y: (1 - normalized.y - normalized.height) * page.height,
-      width: normalized.width * page.width,
-      height: normalized.height * page.height
-    }
+    status: 'measured',
+    x: normalized.x * page.width,
+    y: (1 - normalized.y - normalized.height) * page.height,
+    width: normalized.width * page.width,
+    height: normalized.height * page.height
   }
 }

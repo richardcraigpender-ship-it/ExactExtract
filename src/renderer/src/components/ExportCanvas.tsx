@@ -4,7 +4,9 @@ import type {
   KeptEntriesBackground,
   KeptEntriesCanvasLayout,
   KeptEntriesFontRef,
-  KeptEntryPlacement
+  KeptEntryPlacement,
+  KeptImagePlacement,
+  KeptImageSourceRef
 } from '../../../shared/keptEntriesLayout'
 import { useCanvasDrag } from '../hooks/useCanvasDrag'
 import { getCanvasDropPoint, KEPT_ENTRY_DRAG_TYPE } from '../lib/canvasDrop'
@@ -14,11 +16,19 @@ import './ExportCanvas.css'
 interface ExportCanvasProps {
   layout: KeptEntriesCanvasLayout
   ariaLabel?: string
+  zoom?: number
   selectedPlacementId?: string | null
   onSelectPlacement?: (placementId: string) => void
   onPlacementChange?: (placement: KeptEntryPlacement) => void
   onDropEntry?: (entryId: string, x: number, y: number) => void
   onBackgroundChange?: (background: KeptEntriesBackground) => void
+  /** 1-based page to render; version-1 layouts leave every placement on page 1. */
+  pageNumber?: number
+  selectedImagePlacementId?: string | null
+  onSelectImagePlacement?: (placementId: string) => void
+  onImagePlacementChange?: (placement: KeptImagePlacement) => void
+  /** Layouts store references only, so the caller supplies displayable bytes. */
+  resolveImageSource?: (source: KeptImageSourceRef) => string | undefined
 }
 
 function asPercent(value: number, total: number): string {
@@ -64,19 +74,36 @@ function placementStyle(
 export function ExportCanvas({
   layout,
   ariaLabel = 'Kept entries export page preview',
+  zoom = 1,
   selectedPlacementId = null,
   onSelectPlacement,
   onPlacementChange,
   onDropEntry,
-  onBackgroundChange
+  onBackgroundChange,
+  pageNumber = 1,
+  selectedImagePlacementId = null,
+  onSelectImagePlacement,
+  onImagePlacementChange,
+  resolveImageSource
 }: ExportCanvasProps): React.JSX.Element {
   const dimensions = getCanvasPageDimensions(layout.pageSize, layout.orientation)
+  const canvasZoom = Math.min(2, Math.max(0.5, zoom))
   const interactive = Boolean(onPlacementChange)
+  const imagesInteractive = Boolean(onImagePlacementChange)
   const drag = useCanvasDrag<KeptEntryPlacement>(dimensions, (placement) =>
     onPlacementChange?.(placement)
   )
+  const imageDrag = useCanvasDrag<KeptImagePlacement>(dimensions, (placement) =>
+    onImagePlacementChange?.(placement)
+  )
   const backgroundDrag = useCanvasDrag<KeptEntriesBackground>(dimensions, (background) =>
     onBackgroundChange?.(background)
+  )
+  const visiblePlacements = layout.placements.filter(
+    (placement) => (placement.pageNumber ?? 1) === pageNumber
+  )
+  const visibleImages = (layout.images ?? []).filter(
+    (placement) => placement.pageNumber === pageNumber
   )
 
   return (
@@ -87,7 +114,11 @@ export function ExportCanvas({
         aria-label={ariaLabel}
         data-page-size={layout.pageSize}
         data-orientation={layout.orientation}
-        style={{ aspectRatio: `${dimensions.width} / ${dimensions.height}` }}
+        style={{
+          aspectRatio: `${dimensions.width} / ${dimensions.height}`,
+          width: `${760 * canvasZoom}px`,
+          minWidth: `${320 * canvasZoom}px`
+        }}
         onDragOver={
           onDropEntry
             ? (event) => {
@@ -159,7 +190,78 @@ export function ExportCanvas({
           </div>
         )}
         <div className="export-canvas-content">
-          {layout.placements.map((placement) => (
+          {visibleImages.map((placement) => {
+            const label = placement.entryId ?? placement.source.ref
+            const src = resolveImageSource?.(placement.source)
+            return (
+              <div
+                className={`export-canvas-image ${
+                  selectedImagePlacementId === placement.id ? 'is-selected' : ''
+                }`}
+                data-image-placement-id={placement.id}
+                data-source-kind={placement.source.kind}
+                data-fit={placement.fit}
+                data-resolved={src ? 'true' : 'false'}
+                key={placement.id}
+                role={imagesInteractive ? 'group' : undefined}
+                aria-label={
+                  imagesInteractive
+                    ? `${selectedImagePlacementId === placement.id ? 'Selected. ' : ''}Move image: ${label}`
+                    : undefined
+                }
+                tabIndex={imagesInteractive ? 0 : undefined}
+                style={{
+                  left: asPercent(placement.x, dimensions.width),
+                  top: asPercent(placement.y, dimensions.height),
+                  width: asPercent(placement.width, dimensions.width),
+                  height: asPercent(placement.height, dimensions.height)
+                }}
+                onClick={
+                  imagesInteractive ? () => onSelectImagePlacement?.(placement.id) : undefined
+                }
+                onKeyDown={
+                  imagesInteractive
+                    ? (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          onSelectImagePlacement?.(placement.id)
+                        }
+                      }
+                    : undefined
+                }
+                onPointerDown={
+                  imagesInteractive
+                    ? (event) => {
+                        onSelectImagePlacement?.(placement.id)
+                        imageDrag.beginDrag(event, placement, 'move')
+                      }
+                    : undefined
+                }
+                onPointerMove={imagesInteractive ? imageDrag.continueDrag : undefined}
+                onPointerUp={imagesInteractive ? imageDrag.endDrag : undefined}
+                onPointerCancel={imagesInteractive ? imageDrag.endDrag : undefined}
+              >
+                {src ? (
+                  <img src={src} alt="" data-fit={placement.fit} />
+                ) : (
+                  <span className="export-canvas-image-placeholder">{`${label} (image not available)`}</span>
+                )}
+                {imagesInteractive && selectedImagePlacementId === placement.id && (
+                  <span
+                    className="export-canvas-resize-handle"
+                    role="button"
+                    aria-label={`Resize image: ${label}`}
+                    tabIndex={0}
+                    onPointerDown={(event) => imageDrag.beginDrag(event, placement, 'resize')}
+                    onPointerMove={imageDrag.continueDrag}
+                    onPointerUp={imageDrag.endDrag}
+                    onPointerCancel={imageDrag.endDrag}
+                  />
+                )}
+              </div>
+            )
+          })}
+          {visiblePlacements.map((placement) => (
             <div
               className={`export-canvas-placement ${
                 selectedPlacementId === placement.id ? 'is-selected' : ''

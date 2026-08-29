@@ -1,8 +1,13 @@
-import React, { lazy, Suspense, useState } from 'react'
+import React, { lazy, Suspense, useMemo, useState } from 'react'
 import { Download, Eye, FileJson, FileText, FileOutput, Images, Table } from 'lucide-react'
-import type { ExportSnapshot } from '../../../export'
+import {
+  buildSessionKeptImageSources,
+  type ExportSnapshot,
+  type KeptImagePlan
+} from '../../../export'
 import type { ProjectEntry } from '../../../shared/contracts'
 import { ExportPreview } from './ExportPreview'
+import { uploadProjectPngs } from '../lib/projectImageUploads'
 import { WorkspaceToolWindow } from './WorkspaceToolWindow'
 import { KeptExportTemplateEditor } from './KeptExportTemplateEditor'
 import {
@@ -45,6 +50,10 @@ interface ExportPanelProps {
   keptEntries?: readonly ProjectEntry[]
   onTemplateExport?: (template: KeptExportTemplate) => void
   onTemplatePreview?: (template: KeptExportTemplate) => Promise<Uint8Array>
+  onPlaceKeptImages?: (plan: KeptImagePlan) => void
+  onOpenKeptCanvas?: () => void
+  placedImageCount?: number
+  onPreviewPlacedImages?: () => void
 }
 
 export const ExportPanel = React.memo(function ExportPanel({
@@ -59,7 +68,11 @@ export const ExportPanel = React.memo(function ExportPanel({
   onPreview,
   keptEntries = [],
   onTemplateExport,
-  onTemplatePreview
+  onTemplatePreview,
+  onPlaceKeptImages,
+  onOpenKeptCanvas,
+  placedImageCount,
+  onPreviewPlacedImages
 }: ExportPanelProps): React.JSX.Element {
   const [previewFormat, setPreviewFormat] = useState<PdfExportFormat>('pdf')
   const [previewData, setPreviewData] = useState<Uint8Array | null>(null)
@@ -67,6 +80,10 @@ export const ExportPanel = React.memo(function ExportPanel({
   const [showTemplateEditor, setShowTemplateEditor] = useState(false)
   const [templateDraft, setTemplateDraft] = useState<KeptExportTemplateDraft>(() =>
     createDefaultKeptExportTemplateDraft()
+  )
+  const sessionImageSources = useMemo(
+    () => buildSessionKeptImageSources(keptEntries),
+    [keptEntries]
   )
 
   return (
@@ -120,6 +137,16 @@ export const ExportPanel = React.memo(function ExportPanel({
               onClick={() => setShowTemplateEditor(true)}
             >
               <FileOutput size={13} /> Configure kept export
+            </button>
+          )}
+          {onOpenKeptCanvas && (
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={isSaving || keptEntries.length === 0}
+              onClick={onOpenKeptCanvas}
+            >
+              <Images size={13} /> Open layout canvas
             </button>
           )}
           <button
@@ -253,6 +280,11 @@ export const ExportPanel = React.memo(function ExportPanel({
               void onTemplatePreview(toKeptExportTemplate(draft)).then(setPreviewData)
             }}
             isExporting={isSaving}
+            sessionImageSources={sessionImageSources}
+            onPlaceImages={onPlaceKeptImages}
+            onUploadPngs={uploadProjectPngs}
+            placedImageCount={placedImageCount}
+            onPreviewPlacedImages={onPreviewPlacedImages}
           />
         </WorkspaceToolWindow>
       )}

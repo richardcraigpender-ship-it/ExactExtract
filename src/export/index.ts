@@ -13,6 +13,18 @@ export {
 } from './pdf'
 export { exportProjectKeptEntriesCanvasPdf } from './keptEntriesCanvas'
 export { buildKeptExportRenderPlan } from './keptExportLayout'
+export {
+  buildSessionKeptImageSources,
+  planKeptEntryImagePlacements,
+  withKeptImagePlacements
+} from './keptImageLayout'
+export type {
+  KeptImagePlan,
+  KeptImagePlanOptions,
+  KeptImagePlanWarning,
+  KeptImagePlanWarningCode,
+  KeptImageSourceDescriptor
+} from './keptImageLayout'
 export { exportProjectKeptEntriesTemplatePdf } from './keptExportTemplatePdf'
 export {
   getKeptEntriesCanvasWarnings,

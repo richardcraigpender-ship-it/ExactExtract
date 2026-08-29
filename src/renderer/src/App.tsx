@@ -35,14 +35,14 @@ import {
   resolveHighlightTargets,
   type HighlightGeometryField,
   type HighlightScope,
-  type HighlightStyleMode,
-  type HighlightUnit
+  type HighlightStyleMode
 } from './lib/highlightGeometry'
 import {
   DEFAULT_KEPT_ENTRIES_LAYOUT,
   createDefaultKeptEntriesLayout
 } from './components/keptEntriesLayout'
 import { ReviewMergeSplitControls } from './components/ReviewMergeSplitControls'
+import { KeptEntriesCanvasWorkspace } from './components/KeptEntriesCanvasWorkspace'
 import {
   RightWorkspace,
   type RightWorkspaceCommand,
@@ -63,6 +63,12 @@ import {
 } from './lib/pdf'
 import { ExtractionBatchError, runExtractionBatch } from './lib/extractionBatch'
 import { generateEntryPngFiles } from './lib/entryImageExport'
+import {
+  collectKeptImageRefs,
+  loadKeptSessionImageUrls,
+  resolveKeptImageDataUrls,
+  resolveKeptImageUrl
+} from './lib/keptImageResolution'
 import { useDebouncedValue } from './hooks/useDebouncedValue'
 import { useIncrementalReviewFilter } from './hooks/useIncrementalReviewFilter'
 import { normalizeReviewQuery } from './hooks/reviewFiltering'
@@ -76,7 +82,12 @@ import type {
   ProjectState
 } from '../../shared/contracts'
 import type { KeptEntriesCanvasLayout } from '../../shared/keptEntriesLayout'
+import type { KeptImageSourceRef } from '../../shared/keptEntriesLayout'
 import type { KeptExportTemplate } from '../../shared/keptExportTemplate'
+import { LengthField } from './components/LengthField'
+import { LengthUnitSelect } from './components/LengthUnitSelect'
+import { CANONICAL_LENGTH_UNIT, isLengthUnit, type LengthUnit } from '../../shared/units'
+import { setLengthUnit as setStoredLengthUnit } from './lib/lengthUnitStore'
 import type { TableColumnDefinition, TableTemplate } from '../../extraction'
 import {
   saveFailureMessage,
@@ -102,7 +113,9 @@ import {
   exportProjectKeptEntriesTemplatePdf,
   exportProjectKeptLayoutPdf,
   exportProjectPdf,
-  exportProjectSourceLayoutPdf
+  exportProjectSourceLayoutPdf,
+  withKeptImagePlacements,
+  type KeptImagePlan
 } from '../../export'
 
 type Screen = 'onboarding' | 'import' | 'preflight' | 'workspace'
@@ -249,6 +262,11 @@ function App(): React.JSX.Element {
     const saved = Number(localStorage.getItem('studio-pane-percent'))
     return saved >= 35 && saved <= 70 ? saved : 52
   })
+  // Seeded from the last unit the user chose, then owned by the project once one is open.
+  const [lengthUnit, setLengthUnit] = useState<LengthUnit>(() => {
+    const saved = localStorage.getItem('studio-length-unit')
+    return isLengthUnit(saved) ? saved : CANONICAL_LENGTH_UNIT
+  })
   const [isDragging, setIsDragging] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -322,6 +340,10 @@ function App(): React.JSX.Element {
   const [keptEntriesLayout, setKeptEntriesLayout] = useState<KeptEntriesCanvasLayout>(
     DEFAULT_KEPT_ENTRIES_LAYOUT
   )
+  const [showKeptCanvas, setShowKeptCanvas] = useState(false)
+  // Session crops are regenerated for display only and dropped when the canvas closes.
+  const [sessionImageUrls, setSessionImageUrls] = useState<ReadonlyMap<string, string>>(new Map())
+  const [sessionImageError, setSessionImageError] = useState<string | null>(null)
 
   const activeDocument = useMemo(
     () => documents.find((document) => document.path === activePath) ?? documents[0],
@@ -804,7 +826,7 @@ function App(): React.JSX.Element {
       field: HighlightGeometryField,
       mode: 'absolute' | 'delta',
       value: number,
-      unit: HighlightUnit
+      unit: LengthUnit
     ): void => {
       setProject((current) => {
         if (!current) return current
@@ -884,13 +906,19 @@ function App(): React.JSX.Element {
         ...project.auditTrail.filter((event) => event.action !== 'analysis-state-saved'),
         analysisEvent
       ],
-      settings: { theme, extraction: extractionSettings, splitPanePercent: panePercent },
+      settings: {
+        theme,
+        extraction: extractionSettings,
+        splitPanePercent: panePercent,
+        lengthUnit
+      },
       keptEntriesLayout
     }
   }, [
     analysisSnapshot,
     documents,
     extractionSettings,
+    lengthUnit,
     panePercent,
     persistedAnalysisState,
     preflight,
@@ -898,6 +926,11 @@ function App(): React.JSX.Element {
     theme,
     keptEntriesLayout
   ])
+
+  const projectSnapshotRef = useRef(projectSnapshot)
+  useEffect(() => {
+    projectSnapshotRef.current = projectSnapshot
+  }, [projectSnapshot])
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -907,6 +940,12 @@ function App(): React.JSX.Element {
   useEffect(() => {
     localStorage.setItem('studio-pane-percent', String(panePercent))
   }, [panePercent])
+
+  // Remembered only as the seed for the next new project; the open project owns the real value.
+  useEffect(() => {
+    setStoredLengthUnit(lengthUnit)
+    localStorage.setItem('studio-length-unit', lengthUnit)
+  }, [lengthUnit])
 
   useEffect(() => {
     screenHeadingRef.current?.focus()
@@ -1079,6 +1118,7 @@ function App(): React.JSX.Element {
       setMode(loaded.settings.extraction.mode)
       setOcrLanguages(loaded.settings.extraction.ocrLanguages)
       setPanePercent(loaded.settings.splitPanePercent)
+      setLengthUnit(loaded.settings.lengthUnit ?? CANONICAL_LENGTH_UNIT)
       if (loaded.settings.theme !== 'system') setTheme(loaded.settings.theme)
       setScreen(loaded.documents.length > 0 ? 'workspace' : 'import')
       undoStackRef.current = []
@@ -1898,7 +1938,19 @@ function App(): React.JSX.Element {
       }
       if (format === 'pdf-kept-canvas') {
         if (template) return exportProjectKeptEntriesTemplatePdf(projectSnapshot, template)
-        return exportProjectKeptEntriesCanvasPdf(projectSnapshot, projectSnapshot.keptEntriesLayout)
+        const imageDataUrls = await resolveKeptImageDataUrls(
+          projectSnapshot,
+          projectSnapshot.keptEntriesLayout,
+          async (path) => {
+            const editedData = editedPdfDataRef.current.get(path)
+            return editedData ?? new Uint8Array(await window.studio.documents.readPdf(path))
+          }
+        )
+        return exportProjectKeptEntriesCanvasPdf(
+          projectSnapshot,
+          projectSnapshot.keptEntriesLayout,
+          { imageDataUrls }
+        )
       }
       const sourceFiles = new Map<string, Uint8Array>()
       for (const document of projectSnapshot.documents) {
@@ -2291,6 +2343,41 @@ function App(): React.JSX.Element {
     setReviewIssueFilter('all')
   }, [])
 
+  const handlePlaceKeptImages = useCallback((plan: KeptImagePlan) => {
+    setKeptEntriesLayout((current) => withKeptImagePlacements(current, plan))
+  }, [])
+
+  // Uploaded images stream from managed storage; session crops must be regenerated for display.
+  const resolveCanvasImageSource = useCallback(
+    (source: KeptImageSourceRef): string | undefined =>
+      resolveKeptImageUrl(source, sessionImageUrls),
+    [sessionImageUrls]
+  )
+
+  // Keyed on the referenced set, so moving or resizing a placement never re-renders the crops.
+  const sessionImageRefs = useMemo(
+    () => collectKeptImageRefs(keptEntriesLayout, 'session-entry'),
+    [keptEntriesLayout]
+  )
+  const sessionImageRefKey = JSON.stringify(sessionImageRefs)
+
+  useEffect(() => {
+    if (!showKeptCanvas || !projectSnapshotRef.current) return
+    const refs = JSON.parse(sessionImageRefKey) as string[]
+    let cancelled = false
+    void loadKeptSessionImageUrls(projectSnapshotRef.current, refs, async (path) => {
+      const editedData = editedPdfDataRef.current.get(path)
+      return editedData ?? new Uint8Array(await window.studio.documents.readPdf(path))
+    }).then((resolved) => {
+      if (cancelled) return
+      setSessionImageUrls(resolved.urls)
+      setSessionImageError(resolved.error ?? null)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [sessionImageRefKey, showKeptCanvas])
+
   const handleSaveEditingEntry = useCallback(
     (patch: EntryEditPatch) => {
       if (editingEntryId) saveEntryEdit(editingEntryId, patch)
@@ -2594,6 +2681,25 @@ function App(): React.JSX.Element {
 
   return (
     <div className="app-shell">
+      {showKeptCanvas && projectSnapshot && (
+        <KeptEntriesCanvasWorkspace
+          entries={projectSnapshot.entries}
+          layout={keptEntriesLayout}
+          isExporting={exportState.isSaving}
+          resolveImageSource={resolveCanvasImageSource}
+          imageResolutionError={sessionImageError ?? undefined}
+          onLayoutChange={setKeptEntriesLayout}
+          onClose={() => {
+            setShowKeptCanvas(false)
+            setSessionImageUrls(new Map())
+            setSessionImageError(null)
+          }}
+          onExport={() => void saveExport('pdf-kept-canvas')}
+          onReset={() =>
+            setKeptEntriesLayout(createDefaultKeptEntriesLayout(projectSnapshot.entries))
+          }
+        />
+      )}
       {isRemovingPages && (
         <div className="blocking-overlay" role="alert" aria-live="assertive">
           <div className="blocking-overlay-panel">
@@ -3185,7 +3291,8 @@ function App(): React.JSX.Element {
                   </div>
                   <div className="template-columns-heading">
                     <span>Expected columns</span>
-                    <small>Coordinates use the PDF page, not screen pixels.</small>
+                    <small>Coordinates are stored as PDF points, whatever unit is shown.</small>
+                    <LengthUnitSelect onChange={setLengthUnit} />
                   </div>
                   <div className="template-columns" role="list">
                     {tableColumns.map((column, index) => (
@@ -3263,38 +3370,28 @@ function App(): React.JSX.Element {
                             <option value="subtract">Subtract from total</option>
                           </select>
                         </label>
-                        <label>
-                          <span>X start</span>
-                          <input
-                            type="number"
-                            value={column.xStart}
-                            onChange={(event) =>
-                              setTableColumns((current) =>
-                                current.map((item, itemIndex) =>
-                                  itemIndex === index
-                                    ? { ...item, xStart: Number(event.target.value) }
-                                    : item
-                                )
+                        <LengthField
+                          label="X start"
+                          value={column.xStart}
+                          onChange={(points) =>
+                            setTableColumns((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, xStart: points } : item
                               )
-                            }
-                          />
-                        </label>
-                        <label>
-                          <span>X end</span>
-                          <input
-                            type="number"
-                            value={column.xEnd}
-                            onChange={(event) =>
-                              setTableColumns((current) =>
-                                current.map((item, itemIndex) =>
-                                  itemIndex === index
-                                    ? { ...item, xEnd: Number(event.target.value) }
-                                    : item
-                                )
+                            )
+                          }
+                        />
+                        <LengthField
+                          label="X end"
+                          value={column.xEnd}
+                          onChange={(points) =>
+                            setTableColumns((current) =>
+                              current.map((item, itemIndex) =>
+                                itemIndex === index ? { ...item, xEnd: points } : item
                               )
-                            }
-                          />
-                        </label>
+                            )
+                          }
+                        />
                         <label className="required-toggle">
                           <input
                             type="checkbox"
@@ -3569,6 +3666,10 @@ function App(): React.JSX.Element {
                       keptEntries={projectSnapshot.entries}
                       onTemplateExport={handleTemplateExport}
                       onTemplatePreview={handleTemplatePreview}
+                      onPlaceKeptImages={handlePlaceKeptImages}
+                      onOpenKeptCanvas={() => setShowKeptCanvas(true)}
+                      placedImageCount={keptEntriesLayout.images?.length ?? 0}
+                      onPreviewPlacedImages={() => setShowKeptCanvas(true)}
                     />
                   ) : null,
                   pages: (

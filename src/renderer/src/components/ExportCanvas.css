@@ -24,8 +24,6 @@
 .export-canvas-page {
   position: relative;
   isolation: isolate;
-  width: min(100%, 760px);
-  min-width: 320px;
   overflow: hidden;
   color: #17231c;
   background: #fff;
@@ -81,6 +79,49 @@
 }
 
 .export-canvas-placement.is-selected {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 2px;
+}
+
+.export-canvas-image {
+  position: absolute;
+  display: block;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--studio-accent) 6%, transparent);
+}
+
+.export-canvas-image > img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.export-canvas-image > img[data-fit='stretch'] {
+  object-fit: fill;
+}
+
+.export-canvas-image-placeholder {
+  display: block;
+  padding: 2px 4px;
+  overflow: hidden;
+  outline: 1px dashed var(--studio-border-strong);
+  color: var(--studio-text-muted);
+  font-size: 9px;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.export-canvas-image[role='group'] {
+  cursor: grab;
+  touch-action: none;
+}
+
+.export-canvas-image[role='group']:active {
+  cursor: grabbing;
+}
+
+.export-canvas-image.is-selected {
   outline: 2px solid var(--studio-accent);
   outline-offset: 2px;
 }

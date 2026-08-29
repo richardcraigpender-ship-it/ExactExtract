@@ -1,4 +1,5 @@
 import type { KeptEntriesCanvasLayout } from './keptEntriesLayout'
+import type { LengthUnit } from './units'
 
 export const PROJECT_SCHEMA_VERSION = 1 as const
 
@@ -117,6 +118,8 @@ export interface ProjectSettings {
   theme: 'light' | 'dark' | 'system'
   extraction: ExtractionSettings
   splitPanePercent: number
+  /** Display unit for coordinates and sizes. Stored values stay in PDF points regardless. */
+  lengthUnit?: LengthUnit
 }
 
 export interface ProjectState {

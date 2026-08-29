@@ -20,6 +20,8 @@ function warningLabel(warning: KeptEntriesCanvasWarning): string {
       return `Placement ${warning.placementId} may overflow its text box.`
     case 'missing-background':
       return 'The background image could not be decoded and will be skipped.'
+    case 'missing-image':
+      return `Placement ${warning.placementId} has no image for "${warning.imageRef}" and will be skipped.`
     case 'system-font-fallback':
       return `System font "${warning.fontFamily}" will fall back to Helvetica unless its bytes are supplied.`
   }
