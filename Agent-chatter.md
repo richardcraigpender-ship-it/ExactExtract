@@ -2707,6 +2707,13 @@ List the exact integration files and confirm that the Pages menu works with load
 - `npm run build`: passed; the existing non-fatal `PdfViewer` chunking warning remains documented.
 - The only outstanding item remains manual visual inspection in the running Electron app because integrated localhost browser access is blocked by editor policy.
 
+### Thumbnail rendering defect fix - 2026-08-29
+
+- Diagnosis: each `PageThumbnail` passed the same active `Uint8Array` to PDF.js. PDF.js can transfer that buffer to its worker, detaching it after the first thumbnail and leaving sibling previews without usable PDF bytes.
+- Fixed `src/renderer/src/components/PageThumbnail.tsx` so every thumbnail provides PDF.js an independent `data.slice()` buffer.
+- Updated `src/renderer/src/App.tsx` to pass page-specific aspect ratios from existing preflight dimensions, preventing portrait and landscape previews from reserving the wrong initial shape.
+- Validation passed: `npm run typecheck:web`, thumbnail fixture suite 5/5, and Pages menu suite 5/5.
+
 ### Dependency chain
 
 1. Agent A real-OCR baseline unlocks Agent C's authoritative OCR acceptance.

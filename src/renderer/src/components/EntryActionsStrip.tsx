@@ -6,6 +6,7 @@ import {
   Eye,
   EyeOff,
   FileSearch,
+  FileText,
   Images,
   ListChecks,
   Save,
@@ -16,10 +17,11 @@ import {
 } from 'lucide-react'
 
 export type ContextMode =
-  'review' | 'analysis' | 'export' | 'pages' | 'warnings' | 'remove-pages' | 'marks'
+  'source-pdf' | 'review' | 'analysis' | 'export' | 'pages' | 'warnings' | 'remove-pages' | 'marks'
 export type EntryActionCommand = 'zoom-in' | 'zoom-out' | 'import' | 'save' | 'jump'
 
 const contextModes = [
+  { id: 'source-pdf', label: 'Source PDF', shortLabel: 'Source', icon: FileText },
   { id: 'review', label: 'Review and bulk actions', shortLabel: 'Review', icon: ListChecks },
   { id: 'analysis', label: 'Analysis', shortLabel: 'Stats', icon: BarChart3 },
   { id: 'export', label: 'Export', shortLabel: 'Export', icon: Download },
@@ -53,7 +55,7 @@ export const EntryActionsStrip = React.memo(function EntryActionsStrip({
   highlightsVisible = true
 }: EntryActionsStripProps): React.JSX.Element {
   return (
-    <nav className="right-workspace-strip" aria-label="Workspace tools">
+    <nav className="workspace-tool-strip" aria-label="Workspace tools">
       <div role="tablist" aria-label="Context panel">
         {contextModes.map(({ id, label, shortLabel, icon: Icon }) => {
           // The marks tab mirrors overlay visibility so the current state is readable

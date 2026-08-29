@@ -22,7 +22,7 @@ import { EntriesList } from './components/EntriesList'
 import { AnalysisWorkspace } from './components/AnalysisWorkspace'
 import { ExportPanel, type PdfExportFormat } from './components/ExportPanel'
 import { HeaderBar } from './components/HeaderBar'
-import { SourcesRail } from './components/SourcesRail'
+import { SourcePdfPanel } from './components/SourcePdfPanel'
 import { PagePreviewStrip } from './components/PagePreviewStrip'
 import { PageThumbnail } from './components/PageThumbnail'
 import { RecentProjectsPanel } from './components/RecentProjectsPanel'
@@ -317,7 +317,6 @@ function App(): React.JSX.Element {
     value: string
   } | null>(null)
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false)
-  const [sourcesRailCollapsed, setSourcesRailCollapsed] = useState(true)
   const [isRemovingPages, setIsRemovingPages] = useState(false)
   const [pageRemovalStatus, setPageRemovalStatus] = useState('')
   const [keptEntriesLayout, setKeptEntriesLayout] = useState<KeptEntriesCanvasLayout>(
@@ -517,6 +516,14 @@ function App(): React.JSX.Element {
       ),
     [activeDocument?.pageCount, activeDocument?.path, preflight]
   )
+  const pageAspectRatios = useMemo(() => {
+    const pages = preflight[activeDocument?.path ?? '']?.pages ?? []
+    return new Map(
+      pages
+        .filter((page) => page.width > 0 && page.height > 0)
+        .map((page) => [page.pageNumber, page.width / page.height])
+    )
+  }, [activeDocument?.path, preflight])
   const reviewSourcePage = Math.min(requestedReviewSourcePage, sourcePageCount)
   const sourcePageEntries = useMemo(
     () =>
@@ -535,6 +542,22 @@ function App(): React.JSX.Element {
       ),
     [activeDocumentId, filteredEntries]
   )
+  const pageReviewCounts = useMemo(() => {
+    const counts = new Map<number, { keep: number; maybe: number; exclude: number }>()
+    for (const entry of project?.entries ?? []) {
+      const pages = new Set(
+        entry.regions
+          .filter((region) => region.documentId === activeDocumentId)
+          .map((region) => region.pageNumber)
+      )
+      for (const pageNumber of pages) {
+        const pageCounts = counts.get(pageNumber) ?? { keep: 0, maybe: 0, exclude: 0 }
+        pageCounts[entry.status] += 1
+        counts.set(pageNumber, pageCounts)
+      }
+    }
+    return counts
+  }, [activeDocumentId, project?.entries])
   const hasSearchQuery = reviewQuery.trim().length > 0
   const parsedReviewPageSpan = Math.max(1, Number(reviewPageSpan) || DEFAULT_REVIEW_PAGE_SPAN)
   const reviewPageEnd = Math.min(sourcePageCount, reviewSourcePage + parsedReviewPageSpan - 1)
@@ -974,28 +997,31 @@ function App(): React.JSX.Element {
     }
   }, [documents, preflight, screen])
 
-  const mergeDocuments = (incoming: IncomingDocument[]): void => {
-    const limitFailure = validatePdfImportBatch(
-      documents.map((document) => document.path),
-      incoming
-    )
-    if (limitFailure) {
-      setError(limitFailure.message)
-      return
-    }
+  const mergeDocuments = useCallback(
+    (incoming: IncomingDocument[]): void => {
+      const limitFailure = validatePdfImportBatch(
+        documents.map((document) => document.path),
+        incoming
+      )
+      if (limitFailure) {
+        setError(limitFailure.message)
+        return
+      }
 
-    setDocuments((current) => {
-      const knownPaths = new Set(current.map((document) => document.path))
-      const importedAt = new Date().toISOString()
-      return [
-        ...current,
-        ...incoming
-          .filter((document) => !knownPaths.has(document.path))
-          .map((document) => ({ ...document, id: crypto.randomUUID(), importedAt }))
-      ]
-    })
-    if (incoming[0]) setActivePath((current) => current ?? incoming[0].path)
-  }
+      setDocuments((current) => {
+        const knownPaths = new Set(current.map((document) => document.path))
+        const importedAt = new Date().toISOString()
+        return [
+          ...current,
+          ...incoming
+            .filter((document) => !knownPaths.has(document.path))
+            .map((document) => ({ ...document, id: crypto.randomUUID(), importedAt }))
+        ]
+      })
+      if (incoming[0]) setActivePath((current) => current ?? incoming[0].path)
+    },
+    [documents]
+  )
 
   const createProject = async (): Promise<void> => {
     setError(null)
@@ -1022,7 +1048,7 @@ function App(): React.JSX.Element {
     }
   }
 
-  const openProject = async (projectId: string): Promise<void> => {
+  const openProject = useCallback(async (projectId: string): Promise<void> => {
     setError(null)
     try {
       const loaded = await window.studio.projects.load(projectId)
@@ -1064,14 +1090,14 @@ function App(): React.JSX.Element {
     } catch (projectError) {
       setError(projectError instanceof Error ? projectError.message : 'Unable to open project.')
     }
-  }
+  }, [])
 
-  const removeRecentProject = async (projectId: string): Promise<void> => {
+  const removeRecentProject = useCallback(async (projectId: string): Promise<void> => {
     await window.studio.projects.removeRecent(projectId)
     setRecentProjects(await window.studio.projects.listRecovery())
-  }
+  }, [])
 
-  const locateProjectSources = async (projectId: string): Promise<void> => {
+  const locateProjectSources = useCallback(async (projectId: string): Promise<void> => {
     setRecoveryStatus('Locating missing source files...')
     try {
       const result = await window.studio.projects.locateSources(projectId)
@@ -1092,9 +1118,9 @@ function App(): React.JSX.Element {
         recoveryError instanceof Error ? recoveryError.message : 'Source recovery failed.'
       )
     }
-  }
+  }, [])
 
-  const retrySave = async (): Promise<void> => {
+  const retrySave = useCallback(async (): Promise<void> => {
     if (!projectSnapshot) return
     setSaveStatus('saving')
     setSaveError(null)
@@ -1107,7 +1133,7 @@ function App(): React.JSX.Element {
       setSaveStatus('error')
       setSaveError(saveFailureMessage(saveFailure))
     }
-  }
+  }, [projectSnapshot])
 
   const startExtraction = async (): Promise<void> => {
     if (!project || documents.length === 0 || extractionAbortRef.current) return
@@ -1262,7 +1288,7 @@ function App(): React.JSX.Element {
     extractionAbortRef.current?.abort()
   }
 
-  const choosePdfs = async (): Promise<void> => {
+  const choosePdfs = useCallback(async (): Promise<void> => {
     setError(null)
     setIsImporting(true)
     try {
@@ -1272,7 +1298,7 @@ function App(): React.JSX.Element {
     } finally {
       setIsImporting(false)
     }
-  }
+  }, [mergeDocuments])
 
   const handleDrop = async (files: File[]): Promise<void> => {
     const pdfFiles = files.filter((file) => file.name.toLowerCase().endsWith('.pdf'))
@@ -1540,146 +1566,152 @@ function App(): React.JSX.Element {
     [navigateToEntry]
   )
 
-  const removePages = async (pagesToRemove: number[]): Promise<void> => {
-    if (!activeDocument) {
-      setError('Select a PDF before removing pages.')
-      setPageRemovalStatus('No active PDF is selected.')
-      return
-    }
-    if (!pdfData) {
-      setError('The PDF is still loading. Wait for the page preview, then try again.')
-      setPageRemovalStatus('The PDF is still loading. Try again when the preview is visible.')
-      return
-    }
-    if (!project) {
-      setError('Open a project before removing pages.')
-      return
-    }
-    setPageRemovalStatus('Preparing page removal...')
-    setIsRemovingPages(true)
-    try {
-      const editedPdfData = editedPdfDataRef.current.get(activeDocument.path)
-      let sourceBytes: Uint8Array
-      if (editedPdfData) {
-        sourceBytes = new Uint8Array(editedPdfData)
-      } else {
-        setPageRemovalStatus('Refreshing the source PDF...')
-        const reloaded = await window.studio.documents.readPdf(activeDocument.path)
-        sourceBytes = new Uint8Array(reloaded)
+  const removePages = useCallback(
+    async (pagesToRemove: number[]): Promise<void> => {
+      if (!activeDocument) {
+        setError('Select a PDF before removing pages.')
+        setPageRemovalStatus('No active PDF is selected.')
+        return
       }
-      if (!hasPdfHeader(sourceBytes)) {
-        throw new Error('The selected source file is not a valid PDF.')
+      if (!pdfData) {
+        setError('The PDF is still loading. Wait for the page preview, then try again.')
+        setPageRemovalStatus('The PDF is still loading. Try again when the preview is visible.')
+        return
       }
-      const beforeRemoval: PageRemovalHistorySnapshot = {
-        project: structuredClone(project),
-        documents: structuredClone(documents),
-        preflight: structuredClone(preflight),
-        pdfData: new Uint8Array(sourceBytes),
-        activePath: activeDocument.path,
-        reviewPage: reviewSourcePage
+      if (!project) {
+        setError('Open a project before removing pages.')
+        return
       }
-      setPageRemovalStatus('Rebuilding the PDF without the selected pages...')
-      const removedPdf = await window.studio.documents.removePdfPages(sourceBytes, pagesToRemove)
-      const { bytes: nextPdfData, pageCount, removedPages: pages } = removedPdf
-      const previousRemovedPages = activeDocument.removedPages ?? []
-      const originalPageCount = pageCount + previousRemovedPages.length
-      const originalPages = pages
-        .map((page) => restoreOriginalPageNumber(page, originalPageCount, previousRemovedPages))
-        .filter((page): page is number => page !== null)
-      const allRemovedPages = [...new Set([...previousRemovedPages, ...originalPages])].sort(
-        (left, right) => left - right
-      )
-      editedPdfDataRef.current.set(activeDocument.path, new Uint8Array(nextPdfData))
-      setPdfData(new Uint8Array(nextPdfData))
-
-      const remapPage = (pageNumber: number): number | null => {
-        return remapPageNumber(pageNumber, pages)
-      }
-      const activePreflight = preflight[activeDocument.path]
-      const nextPreflight = activePreflight
-        ? {
-            ...activePreflight,
-            pageCount,
-            pages: activePreflight.pages.flatMap((page) => {
-              const nextPage = remapPage(page.pageNumber)
-              return nextPage === null ? [] : [{ ...page, pageNumber: nextPage }]
-            })
-          }
-        : undefined
-
-      const occurredAt = new Date().toISOString()
-      setDocuments((current) =>
-        current.map((document) =>
-          document.id === activeDocument.id
-            ? { ...document, pageCount, removedPages: allRemovedPages }
-            : document
+      setPageRemovalStatus('Preparing page removal...')
+      setIsRemovingPages(true)
+      try {
+        const editedPdfData = editedPdfDataRef.current.get(activeDocument.path)
+        let sourceBytes: Uint8Array
+        if (editedPdfData) {
+          sourceBytes = new Uint8Array(editedPdfData)
+        } else {
+          setPageRemovalStatus('Refreshing the source PDF...')
+          const reloaded = await window.studio.documents.readPdf(activeDocument.path)
+          sourceBytes = new Uint8Array(reloaded)
+        }
+        if (!hasPdfHeader(sourceBytes)) {
+          throw new Error('The selected source file is not a valid PDF.')
+        }
+        const beforeRemoval: PageRemovalHistorySnapshot = {
+          project: structuredClone(project),
+          documents: structuredClone(documents),
+          preflight: structuredClone(preflight),
+          pdfData: new Uint8Array(sourceBytes),
+          activePath: activeDocument.path,
+          reviewPage: reviewSourcePage
+        }
+        setPageRemovalStatus('Rebuilding the PDF without the selected pages...')
+        const removedPdf = await window.studio.documents.removePdfPages(sourceBytes, pagesToRemove)
+        const { bytes: nextPdfData, pageCount, removedPages: pages } = removedPdf
+        const previousRemovedPages = activeDocument.removedPages ?? []
+        const originalPageCount = pageCount + previousRemovedPages.length
+        const originalPages = pages
+          .map((page) => restoreOriginalPageNumber(page, originalPageCount, previousRemovedPages))
+          .filter((page): page is number => page !== null)
+        const allRemovedPages = [...new Set([...previousRemovedPages, ...originalPages])].sort(
+          (left, right) => left - right
         )
-      )
-      const nextEntries = project.entries.flatMap((entry) => {
-        const regions = entry.regions.flatMap((region) => {
-          if (region.documentId !== activeDocument.id) return [region]
-          const nextPage = remapPage(region.pageNumber)
-          return nextPage === null ? [] : [{ ...region, pageNumber: nextPage }]
+        editedPdfDataRef.current.set(activeDocument.path, new Uint8Array(nextPdfData))
+        setPdfData(new Uint8Array(nextPdfData))
+
+        const remapPage = (pageNumber: number): number | null => {
+          return remapPageNumber(pageNumber, pages)
+        }
+        const activePreflight = preflight[activeDocument.path]
+        const nextPreflight = activePreflight
+          ? {
+              ...activePreflight,
+              pageCount,
+              pages: activePreflight.pages.flatMap((page) => {
+                const nextPage = remapPage(page.pageNumber)
+                return nextPage === null ? [] : [{ ...page, pageNumber: nextPage }]
+              })
+            }
+          : undefined
+
+        const occurredAt = new Date().toISOString()
+        setDocuments((current) =>
+          current.map((document) =>
+            document.id === activeDocument.id
+              ? { ...document, pageCount, removedPages: allRemovedPages }
+              : document
+          )
+        )
+        const nextEntries = project.entries.flatMap((entry) => {
+          const regions = entry.regions.flatMap((region) => {
+            if (region.documentId !== activeDocument.id) return [region]
+            const nextPage = remapPage(region.pageNumber)
+            return nextPage === null ? [] : [{ ...region, pageNumber: nextPage }]
+          })
+          return regions.length > 0 ? [{ ...entry, regions, updatedAt: occurredAt }] : []
         })
-        return regions.length > 0 ? [{ ...entry, regions, updatedAt: occurredAt }] : []
-      })
-      setProject({
-        ...project,
-        documents: project.documents.map((document) =>
-          document.id === activeDocument.id
-            ? { ...document, pageCount, removedPages: allRemovedPages }
-            : document
-        ),
-        pages: project.pages.flatMap((page) => {
-          if (page.documentId !== activeDocument.id) return [page]
-          const nextPage = remapPage(page.pageNumber)
-          return nextPage === null ? [] : [{ ...page, pageNumber: nextPage }]
-        }),
-        entries: nextEntries,
-        auditTrail: [
-          ...project.auditTrail,
-          {
-            id: crypto.randomUUID(),
-            occurredAt,
-            action: 'pages-removed',
-            entityType: 'document',
-            entityId: activeDocument.id,
-            details: { count: pages.length, remaining: pageCount }
-          }
-        ],
-        updatedAt: occurredAt
-      })
+        setProject({
+          ...project,
+          documents: project.documents.map((document) =>
+            document.id === activeDocument.id
+              ? { ...document, pageCount, removedPages: allRemovedPages }
+              : document
+          ),
+          pages: project.pages.flatMap((page) => {
+            if (page.documentId !== activeDocument.id) return [page]
+            const nextPage = remapPage(page.pageNumber)
+            return nextPage === null ? [] : [{ ...page, pageNumber: nextPage }]
+          }),
+          entries: nextEntries,
+          auditTrail: [
+            ...project.auditTrail,
+            {
+              id: crypto.randomUUID(),
+              occurredAt,
+              action: 'pages-removed',
+              entityType: 'document',
+              entityId: activeDocument.id,
+              details: { count: pages.length, remaining: pageCount }
+            }
+          ],
+          updatedAt: occurredAt
+        })
 
-      setDocuments((current) =>
-        current.map((document) =>
-          document.id === activeDocument.id ? { ...document, pageCount } : document
+        setDocuments((current) =>
+          current.map((document) =>
+            document.id === activeDocument.id ? { ...document, pageCount } : document
+          )
         )
-      )
-      setPreflight((current) =>
-        nextPreflight ? { ...current, [activeDocument.path]: nextPreflight } : current
-      )
-      const nextEntryIds = new Set(nextEntries.map((entry) => entry.id))
-      setSelectedReviewIds((current) => new Set([...current].filter((id) => nextEntryIds.has(id))))
-      setSelectedEntryId((current) => (current && nextEntryIds.has(current) ? current : null))
+        setPreflight((current) =>
+          nextPreflight ? { ...current, [activeDocument.path]: nextPreflight } : current
+        )
+        const nextEntryIds = new Set(nextEntries.map((entry) => entry.id))
+        setSelectedReviewIds(
+          (current) => new Set([...current].filter((id) => nextEntryIds.has(id)))
+        )
+        setSelectedEntryId((current) => (current && nextEntryIds.has(current) ? current : null))
 
-      const nextCurrentPage = remapPage(reviewSourcePage) ?? Math.min(reviewSourcePage, pageCount)
-      setReviewSourcePage(nextCurrentPage)
-      setRequestedPdfPage(nextCurrentPage)
-      setError(null)
-      setPageRemovalStatus(
-        `Removed ${pages.length} page${pages.length === 1 ? '' : 's'}. ${pageCount} page${pageCount === 1 ? '' : 's'} remain.`
-      )
-      pageRemovalUndoRef.current = [...pageRemovalUndoRef.current, beforeRemoval]
-      pageRemovalRedoRef.current = []
-      setPageRemovalHistory({ undoCount: pageRemovalUndoRef.current.length, redoCount: 0 })
-    } catch (removeError) {
-      const message = removeError instanceof Error ? removeError.message : 'Unable to remove pages.'
-      setError(message)
-      setPageRemovalStatus(message)
-    } finally {
-      setIsRemovingPages(false)
-    }
-  }
+        const nextCurrentPage = remapPage(reviewSourcePage) ?? Math.min(reviewSourcePage, pageCount)
+        setReviewSourcePage(nextCurrentPage)
+        setRequestedPdfPage(nextCurrentPage)
+        setError(null)
+        setPageRemovalStatus(
+          `Removed ${pages.length} page${pages.length === 1 ? '' : 's'}. ${pageCount} page${pageCount === 1 ? '' : 's'} remain.`
+        )
+        pageRemovalUndoRef.current = [...pageRemovalUndoRef.current, beforeRemoval]
+        pageRemovalRedoRef.current = []
+        setPageRemovalHistory({ undoCount: pageRemovalUndoRef.current.length, redoCount: 0 })
+      } catch (removeError) {
+        const message =
+          removeError instanceof Error ? removeError.message : 'Unable to remove pages.'
+        setError(message)
+        setPageRemovalStatus(message)
+      } finally {
+        setIsRemovingPages(false)
+      }
+    },
+    [activeDocument, documents, pdfData, preflight, project, reviewSourcePage]
+  )
 
   const restorePageRemovalSnapshot = (snapshot: PageRemovalHistorySnapshot): void => {
     setProject(structuredClone(snapshot.project))
@@ -1851,100 +1883,103 @@ function App(): React.JSX.Element {
     }
   }, [])
 
-  const generatePdfExport = async (
-    format: PdfExportFormat,
-    template?: KeptExportTemplate
-  ): Promise<Uint8Array> => {
-    if (!projectSnapshot) throw new Error('Open a project before previewing an export.')
-    if (format === 'pdf') {
-      return exportProjectPdf(projectSnapshot, {
-        metrics: analysisSnapshot.metrics.map((metric) => ({
-          label: metric.kind,
-          value: metric.value,
-          contributorCount: metric.contributorEntryIds.length,
-          group: metric.group
-        }))
-      })
-    }
-    if (format === 'pdf-kept-canvas') {
-      if (template) return exportProjectKeptEntriesTemplatePdf(projectSnapshot, template)
-      return exportProjectKeptEntriesCanvasPdf(projectSnapshot, projectSnapshot.keptEntriesLayout)
-    }
-    const sourceFiles = new Map<string, Uint8Array>()
-    for (const document of projectSnapshot.documents) {
-      const editedData = editedPdfDataRef.current.get(document.path)
-      const data =
-        editedData ?? new Uint8Array(await window.studio.documents.readPdf(document.path))
-      sourceFiles.set(document.path, data)
-    }
-    if (format === 'pdf-layout') return exportProjectSourceLayoutPdf(projectSnapshot, sourceFiles)
-    if (format === 'pdf-compact') {
-      return exportProjectCompactedSourceLayoutPdf(projectSnapshot, sourceFiles)
-    }
-    if (format === 'pdf-kept') return exportProjectKeptEntriesPdf(projectSnapshot, sourceFiles)
-    return exportProjectKeptLayoutPdf(projectSnapshot, sourceFiles)
-  }
-
-  const saveExport = async (
-    format:
-      | 'csv'
-      | 'json'
-      | 'pdf'
-      | 'pdf-layout'
-      | 'pdf-compact'
-      | 'pdf-kept'
-      | 'pdf-kept-layout'
-      | 'pdf-kept-canvas'
-      | 'entry-images',
-    template?: KeptExportTemplate
-  ): Promise<void> => {
-    if (!projectSnapshot) return
-    setExportState({ isSaving: true, status: `Preparing ${format.toUpperCase()}...` })
-    try {
-      if (format === 'entry-images') {
-        const files = await generateEntryPngFiles(projectSnapshot, async (path) => {
-          const editedData = editedPdfDataRef.current.get(path)
-          return editedData ?? new Uint8Array(await window.studio.documents.readPdf(path))
+  const generatePdfExport = useCallback(
+    async (format: PdfExportFormat, template?: KeptExportTemplate): Promise<Uint8Array> => {
+      if (!projectSnapshot) throw new Error('Open a project before previewing an export.')
+      if (format === 'pdf') {
+        return exportProjectPdf(projectSnapshot, {
+          metrics: analysisSnapshot.metrics.map((metric) => ({
+            label: metric.kind,
+            value: metric.value,
+            contributorCount: metric.contributorEntryIds.length,
+            group: metric.group
+          }))
         })
-        const result = await window.studio.exports.saveEntryImages({
-          suggestedFolderName: `${projectSnapshot.name}-kept-entry-images`,
-          files
+      }
+      if (format === 'pdf-kept-canvas') {
+        if (template) return exportProjectKeptEntriesTemplatePdf(projectSnapshot, template)
+        return exportProjectKeptEntriesCanvasPdf(projectSnapshot, projectSnapshot.keptEntriesLayout)
+      }
+      const sourceFiles = new Map<string, Uint8Array>()
+      for (const document of projectSnapshot.documents) {
+        const editedData = editedPdfDataRef.current.get(document.path)
+        const data =
+          editedData ?? new Uint8Array(await window.studio.documents.readPdf(document.path))
+        sourceFiles.set(document.path, data)
+      }
+      if (format === 'pdf-layout') return exportProjectSourceLayoutPdf(projectSnapshot, sourceFiles)
+      if (format === 'pdf-compact') {
+        return exportProjectCompactedSourceLayoutPdf(projectSnapshot, sourceFiles)
+      }
+      if (format === 'pdf-kept') return exportProjectKeptEntriesPdf(projectSnapshot, sourceFiles)
+      return exportProjectKeptLayoutPdf(projectSnapshot, sourceFiles)
+    },
+    [analysisSnapshot, projectSnapshot]
+  )
+
+  const saveExport = useCallback(
+    async (
+      format:
+        | 'csv'
+        | 'json'
+        | 'pdf'
+        | 'pdf-layout'
+        | 'pdf-compact'
+        | 'pdf-kept'
+        | 'pdf-kept-layout'
+        | 'pdf-kept-canvas'
+        | 'entry-images',
+      template?: KeptExportTemplate
+    ): Promise<void> => {
+      if (!projectSnapshot) return
+      setExportState({ isSaving: true, status: `Preparing ${format.toUpperCase()}...` })
+      try {
+        if (format === 'entry-images') {
+          const files = await generateEntryPngFiles(projectSnapshot, async (path) => {
+            const editedData = editedPdfDataRef.current.get(path)
+            return editedData ?? new Uint8Array(await window.studio.documents.readPdf(path))
+          })
+          const result = await window.studio.exports.saveEntryImages({
+            suggestedFolderName: `${projectSnapshot.name}-kept-entry-images`,
+            files
+          })
+          setExportState({
+            isSaving: false,
+            status:
+              result.status === 'saved'
+                ? `Saved ${result.fileCount} PNGs to ${result.path}`
+                : 'Export cancelled'
+          })
+          return
+        }
+        let content: string
+        if (format === 'csv') content = exportProjectCsv(projectSnapshot)
+        else if (format === 'json') {
+          content = exportProjectJson(projectSnapshot, { includeExcluded: true })
+        } else {
+          const bytes = await generatePdfExport(format, template)
+          let binary = ''
+          for (let offset = 0; offset < bytes.length; offset += 32768) {
+            binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768))
+          }
+          content = btoa(binary)
+        }
+        const result = await window.studio.exports.save({
+          format,
+          suggestedName: `${projectSnapshot.name}-review`,
+          content
         })
         setExportState({
           isSaving: false,
-          status:
-            result.status === 'saved'
-              ? `Saved ${result.fileCount} PNGs to ${result.path}`
-              : 'Export cancelled'
+          status: result.status === 'saved' ? `Saved ${result.path}` : 'Export cancelled'
         })
-        return
+      } catch (exportError) {
+        const message = exportError instanceof Error ? exportError.message : 'Export failed.'
+        setExportState({ isSaving: false, status: message })
       }
-      let content: string
-      if (format === 'csv') content = exportProjectCsv(projectSnapshot)
-      else if (format === 'json') {
-        content = exportProjectJson(projectSnapshot, { includeExcluded: true })
-      } else {
-        const bytes = await generatePdfExport(format, template)
-        let binary = ''
-        for (let offset = 0; offset < bytes.length; offset += 32768) {
-          binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768))
-        }
-        content = btoa(binary)
-      }
-      const result = await window.studio.exports.save({
-        format,
-        suggestedName: `${projectSnapshot.name}-review`,
-        content
-      })
-      setExportState({
-        isSaving: false,
-        status: result.status === 'saved' ? `Saved ${result.path}` : 'Export cancelled'
-      })
-    } catch (exportError) {
-      const message = exportError instanceof Error ? exportError.message : 'Export failed.'
-      setExportState({ isSaving: false, status: message })
-    }
-  }
+    },
+    [generatePdfExport, projectSnapshot]
+  )
 
   const undoReview = useCallback((): void => {
     const previous = undoStackRef.current.at(-1)
@@ -2209,10 +2244,6 @@ function App(): React.JSX.Element {
     []
   )
 
-  const handleToggleSourcesRailCollapsed = useCallback(
-    () => setSourcesRailCollapsed((current) => !current),
-    []
-  )
   const handleSelectSourcePath = useCallback((path: string) => {
     setPdfData(null)
     setActivePath(path)
@@ -2540,7 +2571,6 @@ function App(): React.JSX.Element {
       historyState.redoCount,
       historyState.undoCount,
       mergeSelectedReviewEntries,
-      pagedEntries,
       redoReview,
       reviewCategories,
       reviewCategory,
@@ -3368,15 +3398,7 @@ function App(): React.JSX.Element {
       )}
 
       {screen === 'workspace' && (
-        <main className={`workspace ${sourcesRailCollapsed ? 'rail-collapsed' : ''}`}>
-          <SourcesRail
-            documents={documents}
-            activePath={activeDocument?.path}
-            collapsed={sourcesRailCollapsed}
-            onToggleCollapsed={handleToggleSourcesRailCollapsed}
-            onSelect={handleSelectSourcePath}
-            onAddPdfs={handleNavAddPdfs}
-          />
+        <main className="workspace">
           <div className="workspace-content">
             <div className="split-shell">
               <div className="viewer-pane" style={{ width: `${panePercent}%` }}>
@@ -3515,6 +3537,14 @@ function App(): React.JSX.Element {
                   </section>
                 }
                 contexts={{
+                  'source-pdf': (
+                    <SourcePdfPanel
+                      documents={documents}
+                      activePath={activeDocument?.path}
+                      onSelect={handleSelectSourcePath}
+                      onAddPdfs={handleNavAddPdfs}
+                    />
+                  ),
                   review: reviewBulkContext,
                   analysis: (
                     <AnalysisWorkspace
@@ -3546,8 +3576,13 @@ function App(): React.JSX.Element {
                       pageCount={sourcePageCount}
                       currentPage={reviewSourcePage}
                       onSelectPage={navigateToReviewPage}
+                      pageReviewCounts={pageReviewCounts}
                       renderThumbnail={(pageNumber) => (
-                        <PageThumbnail data={pdfData} pageNumber={pageNumber} />
+                        <PageThumbnail
+                          data={pdfData}
+                          pageNumber={pageNumber}
+                          aspectRatio={pageAspectRatios.get(pageNumber)}
+                        />
                       )}
                     />
                   ),

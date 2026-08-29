@@ -8,6 +8,7 @@ void React
 import { RightWorkspace, type RightWorkspaceMode } from './RightWorkspace'
 
 const contexts: Record<RightWorkspaceMode, React.ReactNode> = {
+  'source-pdf': <p>Source documents</p>,
   review: <p>Bulk controls</p>,
   analysis: <p>Metrics</p>,
   export: <p>Export controls</p>,
@@ -17,7 +18,7 @@ const contexts: Record<RightWorkspaceMode, React.ReactNode> = {
   marks: <p>Highlight tools</p>
 }
 
-test('keeps entries visible while exposing one accessible context panel', () => {
+test('separates full-height tools from the extracted entries panel', () => {
   const markup = renderToStaticMarkup(
     <RightWorkspace
       mode="analysis"
@@ -33,7 +34,8 @@ test('keeps entries visible while exposing one accessible context panel', () => 
     />
   )
 
-  assert.match(markup, /aria-label="Extracted entries"/)
+  assert.match(markup, /class="left-workspace" aria-label="Workspace tools"/)
+  assert.match(markup, /class="right-workspace" aria-label="Extracted entries"/)
   assert.match(markup, /Entry 1/)
   assert.match(markup, /role="tab"[^>]*aria-label="Analysis"[^>]*aria-selected="true"/)
   assert.match(markup, /role="tabpanel"[^>]*aria-label="Analysis"/)

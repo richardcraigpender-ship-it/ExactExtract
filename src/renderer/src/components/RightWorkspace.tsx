@@ -25,10 +25,10 @@ export const RightWorkspace = React.memo(function RightWorkspace({
   highlightsVisible = true
 }: RightWorkspaceProps): React.JSX.Element {
   return (
-    <aside className="right-workspace" aria-label="Entries and workspace tools">
-      <section className="right-workspace-entries" aria-label="Extracted entries">
-        {entries}
-      </section>
+    <>
+      <aside className="left-workspace" aria-label="Workspace tools">
+        <ContextPanel mode={mode}>{contexts[mode]}</ContextPanel>
+      </aside>
       <EntryActionsStrip
         mode={mode}
         warningCount={warningCount}
@@ -36,7 +36,9 @@ export const RightWorkspace = React.memo(function RightWorkspace({
         onModeChange={onModeChange}
         onCommand={onCommand}
       />
-      <ContextPanel mode={mode}>{contexts[mode]}</ContextPanel>
-    </aside>
+      <aside className="right-workspace" aria-label="Extracted entries">
+        {entries}
+      </aside>
+    </>
   )
 })

@@ -2,6 +2,7 @@ import React, { type ReactNode } from 'react'
 import type { ContextMode } from './EntryActionsStrip'
 
 const contextLabels: Record<ContextMode, string> = {
+  'source-pdf': 'Source PDF',
   review: 'Review and bulk actions',
   analysis: 'Analysis',
   export: 'Export',
@@ -23,7 +24,7 @@ export const ContextPanel = React.memo(function ContextPanel({
   return (
     <section
       id={`right-workspace-context-${mode}`}
-      className="right-workspace-context"
+      className="workspace-context"
       role="tabpanel"
       aria-label={contextLabels[mode]}
     >
