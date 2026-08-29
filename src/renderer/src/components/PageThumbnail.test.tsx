@@ -96,6 +96,24 @@ test('marks the thumbnail slot as rendered so it can drop its placeholder shape'
 })
 
 // PT-A-009
+test('shows accessible per-page review counts beneath the preview', () => {
+  const markup = renderToStaticMarkup(
+    <PagePreviewStrip
+      pageCount={2}
+      currentPage={1}
+      onSelectPage={() => {}}
+      pageReviewCounts={new Map([[1, { keep: 3, maybe: 1, exclude: 2 }]])}
+    />
+  )
+
+  assert.match(markup, /page-preview-count-keep">K: 3/)
+  assert.match(markup, /page-preview-count-maybe">M: 1/)
+  assert.match(markup, /page-preview-count-exclude">X: 2/)
+  assert.match(markup, /aria-label="Go to page 1" aria-description="3 kept, 1 maybe, 2 excluded"/)
+  assert.match(markup, /aria-label="Go to page 2" aria-description="0 kept, 0 maybe, 0 excluded"/)
+})
+
+// PT-A-010
 test('hides thumbnails from assistive technology because the button is already labelled', () => {
   const markup = renderToStaticMarkup(
     <PagePreviewStrip

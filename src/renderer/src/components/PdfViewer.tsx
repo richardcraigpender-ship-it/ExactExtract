@@ -44,6 +44,7 @@ export interface PdfViewerHandle {
 interface PdfViewerProps {
   data: Uint8Array | null
   fileName: string
+  initialZoom?: number
   highlight?: ViewerHighlight
   highlights?: ViewerHighlight[]
   requestedPage?: number
@@ -61,6 +62,7 @@ export const PdfViewer = memo(
     {
       data,
       fileName,
+      initialZoom = 1,
       highlight,
       highlights = [],
       requestedPage,
@@ -80,7 +82,7 @@ export const PdfViewer = memo(
     const [pageCount, setPageCount] = useState(0)
     const [pageNumber, setPageNumber] = useState(1)
     const [rotation, setRotation] = useState<ViewerRotation>(0)
-    const [zoom, setZoom] = useState(1)
+    const [zoom, setZoom] = useState(() => Math.min(2, Math.max(0.6, initialZoom)))
     const [availableWidth, setAvailableWidth] = useState(700)
     const [pageAspectRatio, setPageAspectRatio] = useState(8.5 / 11)
     const [internalOverlayVisible, setInternalOverlayVisible] = useState(true)
@@ -100,7 +102,9 @@ export const PdfViewer = memo(
     const latestRegionRef = useRef<
       (NormalizedViewerRegion & { entryId: string; regionIndex: number }) | null
     >(null)
-    const file = useMemo(() => (data ? { data } : null), [data])
+    // PDF.js may transfer typed-array buffers to its worker. Keep the state-owned PDF bytes intact
+    // so other consumers, including the Pages thumbnail strip, can render from the same source.
+    const file = useMemo(() => (data ? { data: data.slice() } : null), [data])
 
     const zoomBy = (delta: number): void => {
       setZoom((current) => Math.min(2, Math.max(0.6, Number((current + delta).toFixed(2)))))

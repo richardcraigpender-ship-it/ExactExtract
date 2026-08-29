@@ -221,7 +221,11 @@ export const ExportPanel = React.memo(function ExportPanel({
         >
           <div className="export-pdf-preview">
             <Suspense fallback={<div className="viewer-message">Loading preview…</div>}>
-              <PdfViewer data={previewData} fileName={`${snapshot.project.name} preview`} />
+              <PdfViewer
+                data={previewData}
+                fileName={`${snapshot.project.name} preview`}
+                initialZoom={0.8}
+              />
             </Suspense>
           </div>
         </WorkspaceToolWindow>

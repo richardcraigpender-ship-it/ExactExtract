@@ -57,7 +57,9 @@ export const PageThumbnail = memo(function PageThumbnail({
     setMeasuredRatio(null)
   }, [data, pageNumber])
 
-  const file = useMemo(() => (data && data.length > 0 ? { data } : null), [data])
+  // PDF.js transfers typed-array buffers to its worker. Each thumbnail needs an independent copy
+  // so the first page render cannot detach the bytes used by its siblings.
+  const file = useMemo(() => (data && data.length > 0 ? { data: data.slice() } : null), [data])
   const knownShape = data ? documentShapes.get(data) : undefined
   const shape = measuredRatio ?? aspectRatio ?? knownShape ?? PAGE_THUMBNAIL_ASPECT_RATIO
 
