@@ -43,7 +43,10 @@ export function KeptEntriesCanvasWorkspace({
   const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null)
   const [selectedImagePlacementId, setSelectedImagePlacementId] = useState<string | null>(null)
   const [page, setPage] = useState(1)
-  const [zoom, setZoom] = useState(2)
+  const [zoom, setZoom] = useState(0.7)
+  const [previewMode, setPreviewMode] = useState<'combined' | 'text' | 'images'>(() =>
+    (layout.images?.length ?? 0) > 0 ? 'images' : 'text'
+  )
 
   const pageCount = keptEntriesLayoutPageCount(layout)
   const resolutionMessage = describeImageResolutionFailure(imageResolutionError)
@@ -112,6 +115,7 @@ export function KeptEntriesCanvasWorkspace({
             layout={layout}
             pageNumber={currentPage}
             zoom={zoom}
+            previewMode={previewMode}
             selectedPlacementId={selectedPlacementId}
             selectedImagePlacementId={selectedImagePlacementId}
             resolveImageSource={resolveImageSource}
@@ -150,6 +154,32 @@ export function KeptEntriesCanvasWorkspace({
               onClick={() => setPage(currentPage + 1)}
             >
               Next page
+            </button>
+          </div>
+          <div className="kept-canvas-preview-mode" role="group" aria-label="Canvas preview mode">
+            <button
+              className="secondary-button"
+              type="button"
+              aria-pressed={previewMode === 'images'}
+              onClick={() => setPreviewMode('images')}
+            >
+              PNG images
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              aria-pressed={previewMode === 'text'}
+              onClick={() => setPreviewMode('text')}
+            >
+              Kept text
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              aria-pressed={previewMode === 'combined'}
+              onClick={() => setPreviewMode('combined')}
+            >
+              Combined
             </button>
           </div>
           <div className="kept-canvas-zoom" aria-label="Canvas zoom">

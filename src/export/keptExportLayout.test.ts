@@ -93,3 +93,25 @@ test('reports missing values and placement overflow', () => {
     false
   )
 })
+
+test('fills between Start Y and End Y before continuing to the next page', () => {
+  const current = template()
+  current.useSeparateLaterPages = false
+  current.pageOneTemplate.entriesPerPage = 20
+  current.pageOneTemplate.fillBetweenY = true
+  current.pageOneTemplate.startY = 60
+  current.pageOneTemplate.endY = 120
+  current.pageOneTemplate.columns[0]!.spacing = 30
+  const plan = buildKeptExportRenderPlan(rows, current)
+
+  assert.deepEqual(
+    plan.pages.map((page) => page.placements.map((placement) => [placement.entryId, placement.y])),
+    [
+      [
+        ['one', 60],
+        ['two', 90]
+      ],
+      [['three', 60]]
+    ]
+  )
+})

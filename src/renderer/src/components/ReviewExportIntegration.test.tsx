@@ -56,9 +56,27 @@ test('renders PDF, CSV, and JSON save commands with preview status', () => {
   assert.match(markup, /Save CSV/)
   assert.match(markup, /Save JSON/)
   assert.match(markup, /Preview PDF/)
+  assert.match(markup, /Reviewed export/)
   assert.match(markup, /Kept original layout/)
   assert.match(markup, /Ready to export/)
   assert.match(markup, /Review project/)
+})
+
+test('separates kept text and PNG layout configuration commands', () => {
+  const markup = renderToStaticMarkup(
+    <ExportPanel
+      snapshot={{ ...snapshot, summary: { ...snapshot.summary, keptCount: 1 } }}
+      status="Ready to export"
+      isSaving={false}
+      onSave={() => {}}
+      keptEntries={[entry('entry-1', 'keep')]}
+      onTemplateExport={() => {}}
+      onPlaceKeptImages={() => {}}
+    />
+  )
+
+  assert.match(markup, /Configure kept text export/)
+  assert.match(markup, /Configure kept PNG layout/)
 })
 
 test('marks the selected export preview entry and offers it as a review-navigation target', () => {

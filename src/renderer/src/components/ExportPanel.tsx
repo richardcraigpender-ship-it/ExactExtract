@@ -9,6 +9,7 @@ import type { ProjectEntry } from '../../../shared/contracts'
 import { ExportPreview } from './ExportPreview'
 import { uploadProjectPngs } from '../lib/projectImageUploads'
 import { WorkspaceToolWindow } from './WorkspaceToolWindow'
+import { KeptImageLayoutEditor } from './KeptImageLayoutEditor'
 import { KeptExportTemplateEditor } from './KeptExportTemplateEditor'
 import {
   cloneKeptExportTemplateDraft,
@@ -78,6 +79,7 @@ export const ExportPanel = React.memo(function ExportPanel({
   const [previewData, setPreviewData] = useState<Uint8Array | null>(null)
   const [isPreviewing, setIsPreviewing] = useState(false)
   const [showTemplateEditor, setShowTemplateEditor] = useState(false)
+  const [showImageLayoutEditor, setShowImageLayoutEditor] = useState(false)
   const [templateDraft, setTemplateDraft] = useState<KeptExportTemplateDraft>(() =>
     createDefaultKeptExportTemplateDraft()
   )
@@ -89,92 +91,105 @@ export const ExportPanel = React.memo(function ExportPanel({
   return (
     <aside className="export-panel" aria-label="Export reviewed project">
       <div className="export-actions">
-        <div className="export-primary-actions">
-          {onPreview && (
-            <div className="export-preview-command">
-              <select
-                aria-label="PDF format to preview"
-                value={previewFormat}
-                onChange={(event) => setPreviewFormat(event.target.value as PdfExportFormat)}
-              >
-                <option value="pdf">Reviewed PDF</option>
-                <option value="pdf-layout">Source layout</option>
-                <option value="pdf-compact">Compact layout</option>
-                <option value="pdf-kept">Kept entries</option>
-                <option value="pdf-kept-layout">Kept original layout</option>
-                <option value="pdf-kept-canvas">Kept canvas layout</option>
-              </select>
+        <section className="export-action-group" aria-label="Reviewed export">
+          <span className="export-action-group-label">Reviewed export</span>
+          <div className="export-primary-actions">
+            {onPreview && (
+              <div className="export-preview-command">
+                <select
+                  aria-label="PDF format to preview"
+                  value={previewFormat}
+                  onChange={(event) => setPreviewFormat(event.target.value as PdfExportFormat)}
+                >
+                  <option value="pdf">Reviewed PDF</option>
+                  <option value="pdf-layout">Source layout</option>
+                  <option value="pdf-compact">Compact layout</option>
+                  <option value="pdf-kept">Kept entries</option>
+                  <option value="pdf-kept-layout">Kept original layout</option>
+                  <option value="pdf-kept-canvas">Kept canvas layout</option>
+                </select>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={isSaving || isPreviewing}
+                  onClick={async () => {
+                    setIsPreviewing(true)
+                    try {
+                      setPreviewData(await onPreview(previewFormat))
+                    } finally {
+                      setIsPreviewing(false)
+                    }
+                  }}
+                >
+                  <Eye size={13} /> {isPreviewing ? 'Generating…' : 'Preview PDF'}
+                </button>
+              </div>
+            )}
+            <button
+              className="primary-button"
+              type="button"
+              disabled={isSaving}
+              onClick={() => onSave('pdf')}
+            >
+              <FileText size={13} /> Save PDF
+            </button>
+            {onTemplateExport && (
               <button
                 className="secondary-button"
                 type="button"
-                disabled={isSaving || isPreviewing}
-                onClick={async () => {
-                  setIsPreviewing(true)
-                  try {
-                    setPreviewData(await onPreview(previewFormat))
-                  } finally {
-                    setIsPreviewing(false)
-                  }
-                }}
+                disabled={isSaving || keptEntries.length === 0}
+                onClick={() => setShowTemplateEditor(true)}
               >
-                <Eye size={13} /> {isPreviewing ? 'Generating…' : 'Preview PDF'}
+                <FileOutput size={13} /> Configure kept text export
               </button>
-            </div>
-          )}
-          <button
-            className="primary-button"
-            type="button"
-            disabled={isSaving}
-            onClick={() => onSave('pdf')}
-          >
-            <FileText size={13} /> Save PDF
-          </button>
-          {onTemplateExport && (
+            )}
+            {onPlaceKeptImages && (
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={isSaving}
+                onClick={() => setShowImageLayoutEditor(true)}
+              >
+                <Images size={13} /> Configure kept PNG layout
+              </button>
+            )}
+            {onOpenKeptCanvas && (
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={isSaving || keptEntries.length === 0}
+                onClick={onOpenKeptCanvas}
+              >
+                <Images size={13} /> Open layout canvas
+              </button>
+            )}
             <button
               className="secondary-button"
               type="button"
-              disabled={isSaving || keptEntries.length === 0}
-              onClick={() => setShowTemplateEditor(true)}
+              disabled={isSaving}
+              onClick={() => onSave('csv')}
             >
-              <FileOutput size={13} /> Configure kept export
+              <Table size={13} /> Save CSV
             </button>
-          )}
-          {onOpenKeptCanvas && (
             <button
               className="secondary-button"
               type="button"
-              disabled={isSaving || keptEntries.length === 0}
-              onClick={onOpenKeptCanvas}
+              disabled={isSaving}
+              onClick={() => onSave('json')}
             >
-              <Images size={13} /> Open layout canvas
+              <FileJson size={13} /> Save JSON
             </button>
-          )}
-          <button
-            className="secondary-button"
-            type="button"
-            disabled={isSaving}
-            onClick={() => onSave('csv')}
-          >
-            <Table size={13} /> Save CSV
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            disabled={isSaving}
-            onClick={() => onSave('json')}
-          >
-            <FileJson size={13} /> Save JSON
-          </button>
-          <button
-            className="secondary-button"
-            type="button"
-            disabled={isSaving || snapshot.summary.keptCount === 0}
-            onClick={() => onSave('entry-images')}
-            title="Create a folder of fixed-size PNG crops, sized to the largest kept source region so nothing is clipped"
-          >
-            <Images size={13} /> Save kept entry PNGs
-          </button>
-        </div>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={isSaving || snapshot.summary.keptCount === 0}
+              onClick={() => onSave('entry-images')}
+              title="Create a folder of fixed-size PNG crops, sized to the largest kept source region so nothing is clipped"
+            >
+              <Images size={13} /> Save kept entry PNGs
+            </button>
+          </div>
+        </section>
         <details className="export-more-actions">
           <summary>More PDF formats</summary>
           <div>
@@ -259,7 +274,7 @@ export const ExportPanel = React.memo(function ExportPanel({
       )}
       {showTemplateEditor && onTemplateExport && (
         <WorkspaceToolWindow
-          title="Configure kept export"
+          title="Configure kept text export"
           className="workspace-tool-window--kept-template"
           onClose={() => setShowTemplateEditor(false)}
         >
@@ -280,11 +295,24 @@ export const ExportPanel = React.memo(function ExportPanel({
               void onTemplatePreview(toKeptExportTemplate(draft)).then(setPreviewData)
             }}
             isExporting={isSaving}
+          />
+        </WorkspaceToolWindow>
+      )}
+      {showImageLayoutEditor && onPlaceKeptImages && (
+        <WorkspaceToolWindow
+          title="Configure kept PNG layout"
+          className="workspace-tool-window--kept-image-layout"
+          onClose={() => setShowImageLayoutEditor(false)}
+        >
+          <KeptImageLayoutEditor
+            pageSize={templateDraft.pageOneTemplate.pageSize}
+            orientation={templateDraft.pageOneTemplate.orientation}
             sessionImageSources={sessionImageSources}
+            placedImageCount={placedImageCount ?? 0}
             onPlaceImages={onPlaceKeptImages}
             onUploadPngs={uploadProjectPngs}
-            placedImageCount={placedImageCount}
-            onPreviewPlacedImages={onPreviewPlacedImages}
+            onPreviewPlacedImages={onPreviewPlacedImages ?? onOpenKeptCanvas ?? (() => undefined)}
+            onClose={() => setShowImageLayoutEditor(false)}
           />
         </WorkspaceToolWindow>
       )}

@@ -1,12 +1,11 @@
 import React, { useState } from 'react'
 import { Check, FileOutput, Plus, RotateCcw, Trash2 } from 'lucide-react'
 
-import type { KeptImagePlan, KeptImageSourceDescriptor } from '../../../export'
 import type { KeptEntriesFontRef } from '../../../shared/keptEntriesLayout'
 import { getCanvasPageDimensions } from '../lib/canvasScale'
 import { CanvasBackgroundControls } from './CanvasBackgroundControls'
 import { FontPicker } from './FontPicker'
-import { KeptImagePlacementSection } from './KeptImagePlacementSection'
+import { LengthField } from './LengthField'
 import {
   applyTextStyle,
   cloneKeptExportPageTemplate,
@@ -35,11 +34,6 @@ interface KeptExportTemplateEditorProps {
   onPreview?: (draft: KeptExportTemplateDraft) => void
   onCancel?: () => void
   isExporting?: boolean
-  sessionImageSources?: readonly KeptImageSourceDescriptor[]
-  onPlaceImages?: (plan: KeptImagePlan) => void
-  onUploadPngs?: (files: File[]) => Promise<KeptImageSourceDescriptor[]>
-  placedImageCount?: number
-  onPreviewPlacedImages?: () => void
 }
 
 const STANDARD_FONTS: Array<Extract<KeptEntriesFontRef, { kind: 'standard-14' }>['family']> = [
@@ -95,12 +89,7 @@ export function KeptExportTemplateEditor({
   onExport,
   onPreview,
   onCancel,
-  isExporting = false,
-  sessionImageSources,
-  onPlaceImages,
-  onUploadPngs,
-  placedImageCount,
-  onPreviewPlacedImages
+  isExporting = false
 }: KeptExportTemplateEditorProps): React.JSX.Element {
   const [draft, setDraft] = useState<KeptExportTemplateDraft>(() =>
     cloneKeptExportTemplateDraft(initialDraft ?? createDefaultKeptExportTemplateDraft())
@@ -247,7 +236,7 @@ export function KeptExportTemplateEditor({
               </select>
             </label>
             <label>
-              <span>Entries per page</span>
+              <span>Maximum entries per page</span>
               <input
                 type="number"
                 min="1"
@@ -263,6 +252,33 @@ export function KeptExportTemplateEditor({
               />
             </label>
           </div>
+          <fieldset className="kept-template-choice">
+            <legend>Vertical flow</legend>
+            <label>
+              <input
+                type="checkbox"
+                checked={template.fillBetweenY ?? false}
+                onChange={(event) =>
+                  setTemplate((current) => ({ ...current, fillBetweenY: event.target.checked }))
+                }
+              />
+              Fill between Start Y and End Y
+            </label>
+            <LengthField
+              label="Start Y"
+              min={0}
+              value={template.startY ?? template.columns[0]?.y ?? 0}
+              disabled={!template.fillBetweenY}
+              onChange={(points) => setTemplate((current) => ({ ...current, startY: points }))}
+            />
+            <LengthField
+              label="End Y"
+              min={0}
+              value={template.endY ?? dimensions.height}
+              disabled={!template.fillBetweenY}
+              onChange={(points) => setTemplate((current) => ({ ...current, endY: points }))}
+            />
+          </fieldset>
           <fieldset className="kept-template-choice">
             <legend>Layout mode</legend>
             <label>
@@ -360,26 +376,23 @@ export function KeptExportTemplateEditor({
                     </select>
                   </label>
                   {(['x', 'y', 'width', 'height', 'spacing'] as const).map((field) => (
-                    <label key={field}>
-                      <span>
-                        {field === 'x' || field === 'y' ? field.toUpperCase() : field}
-                        {field === 'height' && ' (whole column)'}
-                        {field === 'spacing' && ' (between entries)'}
-                      </span>
-                      <input
-                        type="number"
-                        min={field === 'x' || field === 'y' ? 0 : 1}
-                        step="1"
-                        value={column[field]}
-                        onChange={(event) =>
-                          setTemplate((current) =>
-                            updateColumn(current, column.id, {
-                              [field]: numberValue(event.target.value, column[field])
-                            })
-                          )
-                        }
-                      />
-                    </label>
+                    <LengthField
+                      key={field}
+                      label={`${field === 'x' || field === 'y' ? field.toUpperCase() : field}${
+                        field === 'height'
+                          ? ' (whole column)'
+                          : field === 'spacing'
+                            ? ' (between entries)'
+                            : ''
+                      }`}
+                      min={field === 'x' || field === 'y' ? 0 : 1}
+                      value={column[field]}
+                      onChange={(points) =>
+                        setTemplate((current) =>
+                          updateColumn(current, column.id, { [field]: points })
+                        )
+                      }
+                    />
                   ))}
                   <label>
                     <span>Overflow</span>
@@ -525,18 +538,6 @@ export function KeptExportTemplateEditor({
           defaultHeight={dimensions.height}
           onChange={(background) => setTemplate((current) => ({ ...current, background }))}
         />
-
-        {onPlaceImages && (
-          <KeptImagePlacementSection
-            pageSize={template.pageSize}
-            orientation={template.orientation}
-            sessionSources={sessionImageSources}
-            onPlaceImages={onPlaceImages}
-            onUploadPngs={onUploadPngs}
-            placedImageCount={placedImageCount}
-            onPreviewPlacedImages={onPreviewPlacedImages}
-          />
-        )}
 
         <section className="kept-template-section" aria-labelledby="kept-template-summary-title">
           <h3 id="kept-template-summary-title">Final-page financial summary</h3>

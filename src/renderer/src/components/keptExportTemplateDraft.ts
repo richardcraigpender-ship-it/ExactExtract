@@ -49,6 +49,9 @@ export interface KeptExportPageTemplateDraft {
   orientation: KeptEntriesOrientation
   layoutMode: KeptExportLayoutMode
   entriesPerPage: number
+  fillBetweenY?: boolean
+  startY?: number
+  endY?: number
   defaultTextStyle: KeptExportTextStyle
   columns: KeptExportColumnDraft[]
   background?: KeptEntriesBackground
@@ -118,6 +121,9 @@ export function createDefaultKeptExportPageTemplate(): KeptExportPageTemplateDra
     orientation: 'portrait',
     layoutMode: 'table-row',
     entriesPerPage: 20,
+    fillBetweenY: false,
+    startY: 72,
+    endY: 720,
     defaultTextStyle: cloneKeptExportTextStyle(DEFAULT_TEXT_STYLE),
     columns: DEFAULT_COLUMN_SPECS.map((column) => ({
       ...column,
@@ -226,6 +232,17 @@ export function validateKeptExportPageTemplate(
   const issues: KeptExportTemplateValidationIssue[] = []
   if (!Number.isInteger(template.entriesPerPage) || template.entriesPerPage < 1) {
     issues.push({ path: `${label}.entriesPerPage`, message: `${label} needs at least one entry.` })
+  }
+  if (
+    template.fillBetweenY &&
+    (!Number.isFinite(template.startY) ||
+      !Number.isFinite(template.endY) ||
+      template.endY! <= template.startY!)
+  ) {
+    issues.push({
+      path: `${label}.yRange`,
+      message: `${label} End Y must be greater than Start Y when filling the vertical range.`
+    })
   }
   if (template.columns.length === 0) {
     issues.push({ path: `${label}.columns`, message: `${label} needs at least one column.` })

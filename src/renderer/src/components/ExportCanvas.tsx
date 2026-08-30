@@ -17,6 +17,7 @@ interface ExportCanvasProps {
   layout: KeptEntriesCanvasLayout
   ariaLabel?: string
   zoom?: number
+  previewMode?: 'combined' | 'text' | 'images'
   selectedPlacementId?: string | null
   onSelectPlacement?: (placementId: string) => void
   onPlacementChange?: (placement: KeptEntryPlacement) => void
@@ -75,6 +76,7 @@ export function ExportCanvas({
   layout,
   ariaLabel = 'Kept entries export page preview',
   zoom = 1,
+  previewMode = 'combined',
   selectedPlacementId = null,
   onSelectPlacement,
   onPlacementChange,
@@ -190,7 +192,7 @@ export function ExportCanvas({
           </div>
         )}
         <div className="export-canvas-content">
-          {visibleImages.map((placement) => {
+          {previewMode !== 'text' && visibleImages.map((placement) => {
             const label = placement.entryId ?? placement.source.ref
             const src = resolveImageSource?.(placement.source)
             return (
@@ -261,7 +263,7 @@ export function ExportCanvas({
               </div>
             )
           })}
-          {visiblePlacements.map((placement) => (
+          {previewMode !== 'images' && visiblePlacements.map((placement) => (
             <div
               className={`export-canvas-placement ${
                 selectedPlacementId === placement.id ? 'is-selected' : ''

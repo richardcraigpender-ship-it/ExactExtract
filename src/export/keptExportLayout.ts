@@ -24,6 +24,23 @@ function pageTemplate(template: KeptExportTemplate, pageNumber: number): KeptExp
     : template.laterPagesTemplate
 }
 
+function effectiveEntriesPerPage(template: KeptExportPageTemplate): number {
+  const { startY, endY } = template
+  if (
+    !template.fillBetweenY ||
+    !Number.isFinite(startY) ||
+    !Number.isFinite(endY) ||
+    endY === undefined ||
+    startY === undefined ||
+    endY <= startY
+  ) {
+    return template.entriesPerPage
+  }
+  const range = endY - startY
+  const fitting = template.columns.map((column) => Math.floor(range / column.spacing))
+  return Math.max(1, Math.min(template.entriesPerPage, ...fitting))
+}
+
 export function buildKeptExportRenderPlan(
   rows: readonly KeptExportSourceRow[],
   template: KeptExportTemplate
@@ -41,7 +58,7 @@ export function buildKeptExportRenderPlan(
   let pageNumber = 1
   while (rowOffset < rows.length || pageNumber === 1) {
     const currentTemplate = pageTemplate(template, pageNumber)
-    const pageRows = rows.slice(rowOffset, rowOffset + currentTemplate.entriesPerPage)
+    const pageRows = rows.slice(rowOffset, rowOffset + effectiveEntriesPerPage(currentTemplate))
     const placements: KeptExportPlacement[] = []
     const rowPlacements =
       currentTemplate.layoutMode === 'column-fill'
@@ -62,8 +79,10 @@ export function buildKeptExportRenderPlan(
         })
         return
       }
-      const y = column.y + rowIndex * column.spacing
-      if (y + column.spacing > column.y + column.height) {
+      const firstRowY = currentTemplate.fillBetweenY ? currentTemplate.startY! : column.y
+      const endY = currentTemplate.fillBetweenY ? currentTemplate.endY! : column.y + column.height
+      const y = firstRowY + rowIndex * column.spacing
+      if (y + column.spacing > endY) {
         warnings.push({
           code: 'overflow',
           entryId: row.entryId,
@@ -84,7 +103,7 @@ export function buildKeptExportRenderPlan(
       })
     })
     allPages.push({ pageNumber, template: currentTemplate, placements })
-    rowOffset += currentTemplate.entriesPerPage
+    rowOffset += pageRows.length
     pageNumber += 1
   }
   return { pages: allPages, warnings }

@@ -3,10 +3,24 @@ import test from 'node:test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import type { KeptEntriesCanvasLayout } from '../../../shared/keptEntriesLayout'
+import {
+  keptEntriesPageDimensions,
+  type KeptEntriesCanvasLayout,
+  type KeptEntriesOrientation,
+  type KeptEntriesPageSize
+} from '../../../shared/keptEntriesLayout'
 import { ExportCanvas } from './ExportCanvas'
 
 void React
+
+/** Derived from the shared page contract so a change there cannot silently pass this suite. */
+function expectedAspectRatio(
+  pageSize: KeptEntriesPageSize,
+  orientation: KeptEntriesOrientation
+): string {
+  const page = keptEntriesPageDimensions(pageSize, orientation)
+  return `aspect-ratio:${page.width} / ${page.height}`
+}
 
 const layout: KeptEntriesCanvasLayout = {
   version: 1,
@@ -42,7 +56,10 @@ test('renders a layered responsive page from PDF-point placement data', () => {
 
   assert.match(markup, /data-page-size="letter"/)
   assert.match(markup, /data-orientation="portrait"/)
-  assert.match(markup, /aspect-ratio:612 \/ 792/)
+  assert.ok(
+    markup.includes(expectedAspectRatio('letter', 'portrait')),
+    'expected the shared letter portrait aspect ratio'
+  )
   assert.match(markup, /class="export-canvas-background"/)
   assert.match(markup, /opacity:0.4/)
   assert.match(markup, /data-placement-id="placement-1"/)
@@ -75,7 +92,10 @@ test('uses landscape dimensions and renders system-font free text', () => {
     />
   )
 
-  assert.match(markup, /aspect-ratio:842 \/ 595/)
+  assert.ok(
+    markup.includes(expectedAspectRatio('a4', 'landscape')),
+    'expected the shared A4 landscape aspect ratio'
+  )
   assert.match(markup, /font-family:&quot;Example Sans&quot;/)
   assert.match(markup, /font-style:italic/)
   assert.match(markup, /font-weight:700/)

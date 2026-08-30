@@ -46,6 +46,10 @@ export interface KeptExportPageTemplate {
   orientation: KeptEntriesOrientation
   layoutMode: KeptExportLayoutMode
   entriesPerPage: number
+  /** When enabled, rows begin at startY and continue until endY on each page. */
+  fillBetweenY?: boolean
+  startY?: number
+  endY?: number
   defaultTextStyle: KeptExportTextStyle
   columns: KeptExportColumn[]
   background?: KeptEntriesBackground

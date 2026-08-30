@@ -9,6 +9,34 @@ export interface ProductUpdate {
 
 export const PRODUCT_UPDATES: readonly ProductUpdate[] = [
   {
+    date: '2026-08-30',
+    kind: 'Feature',
+    title: 'Kept image layouts',
+    summary:
+      'Place session crops or uploaded PNGs on multi-page kept-entry layouts, then preview and export them.'
+  },
+  {
+    date: '2026-08-30',
+    kind: 'Changed',
+    title: 'Clearer kept exports',
+    summary:
+      'Kept text templates and kept PNG layouts now open in separate configuration windows.'
+  },
+  {
+    date: '2026-08-30',
+    kind: 'Feature',
+    title: 'Flexible layout measurements',
+    summary:
+      'Use points, millimetres, centimetres, inches, or pixels for layout controls; projects store precise PDF points.'
+  },
+  {
+    date: '2026-08-30',
+    kind: 'Changed',
+    title: 'Vertical export flow',
+    summary:
+      'Text and PNG kept exports can fill between Start Y and End Y before continuing on the next page.'
+  },
+  {
     date: '2026-08-25',
     kind: 'Changed',
     title: 'Windows beta candidate',

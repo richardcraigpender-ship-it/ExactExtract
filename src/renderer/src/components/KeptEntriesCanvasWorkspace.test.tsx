@@ -88,14 +88,24 @@ test('starts on the first canvas page and reports the continuation total', () =>
   assert.doesNotMatch(markup, /data-image-placement-id="kept-image-2"/)
 })
 
-test('offers bounded canvas zoom controls at two hundred percent by default', () => {
+test('starts image layouts in PNG preview mode and offers text and combined views', () => {
+  const markup = renderWorkspace()
+
+  assert.match(markup, /aria-label="Canvas preview mode"/)
+  assert.match(markup, /PNG images<\/button>/)
+  assert.match(markup, /Kept text<\/button>/)
+  assert.match(markup, /Combined<\/button>/)
+  assert.match(markup, /aria-pressed="true">PNG images<\/button>/)
+})
+
+test('offers bounded canvas zoom controls at seventy percent by default', () => {
   const markup = renderWorkspace()
 
   assert.match(markup, /aria-label="Canvas zoom"/)
   assert.doesNotMatch(markup, /aria-label="Zoom out"[^>]*disabled=""/)
-  assert.match(markup, /aria-label="Zoom in"[^>]*disabled=""/)
+  assert.doesNotMatch(markup, /aria-label="Zoom in"[^>]*disabled=""/)
   assert.doesNotMatch(markup, /aria-label="Reset canvas zoom"[^>]*disabled=""/)
-  assert.match(markup, />200%<\/span>/)
+  assert.match(markup, />70%<\/span>/)
 })
 
 test('offers image placements as draggable and resizable canvas targets', () => {

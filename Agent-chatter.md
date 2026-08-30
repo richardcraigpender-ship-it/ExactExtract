@@ -554,6 +554,10 @@ Ownership notes:
 
 ## Handoff log
 
+- 2026-08-30 — Failing test for Agent C: `uses landscape dimensions and renders system-font free text` in `ExportCanvas.test.tsx` expects `aspect-ratio:842 / 595`. `getCanvasPageDimensions` in `canvasScale.ts` now delegates to `keptEntriesPageDimensions`, which returns exact A4 (841.89 x 595.28) where canvasScale previously used rounded integers (842 x 595), so the rendered string no longer matches. Either update the expectation to the exact values, or round inside `getCanvasPageDimensions` — though rounding reintroduces the second A4 definition that the delegation removed. Agent A did not edit `canvasScale.ts`; it was being worked on at the time.
+
+- 2026-08-30 — Agent A: `measureHighlight` now returns a status union (`measured` / `no-selection` / `no-page-size`). Because every unit is a real length, a page with no recorded size has nothing to convert against, so numeric edits there did nothing while the panel still said "select an entry". The panel now explains the cause and disables Apply. Percent was not reintroduced: nothing depended on it as an input, and relative sizing belongs on its own axis rather than in the unit list. Files: `highlightGeometry.ts`, `HighlightToolPanel.tsx`, and both tests. Highlight suites 34/34, typecheck clean, lint 0, build exit 0.
+
 - 2026-08-30 — The four files Agent A edited in Agent B's lane are accepted after manual testing, with no errors observed: `KeptEntriesCanvasWorkspace.tsx` (`imageResolutionError` prop and status line), `ExportCanvasImages.test.tsx` (placeholder assertion), `KeptEntriesPreviewWarnings.tsx` (`missing-image` case), and `keptEntriesLayoutPersistence.ts` (layout version 2). Nothing reverted; the review request is closed.
 
 - 2026-08-29T00:00:00+01:00 — Agent A: `LengthField` optional mode, for Agent B. **Landed — adopt it.**
@@ -2750,14 +2754,14 @@ $$
 
 ### Exit criteria
 
-- [ ] Users can choose session-generated kept-entry images or upload multiple PNGs.
-- [ ] Batch placement starts at configured X/Y and stacks vertically with a configured gap.
-- [ ] Entries-per-page produces deterministic continuation pages.
-- [ ] Optional width/height and uniform crop mode work without stretching images by default.
-- [ ] Users can manually correct generated image placements.
-- [ ] Saved projects reopen with managed image layouts intact.
-- [ ] Exported PDFs contain correctly ordered, positioned image placements.
-- [ ] Focused tests, full typecheck, full test suite, and production build pass.
+- [x] Users can choose session-generated kept-entry images or upload multiple PNGs.
+- [x] Batch placement starts at configured X/Y and stacks vertically with a configured gap.
+- [x] Entries-per-page produces deterministic continuation pages.
+- [x] Optional width/height and uniform crop mode work without stretching images by default.
+- [x] Users can manually correct generated image placements.
+- [x] Saved projects reopen with managed image layouts intact.
+- [x] Exported PDFs contain correctly ordered, positioned image placements.
+- [x] Focused tests, full typecheck, full test suite, and production build pass.
 
 ### Sub-sprint: Live Kept-Image Canvas Preview (Agent A/B)
 
@@ -2802,11 +2806,25 @@ $$
 2. Agent B may prepare the command/layout shell in parallel, then wires the released callback into the reused canvas workspace.
 3. Both run focused resolver, canvas, and editor tests, followed by `npm run typecheck`, `npm test`, and `npm run build`.
 
-- [ ] The image-placement section exposes Preview placed images after a plan is applied.
-- [ ] Preview renders session and managed uploaded PNGs rather than placeholders when sources are available.
-- [ ] Continuation pages can be navigated.
-- [ ] Unresolved images are actionable and non-crashing.
-- [ ] Existing immediate-placement behavior is preserved.
+- [x] The image-placement section exposes Preview placed images after a plan is applied.
+- [x] Preview renders session and managed uploaded PNGs rather than placeholders when sources are available.
+- [x] Continuation pages can be navigated.
+- [x] Unresolved images are actionable and non-crashing.
+- [x] Existing immediate-placement behavior is preserved.
+
+### Manual acceptance confirmed - Batch Place Kept Entry Images and canvas preview (2026-08-30)
+
+Coordinator confirmed the five checks that no static-render test can reach, exercised in the running Electron app: pointer drag/resize/delete of placements; save, close, and reopen with uploaded images still resolving; an exported PDF inspected for image order and position; session and uploaded PNGs rendering as real images rather than placeholders; and continuation-page navigation for a batch exceeding entries-per-page. Both exit-gate checklists above are therefore closed.
+
+**Evidence split, so a later reader knows what is actually proven.** Automated coverage coming to **445/445** with clean lint, typecheck, and production build proves contracts, geometry maths, planner output, managed-storage behaviour, and rendered markup. It does not prove pointer interaction or that pixels appear, which is exactly what the manual pass covered. One item, "unresolved images are actionable and non-crashing", is closed on automated evidence — the placeholder render path and the message builder — rather than on a deliberately corrupted managed file; if that scenario is ever wanted, deleting a PNG from the managed image directory and reopening is the check.
+
+**Scope note, as intended.** These checklists are acceptance gates for the delivered behaviour, not an exhaustive specification. They will not stay accurate as the feature evolves, and are not meant to; treat them as a record of what was verified on this date rather than as a permanent contract.
+
+### Agent C acceptance lane status - 2026-08-30
+
+- Reviewed the Batch Place Kept Entry Images sprint and Live Kept-Image Canvas Preview sub-sprint before claiming work.
+- No acceptance claim was created because both parent and sub-sprint exit checklists are already marked complete, including coordinator-confirmed Electron runtime checks.
+- The acceptance lane is released. Any new claim should target a new feature change or a newly reported regression, not repeat the completed PNG-entry verification.
 
 #### Agent C acceptance - 2026-08-29
 
