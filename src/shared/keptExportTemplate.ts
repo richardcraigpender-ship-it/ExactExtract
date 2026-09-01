@@ -8,7 +8,15 @@ import type {
 export type KeptExportLayoutMode = 'column-fill' | 'table-row'
 export type KeptExportOverflowBehavior = 'wrap' | 'clip' | 'next-page'
 export type KeptExportSourceField =
-  'text' | 'payee' | 'date' | 'money-out' | 'money-in' | 'balance' | 'category' | 'reference'
+  | 'text'
+  | 'payee'
+  | 'date'
+  | 'money-out'
+  | 'money-in'
+  | 'balance'
+  | 'calculated-balance'
+  | 'category'
+  | 'reference'
 
 export type KeptExportSummaryField =
   | 'money-in-total'
@@ -26,6 +34,35 @@ export interface KeptExportTextStyle {
   color: string
   fontWeight: 'normal' | 'bold'
   fontStyle: 'normal' | 'italic'
+}
+
+export interface KeptExportDivider {
+  enabled: boolean
+  width: number
+  thickness: number
+  color: string
+  opacity: number
+  startX: number
+  endX: number
+}
+
+export type KeptExportRunningBalanceFallback = 'first-existing-balance' | 'zero'
+export type KeptExportBalanceFieldMode = 'keep-original' | 'replace-original' | 'add-calculated'
+
+export interface KeptExportRunningBalance {
+  enabled: boolean
+  /** Blank means resolve the opening balance from `fallback`. */
+  openingBalance?: number
+  fallback: KeptExportRunningBalanceFallback
+  balanceFieldMode: KeptExportBalanceFieldMode
+  decimalPlaces: number
+}
+
+export const DEFAULT_KEPT_EXPORT_RUNNING_BALANCE: KeptExportRunningBalance = {
+  enabled: false,
+  fallback: 'first-existing-balance',
+  balanceFieldMode: 'add-calculated',
+  decimalPlaces: 2
 }
 
 export interface KeptExportColumn {
@@ -50,8 +87,10 @@ export interface KeptExportPageTemplate {
   fillBetweenY?: boolean
   startY?: number
   endY?: number
+  showReferenceUnderMainText?: boolean
   defaultTextStyle: KeptExportTextStyle
   columns: KeptExportColumn[]
+  divider?: KeptExportDivider
   background?: KeptEntriesBackground
 }
 
@@ -60,6 +99,7 @@ export interface KeptExportTemplate {
   pageOneTemplate: KeptExportPageTemplate
   laterPagesTemplate: KeptExportPageTemplate
   summaryFields?: KeptExportSummaryField[]
+  runningBalance?: KeptExportRunningBalance
 }
 
 export interface KeptExportSourceRow {
@@ -83,10 +123,27 @@ export interface KeptExportPage {
   pageNumber: number
   template: KeptExportPageTemplate
   placements: KeptExportPlacement[]
+  dividers: KeptExportDividerPlacement[]
+}
+
+export interface KeptExportDividerPlacement {
+  entryId: string
+  pageNumber: number
+  startX: number
+  endX: number
+  y: number
+  thickness: number
+  color: string
+  opacity: number
 }
 
 export interface KeptExportLayoutWarning {
-  code: 'overflow' | 'missing-value' | 'no-columns'
+  code:
+    | 'overflow'
+    | 'missing-value'
+    | 'no-columns'
+    | 'running-balance-fallback'
+    | 'running-balance-unmappable'
   entryId?: string
   columnId?: string
   message: string

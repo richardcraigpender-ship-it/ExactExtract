@@ -38,7 +38,8 @@ function dimensions(layout: KeptEntriesCanvasLayout): { width: number; height: n
 function decodeDataUrl(dataUrl: string): { kind: 'png' | 'jpg'; bytes: Uint8Array } | undefined {
   const match = /^data:(image\/png|image\/(?:jpeg|jpg));base64,(.+)$/i.exec(dataUrl)
   if (!match) return undefined
-  const bytes = Uint8Array.from(Buffer.from(match[2], 'base64'))
+  const binary = atob(match[2])
+  const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0))
   return { kind: match[1].toLowerCase() === 'image/png' ? 'png' : 'jpg', bytes }
 }
 
@@ -227,6 +228,18 @@ export async function exportProjectKeptEntriesCanvasPdf(
       width: box.width,
       height: box.height
     })
+
+    const divider = layout.imagePlacementOptions?.divider
+    if (divider?.enabled) {
+      const dividerY = pageSize.height - box.y - box.height
+      page.drawLine({
+        start: { x: divider.startX, y: dividerY },
+        end: { x: divider.endX, y: dividerY },
+        thickness: divider.thickness,
+        color: color(divider.color),
+        opacity: Math.max(0, Math.min(1, divider.opacity))
+      })
+    }
   }
 
   for (const placement of layout.placements) {

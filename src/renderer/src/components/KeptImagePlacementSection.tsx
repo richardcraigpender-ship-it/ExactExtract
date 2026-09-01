@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { Eye, ImagePlus, LayoutGrid, Trash2 } from 'lucide-react'
 
 import {
@@ -6,7 +6,12 @@ import {
   type KeptImagePlan,
   type KeptImageSourceDescriptor
 } from '../../../export'
-import type { KeptEntriesOrientation, KeptEntriesPageSize } from '../../../shared/keptEntriesLayout'
+import type {
+  KeptEntriesDivider,
+  KeptEntriesOrientation,
+  KeptEntriesPageSize,
+  KeptImagePlacementOptions
+} from '../../../shared/keptEntriesLayout'
 import { LengthField } from './LengthField'
 
 export type KeptImageSourceMode = 'session-entry' | 'uploaded-png'
@@ -21,6 +26,12 @@ interface KeptImagePlacementSectionProps {
   /** Images already on the canvas, so preview is offered only once a plan has been applied. */
   placedImageCount?: number
   onPreviewPlacedImages?: () => void
+  initialOptions?: KeptImagePlacementOptions
+  initialUploadedSources?: readonly KeptImageSourceDescriptor[]
+  onConfigurationChange?: (
+    options: KeptImagePlacementOptions,
+    uploadedSources: readonly KeptImageSourceDescriptor[]
+  ) => void
 }
 
 interface PlacementOptions {
@@ -35,6 +46,17 @@ interface PlacementOptions {
   height: number | null
   preserveAspectRatio: boolean
   uniformSlots: boolean
+  divider: KeptEntriesDivider
+}
+
+const DEFAULT_DIVIDER: KeptEntriesDivider = {
+  enabled: false,
+  startX: 48,
+  endX: 564,
+  width: 516,
+  thickness: 1,
+  color: '#17231c',
+  opacity: 0.35
 }
 
 const DEFAULT_OPTIONS: PlacementOptions = {
@@ -47,7 +69,8 @@ const DEFAULT_OPTIONS: PlacementOptions = {
   width: null,
   height: null,
   preserveAspectRatio: true,
-  uniformSlots: false
+  uniformSlots: false,
+  divider: DEFAULT_DIVIDER
 }
 
 function numberValue(value: string, fallback: number): number {
@@ -66,37 +89,63 @@ export function KeptImagePlacementSection({
   onPlaceImages,
   onUploadPngs,
   placedImageCount = 0,
-  onPreviewPlacedImages
+  onPreviewPlacedImages,
+  initialOptions,
+  initialUploadedSources = [],
+  onConfigurationChange
 }: KeptImagePlacementSectionProps): React.JSX.Element {
   const [mode, setMode] = useState<KeptImageSourceMode>(
-    sessionSources.length > 0 ? 'session-entry' : 'uploaded-png'
+    initialOptions?.sourceMode ?? (sessionSources.length > 0 ? 'session-entry' : 'uploaded-png')
   )
-  const [uploaded, setUploaded] = useState<KeptImageSourceDescriptor[]>([])
+  const [uploaded, setUploaded] = useState<KeptImageSourceDescriptor[]>(() => [
+    ...initialUploadedSources
+  ])
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-  const [options, setOptions] = useState<PlacementOptions>(DEFAULT_OPTIONS)
+  const [options, setOptions] = useState<PlacementOptions>(() => ({
+    ...DEFAULT_OPTIONS,
+    ...initialOptions,
+    width: initialOptions?.width ?? null,
+    height: initialOptions?.height ?? null,
+    divider: { ...DEFAULT_DIVIDER, ...initialOptions?.divider }
+  }))
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const placementOptions = useMemo<KeptImagePlacementOptions>(
+    () => ({
+      sourceMode: mode,
+      startX: options.startX,
+      startY: options.startY,
+      endY: optionalDimension(options.endY),
+      fillBetweenY: options.fillBetweenY,
+      entriesPerPage: options.entriesPerPage,
+      gap: options.gap,
+      width: optionalDimension(options.width),
+      height: optionalDimension(options.height),
+      preserveAspectRatio: options.preserveAspectRatio,
+      uniformSlots: options.uniformSlots,
+      divider: { ...options.divider }
+    }),
+    [mode, options]
+  )
+
+  useEffect(() => {
+    onConfigurationChange?.(placementOptions, uploaded)
+  }, [onConfigurationChange, placementOptions, uploaded])
 
   const hasSessionImages = sessionSources.length > 0
   const sources = mode === 'session-entry' ? sessionSources : uploaded
 
   const plan = useMemo<KeptImagePlan>(
-    () =>
-      planKeptEntryImagePlacements(sources, {
+    () => ({
+      ...planKeptEntryImagePlacements(sources, {
         pageSize,
         orientation,
-        startX: options.startX,
-        startY: options.startY,
-        endY: options.endY,
-        fillBetweenY: options.fillBetweenY,
-        gap: options.gap,
-        entriesPerPage: options.entriesPerPage,
-        width: optionalDimension(options.width),
-        height: optionalDimension(options.height),
-        preserveAspectRatio: options.preserveAspectRatio,
-        uniformSlots: options.uniformSlots
+        ...placementOptions
       }),
-    [options, orientation, pageSize, sources]
+      options: placementOptions
+    }),
+    [orientation, pageSize, placementOptions, sources]
   )
 
   const setOption = <Key extends keyof PlacementOptions>(
@@ -104,6 +153,10 @@ export function KeptImagePlacementSection({
     value: PlacementOptions[Key]
   ): void => {
     setOptions((current) => ({ ...current, [key]: value }))
+  }
+
+  const setDivider = (patch: Partial<KeptEntriesDivider>): void => {
+    setOptions((current) => ({ ...current, divider: { ...current.divider, ...patch } }))
   }
 
   const canPlace = plan.placements.length > 0
@@ -284,6 +337,76 @@ export function KeptImagePlacementSection({
           Uniform crop dimensions
         </label>
       </div>
+
+      <fieldset className="kept-image-divider" aria-labelledby="kept-image-divider-legend">
+        <legend id="kept-image-divider-legend">Entry divider</legend>
+        <label className="kept-image-divider-toggle">
+          <input
+            type="checkbox"
+            checked={options.divider.enabled}
+            onChange={(event) => setDivider({ enabled: event.target.checked })}
+          />
+          Show a divider after every image
+        </label>
+        <div className="kept-image-grid">
+          <LengthField
+            label="Width"
+            min={1}
+            value={options.divider.width}
+            disabled={!options.divider.enabled}
+            onChange={(width) => setDivider({ width, endX: options.divider.startX + width })}
+          />
+          <LengthField
+            label="Thickness"
+            min={0.1}
+            value={options.divider.thickness}
+            disabled={!options.divider.enabled}
+            onChange={(thickness) => setDivider({ thickness })}
+          />
+          <label>
+            <span>Color</span>
+            <input
+              type="color"
+              value={options.divider.color}
+              disabled={!options.divider.enabled}
+              onChange={(event) => setDivider({ color: event.target.value })}
+            />
+          </label>
+          <label>
+            <span>Opacity</span>
+            <input
+              type="number"
+              min="0"
+              max="1"
+              step="0.05"
+              value={options.divider.opacity}
+              disabled={!options.divider.enabled}
+              onChange={(event) =>
+                setDivider({
+                  opacity: Math.max(
+                    0,
+                    Math.min(1, numberValue(event.target.value, options.divider.opacity))
+                  )
+                })
+              }
+            />
+          </label>
+          <LengthField
+            label="Start X"
+            min={0}
+            value={options.divider.startX}
+            disabled={!options.divider.enabled}
+            onChange={(startX) => setDivider({ startX, endX: startX + options.divider.width })}
+          />
+          <LengthField
+            label="End X"
+            min={0}
+            value={options.divider.endX}
+            disabled={!options.divider.enabled}
+            onChange={(endX) => setDivider({ endX, width: endX - options.divider.startX })}
+          />
+        </div>
+      </fieldset>
 
       <p className="kept-image-summary" role="status">
         {canPlace

@@ -76,9 +76,395 @@ Execution order:
 
 ## Active work
 
+- 2026-09-01 — Agent B released Document Style Detector workload: divider, colour, and visual-rule detection. Scope stayed in `src/style/colors.ts`, `src/style/dividers.ts`, `src/style/detect.ts`, `src/extraction/types.ts`, `src/extraction/pdfjsAdapter.ts`, the style barrel, and focused tests. Toolbar, persistence, profile panel, and export-template application remain Agent C-owned.
 - All three agent workloads for Event Handler & Interaction Fixes completed on 2026-08-26.
 - 2026-08-29 — Agent A claims the highlight unit change on coordinator instruction: `highlightGeometry.ts`, `HighlightToolPanel.tsx`, and their tests. `HighlightUnit` ('percent' | 'points') is being replaced by the shared `LengthUnit` scale and percent is being removed, so every length control in the app uses one scale. **Agent B: this was on the list sent to you — do not start it.** `CanvasBackgroundControls.tsx` and `KeptImagePlacementSection.tsx` are yours and are not touched.
 - 2026-08-29 — Agent A claimed and released managed-PNG retention: new `src/main/projectImageRetention.ts` and its test, startup wiring in `src/main/index.ts`, and the version-2 reopen fix in `src/renderer/src/components/keptEntriesLayoutPersistence.ts`. `src/main/projectImageStore.ts`, `src/shared/projectImages.ts`, and the renderer upload/resolution libraries were audited but left with their author.
+- 2026-08-30 — **Agent B released B1-B5 of the Calculated Running Balance Export sprint.** Owned and completed: `keptExportTemplateDraft.ts`, `KeptExportTemplateEditor.tsx`, `KeptExportTemplateEditor.css`, `KeptExportTemplateEditor.test.tsx`. **Agent A note:** the shared contract (A1) was landed by Agent B to unblock B1/B3, because `KeptExportSourceField` is duplicated in the shared module and the draft module, so the dropdown could not compile without it. Agent A's `DEFAULT_KEPT_EXPORT_RUNNING_BALANCE`, warning codes, `runningBalance.ts`, and `sourceRows` integration merged cleanly with it — no rework needed. Agent A retains A2-A5.
+- 2026-08-30 — **Agent A released A1-A5 of the Calculated Running Balance Export sprint.** Owned and completed: `src/shared/keptExportTemplate.ts` (contract completion), new `src/export/runningBalance.ts` + `src/export/runningBalance.test.ts`, `src/export/keptExportTemplatePdf.ts` (`sourceRows` integration), `src/export/keptExportTemplatePdf.test.ts`, and the `src/export/index.ts` barrel. No renderer or editor files touched — Agent B's B1-B5 files were left untouched.
+
+### Agent A handoff — Calculated Running Balance Export (2026-08-30)
+
+**A1 — Shared contract.** `calculated-balance` was already present in `KeptExportSourceField` from Agent B's unblocking commit. Completed the remainder: added `DEFAULT_KEPT_EXPORT_RUNNING_BALANCE` (`enabled: false`, `fallback: 'first-existing-balance'`, `balanceFieldMode: 'add-calculated'`, `decimalPlaces: 2`) and extended `KeptExportLayoutWarning['code']` with `running-balance-fallback` and `running-balance-unmappable`. `runningBalance` on `KeptExportTemplate` stays optional, so existing templates remain valid.
+
+**A2 — Pure helper.** New `buildRunningBalanceValues(rows, options)` in `src/export/runningBalance.ts` returns `{ values: Map<entryId, number>, openingBalance, openingBalanceSource, warnings }`. Opening balance resolves manual → inferred (`firstBalance - moneyIn + moneyOut`) → zero. Missing amounts are treated as `0`, results are rounded to currency precision each step, and no input is mutated.
+
+**A3 — `sourceRows()` integration.** `sourceRows` now takes the template, populates `values['calculated-balance']`, and only overwrites `values.balance` when `balanceFieldMode === 'replace-original'`. `keep-original` and `add-calculated` leave the original balance intact. Non-financial kept rows still export their text and receive the carried-forward balance. `decimalPlaces` is clamped to 0-6 to match Agent B's validation range.
+
+**A4/A5 — Coverage.** 8 helper tests plus 9 export tests. Covered: manual opening balance, first-existing-balance inference, zero fallback, carry-forward, no-mappable-money warning, no mutation, empty row set, float rounding, calculated column rendering, replace-mode substitution, add-mode preservation, decimal places, and zero kept entries. Export never throws because inference was impossible.
+
+**Verification (all green):** `npm run typecheck`; `npx tsx --import ./test-setup.cjs --test src/export/keptExportLayout.test.ts src/export/keptExportTemplatePdf.test.ts src/export/runningBalance.test.ts` → 21/21 pass, exit 0; `npm run build` succeeds. The new export tests were also confirmed non-vacuous by reverting the `sourceRows` integration, which produced 5 failures.
+
+### Agent B handoff — Calculated Running Balance Export (2026-08-30)
+
+**B1 — Draft types and defaults.** Added `runningBalance: KeptExportRunningBalance` to `KeptExportTemplateDraft` (required in the draft, optional on the shared template), plus `createDefaultRunningBalance()` returning `enabled: false`, `fallback: 'first-existing-balance'`, `balanceFieldMode: 'add-calculated'`, `decimalPlaces: 2`. Cloning, `createKeptExportTemplateDraft()`, and `toKeptExportTemplate()` all carry the setting; templates saved before this sprint receive defaults via spread merge.
+
+**B2 — UI controls.** New "Calculated balance" section in the export popup: enable toggle, opening balance input (blank-capable, emits `undefined` not `NaN`), fallback dropdown, decimal places, and an "Original balance output" radio group. Every field except the toggle is disabled while the feature is off.
+
+**B3 — Source field.** `Calculated balance` added to the column source dropdown and to `KeptExportSourceField` in both the shared and draft modules.
+
+**B4 — Validation.** `validateKeptExportRunningBalance()` rejects a non-finite opening balance and decimal places outside 0-6, and is folded into `validateKeptExportTemplateDraft()`, so Apply/Preview/Export disable on invalid input. A blank opening balance is explicitly valid.
+
+**B5 — Tests.** Three new cases in `KeptExportTemplateEditor.test.tsx`: dropdown option plus default-off controls, invalid decimal places blocking Apply/Export, and blank opening balance raising no alert.
+
+**Wiring note:** no `ExportPanel.tsx` change was needed. It already routes `toKeptExportTemplate(draft)` through Apply, Preview, and Export, so the running balance config reaches all three paths automatically.
+
+**Validation:** `npm run typecheck` (Node + web) passes; 19/19 focused tests pass across `keptExportLayout.test.ts`, `keptExportTemplatePdf.test.ts`, and `KeptExportTemplateEditor.test.tsx`; `npm run build` passes; Prettier clean on all Agent B files; `npm run lint` reports 0 errors.
+
+**Left for other owners:** `npm run lint` shows 129 formatting warnings in files with uncommitted work by other agents — `src/export/runningBalance.ts`, `ExportCanvas.tsx`, `ExportPanel.tsx`, `productUpdates.ts`. Agent B deliberately did not reformat them to avoid colliding with in-flight edits.
+
+## 2026-09-01 3-Agent Sprint Plan: Document Style Detector
+
+**Goal:** Build a compact, local style-detection pipeline that profiles a document's fonts, text styles, colours, headers, dividers, visual rules, and repeated layout patterns. It should run during extraction and also be runnable manually from the toolbar.
+
+**Confidence boundary:** born-digital PDFs should produce reliable embedded text/style/layout data through `pdfjs-dist`. Scanned/image-only PDFs should return an honest partial profile with approximation and warnings; exact commercial font identification from pixels is out of MVP scope.
+
+**Recommended dependencies:** use existing `pdfjs-dist` first. Add `culori` for colour clustering/naming if needed. `@techstark/opencv-js` can support scanned/image visual detection later, but keep it isolated from the MVP digital-PDF detector path.
+
+**Total estimate:** 21 SP · **Duration:** 3-5 focused days · **Risk:** Medium
+
+### Agent A — Style Contract + Digital PDF Detector
+
+Owner: shared style model, PDF.js text/style extraction, font normalization, and deterministic text-style clustering. **Estimate: 8 SP**
+
+Likely files:
+
+- `src/shared/contracts.ts`
+- `src/style/types.ts`
+- `src/style/detect.ts`
+- `src/style/fonts.ts`
+- `src/style/colors.ts`
+- `src/style/cluster.ts`
+- `src/extraction/pdfjsAdapter.ts`
+- `src/extraction/pipeline.ts`
+- tests under `src/style/*.test.ts`
+
+Tasks:
+
+1. Define `DocumentStyleProfile`, `TextStyleCluster`, `DividerStyleCluster`, `ColourCluster`, page summaries, confidence, and warnings.
+2. Normalize embedded PDF font names by stripping subset prefixes and inferring face/weight/slant from names such as Bold, Italic, Oblique, Medium, and Semibold.
+3. Use PDF.js text items/style maps to collect text, page number, approximate bbox, transform-derived font size, and style keys.
+4. Cluster text styles by normalized family, face, size bucket, weight, slant, and optional colour.
+5. Infer likely header/body/footer/table/small-print roles from frequency, size, and page position.
+6. Keep persisted output compact: clusters, counts, samples, page coverage, confidence, and warnings only; no long-term raw per-word style dump.
+
+Acceptance criteria:
+
+- Digital PDFs produce a deterministic `DocumentStyleProfile`.
+- Missing or unknown font/style metadata does not fail extraction.
+- Header/body/small-print roles are inferred when enough evidence exists.
+- Existing extraction results, source entries, highlights, and export data are unchanged.
+- Unit tests cover font-name normalization, size clustering, role inference, empty input, and unknown style input.
+
+Definition of done:
+
+- A born-digital PDF can be profiled with stable text-style clusters ready for persistence and UI display.
+- The style profile is compact enough to store in project analytics/document metadata.
+- Agent B can add divider/operator-list detection without changing Agent A's public contract.
+
+### Agent A completion — Document Style Detector (2026-09-01)
+
+- Added the shared style profile contract to `src/shared/contracts.ts`, including `DocumentStyleProfile`, `TextStyleCluster`, `DividerStyleCluster`, `ColourCluster`, page summaries, confidence, warnings, and optional `ProjectDocument.styleProfile` / `ProjectState.styleProfiles` storage hooks.
+- Added `src/style/fonts.ts` and `src/style/detect.ts` for digital-PDF text style detection from existing PDF.js text-layer inputs. The detector normalizes subset font names, infers weight/slant, buckets transform-derived font sizes, clusters text styles, infers header/body/footer/table/small-print roles, and returns compact page summaries and warnings.
+- Wired `extractDocumentTextLayer()` to attach `styleProfile` to `ParserExtractionResult` without changing extraction entries, source regions, highlight boxes, or export data.
+- Reconciled with existing renderer style work by keeping both `role` and `likelyRole` on `TextStyleCluster`; Agent C can use `role` for UI copy while Agent A/B logic can continue using `likelyRole`.
+- Added focused coverage in `src/style/fonts.test.ts`, `src/style/detect.test.ts`, and `src/extraction/pipeline.test.ts` for font normalization, missing fonts, size bucketing, role inference, image-only partial profiles, compact page summaries, and extraction-time style profile attachment.
+- Validation: focused style/pipeline tests passed 10/10; `npm run typecheck` passed; Prettier applied to touched Agent A files.
+
+### Agent B — Divider, Colour, and Visual Rule Detection
+
+Owner: page visual styling beyond fonts: colours, dividers, table rules, underlines, logo/image markers, and optional pixel-assisted detection. **Estimate: 7 SP**
+
+Likely files:
+
+- `src/style/dividers.ts`
+- `src/style/colors.ts`
+- `src/style/operatorList.ts`
+- `src/extraction/pdfjsAdapter.ts`
+- `src/style/dividers.test.ts`
+- `package.json` / `package-lock.json` if adding `culori`
+
+Tasks:
+
+1. Add colour normalization: RGB to hex, simple nearest colour name, and similar-colour clustering.
+2. Inspect PDF.js operator lists for stroked horizontal/vertical lines, rectangle borders, fill/stroke colours, and line width/thickness.
+3. Build divider/rule clusters with orientation, thickness, average length, colour, page position, occurrence count, and likely role.
+4. Infer underlines by matching thin horizontal rules below nearby text; mark them as inferred, not exact text metadata.
+5. Detect repeated image/logo-like regions in headers/footers without storing image bytes.
+6. Keep OpenCV usage optional and isolated for scanned/image follow-up; no heavy pixel pass on every digital PDF by default.
+
+Acceptance criteria:
+
+- PDFs with visible table rules produce horizontal/vertical divider clusters.
+- Rule thickness, length, orientation, and colour are captured when available.
+- Repeated dividers are grouped deterministically.
+- Missing operator-list data produces warnings, not failures.
+- Colour names are approximate but stable.
+
+Definition of done:
+
+- Style profiles include `dividerStyles` and `colourPalette`.
+- At least one fixture detects table rules and one fixture reports no rules cleanly.
+- Any new dependency is wrapped behind local helpers and does not leak into renderer/UI code directly.
+
+### Agent B completion — 2026-09-01
+
+- Added compact `PageVisualRule` observations to extraction input pages and extended the PDF.js adapter to derive visual rules from operator lists: line width, stroke RGB, construct-path move/line/rectangle operations, and stroke/fill-stroke operators. Missing operator-list data leaves `visualRules` undefined so the style detector can honestly report partial visual detection.
+- Added local colour helpers in `src/style/colors.ts`: RGB/hex normalization, stable hue/chroma-based approximate names, and deterministic palette clustering. No renderer/UI imports and no heavy OpenCV path.
+- Added `src/style/dividers.ts` to cluster horizontal/vertical visual rules into `DividerStyleCluster` values with orientation, thickness, average length, colour, page coverage, occurrence count, and likely role (`table-rule`, `section-divider`, `margin-rule`, or `unknown`).
+- Wired `detectDocumentStyleProfile()` to include `dividerStyles` and `colourPalette`, plus a `missing-operator-list` warning when text styles exist but PDF operator-list data is unavailable.
+- Validation: `npm run typecheck` passed through `npm run build`; focused tests passed 18/18 across `src/style/colors.test.ts`, `src/style/dividers.test.ts`, `src/style/fonts.test.ts`, `src/style/detect.test.ts`, and `src/extraction/pdfjsAdapter.test.ts`; Prettier check passed on Agent B touched files; production build passed with only the existing `PdfViewer.tsx` chunk warning.
+
+Agent B ownership released. Agent C can now read `DocumentStyleProfile.dividerStyles` and `colourPalette` for toolbar/profile-panel/export-template UI without changing the detection contract.
+
+### Agent C — Toolbar, Persistence, Style Panel, and Export Integration
+
+Owner: user workflow, manual detection command, extraction-time wiring, persistence, read-only display, and explicit export-template application. **Estimate: 6 SP**
+
+Likely files:
+
+- `src/renderer/src/App.tsx`
+- `src/renderer/src/components/EntryActionsStrip.tsx`
+- `src/renderer/src/components/StyleProfilePanel.tsx`
+- `src/renderer/src/components/StyleProfilePanel.test.tsx`
+- `src/shared/contracts.ts`
+- `src/main/projectStore.ts`
+- `src/renderer/src/components/KeptExportTemplateEditor.tsx`
+
+Tasks:
+
+1. Add a toolbar command named `Detect style` that runs against the current document/project.
+2. Run style detection during extraction after PDF parsing, without blocking successful extraction if style detection fails.
+3. Persist compact style profiles with project/document analytics and restore them on reopen.
+4. Add a read-only Style Profile panel showing dominant body/header styles, colour palette, divider summary, confidence, and warnings.
+5. Add explicit export-template actions: apply detected body style, header style, and divider style.
+6. Keep source data truthful: no entry mutation, no highlight-box edits, and no automatic export template overwrite without user action.
+
+Acceptance criteria:
+
+- User can run style detection manually from the toolbar.
+- Extraction can attach style profiles automatically.
+- Style summary appears without blocking review, export, or analysis.
+- Detection failure creates a warning/status, not a broken workflow.
+- Applying detected style to export templates is explicit and reversible.
+- Keyboard and screen-reader labels exist for the toolbar action and panel.
+
+Definition of done:
+
+- Manual and automatic detection paths both work.
+- Style data persists across project reopen.
+- UI tests cover no profile, partial profile, full profile, and apply-style action.
+
+### Agent C completion — Document Style Detector (2026-09-01)
+
+- Implemented manual style detection from the workspace toolbar: `Detect style` opens the Style context and runs against the active source PDF without changing entries, source regions, or highlight boxes.
+- Added `StyleProfilePanel` as a read-only style summary surface with no-profile, full-profile, partial-profile, warning/status, and explicit apply-action states.
+- Wired automatic style-profile attachment after extraction. Style detection failures are captured as status warnings and do not fail extraction.
+- Persisted document style profiles on `ProjectDocument.styleProfile`; project-store validation now accepts compact profiles and a focused persistence regression round-trips them across save/reopen.
+- Added explicit export-template application actions for detected body style, header style, and divider style. These update the kept-text export template only after the user clicks an apply action.
+- Added `src/shared/documentStyle.ts` helper conversions from the existing shared style contract into kept-text export text/divider styles. This preserves Agent A's richer `DocumentStyleProfile` contract in `src/shared/contracts.ts`.
+- Focused validation passed: 23/23 tests across style detection, Style panel, toolbar/workspace integration, and project-store persistence. Full `npm run typecheck` passed after formatting Agent C-touched files.
+- MVP boundary: divider/operator-list detection remains Agent B-owned; the Agent C panel and apply-divider action are wired and remain disabled until divider clusters exist.
+
+### Shared Work Order
+
+1. Agent A lands the style contract and digital PDF text-style detector.
+2. Agent B adds colour/divider/operator-list detection against Agent A's contract.
+3. Agent C wires toolbar, persistence, panel, and export-template application.
+4. Joint validation runs extraction/style detection on representative business, school, hospital, book/text, calendar, and journal-like PDFs.
+
+### Sprint Acceptance
+
+- Born-digital stylised PDFs produce compact style profiles with text style clusters.
+- Header/body/table/small-print patterns are identified where embedded data exists.
+- Divider/rule clusters capture line thickness, colour, length, orientation, and likely role.
+- Scanned/image-only PDFs return partial profiles with honest confidence/warnings.
+- Manual toolbar detection works after extraction.
+- Extraction-time detection works without breaking extraction.
+- Style profile persists and reopens.
+- Export templates can explicitly use detected styles.
+- Original entries, source regions, highlight boxes, and source-layout PDFs are not mutated.
+
+### Validation Commands
+
+```powershell
+npm run typecheck
+npx tsx --import ./test-setup.cjs --test --test-reporter=spec src/style/*.test.ts src/renderer/src/components/StyleProfilePanel.test.tsx
+npm run build
+```
+
+## 2026-08-30 2-Agent Sprint Plan: Calculated Running Balance Export
+
+**Goal:** Add a safe export-only calculated running balance for kept entries, with the ability to add a new calculated balance column or replace the existing balance output during template export.
+
+**Scope:** Kept text/template PDF export only. Do not mutate source entries. Do not alter highlight boxes. Do not mask source-layout PDFs in this sprint.
+
+**Duration:** 2-3 focused days · **Total estimate:** 13 SP · **Release risk:** Low/medium
+
+**Excluded from this sprint:** source-layout masking, highlight-box editing, scanned/image redaction, mutation of original extracted entries.
+
+### Calculation rules (shared contract)
+
+For kept entries only, in export order:
+
+```text
+runningBalance = previousBalance + moneyIn - moneyOut
+```
+
+Opening balance resolution order:
+
+1. Manual opening balance when supplied.
+2. Otherwise infer from the first detected balance: `openingBalance = firstExistingBalance - moneyIn + moneyOut`.
+3. Otherwise `0`.
+
+Missing amounts are treated as `0`. Rows that cannot be financially mapped still export their text and carry the previous balance forward.
+
+### Agent A — Running balance engine and export contract
+
+Owner: calculation model, shared types, render-plan data, export semantics. **Estimate: 7 SP**
+
+Likely files:
+
+- `src/shared/keptExportTemplate.ts`
+- `src/export/keptExportTemplatePdf.ts`
+- `src/export/keptExportLayout.ts`
+- `src/export/keptExportLayout.test.ts`
+- `src/export/keptExportTemplatePdf.test.ts`
+
+Proposed contract:
+
+```ts
+type KeptExportSourceField =
+  | 'text' | 'payee' | 'date' | 'money-out' | 'money-in'
+  | 'balance' | 'calculated-balance' | 'category' | 'reference'
+
+interface KeptExportRunningBalance {
+  enabled: boolean
+  openingBalance?: number
+  fallback: 'first-existing-balance' | 'zero'
+  balanceFieldMode: 'keep-original' | 'replace-original' | 'add-calculated'
+  decimalPlaces: number
+}
+```
+
+Default: `enabled: false`, `fallback: 'first-existing-balance'`, `balanceFieldMode: 'add-calculated'`, `decimalPlaces: 2`.
+
+**A1 — Extend shared template contract (1 SP)**
+
+- Add `calculated-balance` to `KeptExportSourceField`; add optional `runningBalance` to `KeptExportTemplate`.
+- Acceptance: templates with and without `runningBalance` typecheck; existing templates remain valid; existing export tests still pass.
+
+**A2 — Build pure running balance helper (2 SP)**
+
+- Add `buildRunningBalanceValues(rows, options)` returning `entryId -> calculatedBalance`, the opening balance used, and fallback warnings.
+- Acceptance: manual opening balance honoured; first-existing-balance fallback infers the true opening balance; zero fallback works; rows without money values carry forward; no mutation of rows or project entries.
+
+**A3 — Integrate into `sourceRows()` (2 SP)**
+
+- Populate `values['calculated-balance']`; in `replace-original` mode also set `values.balance` from the calculated value.
+- Acceptance: original `balance` untouched in keep/add modes; replaced only in replace mode; non-financial kept rows still export text and carry the balance forward; maybe/excluded rows ignored.
+
+**A4 — PDF export coverage (1 SP)**
+
+- Acceptance: template export renders the calculated balance column; replace mode substitutes the original balance column; text-only rows still render; existing divider tests still pass.
+
+**A5 — Warnings and edge cases (1 SP)**
+
+- Non-fatal warnings when the fallback balance is unavailable, when no money columns are mappable, and when opening balance was inferred.
+- Acceptance: export never fails because inference was impossible; no crash with zero kept entries.
+
+### Agent B — Template editor UI and user workflow
+
+Owner: export popup controls, user-facing configuration, template draft persistence. **Estimate: 6 SP**
+
+Likely files:
+
+- `src/renderer/src/components/keptExportTemplateDraft.ts`
+- `src/renderer/src/components/KeptExportTemplateEditor.tsx`
+- `src/renderer/src/components/KeptExportTemplateEditor.css`
+- `src/renderer/src/components/KeptExportTemplateEditor.test.tsx`
+- `src/renderer/src/components/ExportPanel.tsx` if draft adaptation needs wiring
+
+Proposed popup section:
+
+```text
+Calculated balance
+
+[ ] Add calculated running balance
+
+Opening balance
+[__________]
+Leave blank to use first detected balance, otherwise 0.
+
+Fallback
+[ First detected balance ▼ ]
+
+Original balance output
+( ) Keep original balance
+( ) Replace Balance columns with calculated balance
+( ) Add calculated balance as separate field
+```
+
+**B1 — Extend draft types and defaults (1 SP)**
+
+- Mirror Agent A's contract in the draft model; preserve values through cloning and `toKeptExportTemplate()`.
+- Acceptance: existing drafts clone without loss; drafts from older templates get safe defaults; converted templates include running balance settings.
+
+**B2 — Add UI controls (2 SP)**
+
+- Enable toggle, opening balance input, fallback dropdown, original-balance mode selector, decimal places.
+- Acceptance: controls render; all fields disabled while the feature is off except the toggle; draft state updates; Apply, Preview, and Export receive the config.
+
+**B3 — Add calculated balance to the source-field dropdown (1 SP)**
+
+- Acceptance: `Calculated balance` is selectable as a column source; existing sources still work; no invalid source-field warnings.
+
+**B4 — Validation and guidance (1 SP)**
+
+- Opening balance must be blank or finite; decimal places 0-6; replace mode works without an explicit calculated-balance column.
+- Acceptance: invalid opening balance or decimal places blocks Apply/Preview/Export; blank opening balance is valid; inline text explains fallback behaviour.
+
+**B5 — Focused UI tests (1 SP)**
+
+- Acceptance: editor renders the new controls; `Calculated balance` appears in source options; invalid opening balance disables Apply/Export; existing divider and template editor tests still pass.
+
+### Integration and work order
+
+Agent A must land the shared contract before Agent B finalises the UI.
+
+1. Agent A: shared type and pure calculation helper.
+2. Agent A: integrate into export rows and tests.
+3. Agent B: draft model and UI controls.
+4. Agent B: UI tests.
+5. Joint: focused export + editor + build verification.
+
+### Combined acceptance criteria
+
+- Calculated running balance can be enabled from the kept export config popup.
+- Opening balance may be left blank.
+- Blank opening balance uses the first detected balance when present, otherwise zero.
+- `Calculated balance` is selectable as a column source.
+- Original balance output can be replaced by the calculated balance.
+- Apply, Preview, and Export all use the same settings.
+- Original entries are not mutated and highlight boxes are unchanged.
+- Existing PDF export and divider features still pass.
+
+### Validation commands
+
+```powershell
+npm run typecheck
+npx tsx --import ./test-setup.cjs --test --test-reporter=spec src/export/keptExportLayout.test.ts src/export/keptExportTemplatePdf.test.ts src/renderer/src/components/KeptExportTemplateEditor.test.tsx
+npm run build
+```
+
+### Risk register
+
+- **Low:** new calculated field in template export; manual opening balance; add-as-separate-column behaviour.
+- **Medium:** replace-original mode if users expect source-layout replacement; inferring opening balance from the first detected balance; row ordering when source order and date order differ; rounding and currency formatting.
+- **High (excluded):** editing highlight boxes to remove the old balance; masking source-layout PDFs; mutating `ProjectEntry` values; redacting scanned/image PDFs.
+
+**Decision:** build export-template only. Use `Replace Balance columns with calculated balance` as the safe overwrite mechanism so reviewed source data stays truthful and reversible.
+
 
 ### 3-Agent Sprint Completion — Event Handler & Interaction Fixes (2026-08-26)
 

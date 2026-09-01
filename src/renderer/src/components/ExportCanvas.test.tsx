@@ -129,3 +129,50 @@ test('exposes canvas drop and editable background affordances', () => {
   assert.match(markup, /aria-label="Move canvas background"/)
   assert.match(markup, /aria-label="Resize canvas background"/)
 })
+
+test('renders image dividers in the canvas preview', () => {
+  const markup = renderToStaticMarkup(
+    <ExportCanvas
+      layout={{
+        ...layout,
+        version: 2,
+        placements: [],
+        imagePlacementOptions: {
+          sourceMode: 'uploaded-png',
+          startX: 48,
+          startY: 72,
+          fillBetweenY: false,
+          entriesPerPage: 4,
+          gap: 12,
+          preserveAspectRatio: true,
+          uniformSlots: false,
+          divider: {
+            enabled: true,
+            width: 260,
+            thickness: 2,
+            color: '#336699',
+            opacity: 0.5,
+            startX: 40,
+            endX: 300
+          }
+        },
+        images: [
+          {
+            id: 'image-1',
+            source: { kind: 'uploaded-png', ref: 'image-1' },
+            pageNumber: 1,
+            x: 48,
+            y: 72,
+            width: 200,
+            height: 100,
+            fit: 'contain'
+          }
+        ]
+      }}
+    />
+  )
+
+  assert.match(markup, /export-canvas-image-divider/)
+  assert.match(markup, /border-top:2px solid #336699/)
+  assert.match(markup, /opacity:0.5/)
+})

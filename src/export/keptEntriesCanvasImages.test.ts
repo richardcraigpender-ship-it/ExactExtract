@@ -4,11 +4,30 @@ import zlib from 'node:zlib'
 import { PDFDocument } from 'pdf-lib'
 
 import { PROJECT_SCHEMA_VERSION, type ProjectEntry, type ProjectState } from '../shared/contracts'
-import type { KeptEntriesCanvasLayout, KeptImagePlacement } from '../shared/keptEntriesLayout'
+import type {
+  KeptEntriesCanvasLayout,
+  KeptImagePlacement,
+  KeptImagePlacementOptions
+} from '../shared/keptEntriesLayout'
 import {
   exportProjectKeptEntriesCanvasPdf,
   getKeptEntriesCanvasWarnings
 } from './keptEntriesCanvas'
+
+function decodeContent(pdfBytes: Uint8Array): string {
+  const raw = Buffer.from(pdfBytes)
+  const streams = [...raw.toString('latin1').matchAll(/stream\r?\n([\s\S]*?)\r?\nendstream/g)]
+  return streams
+    .map((match) => {
+      const buffer = Buffer.from(match[1], 'latin1')
+      try {
+        return zlib.inflateSync(buffer).toString('latin1')
+      } catch {
+        return buffer.toString('latin1')
+      }
+    })
+    .join('\n')
+}
 
 function crc32(bytes: Uint8Array): number {
   let crc = 0xffffffff
@@ -127,6 +146,51 @@ function layout(images: KeptImagePlacement[]): KeptEntriesCanvasLayout {
     pageCount: Math.max(1, ...images.map((image) => image.pageNumber))
   }
 }
+
+test('draws a configured divider after every placed image', async () => {
+  const images = [imagePlacement(), imagePlacement({ id: 'kept-image-2', y: 220 })]
+  const dividerOptions: KeptImagePlacementOptions = {
+    sourceMode: 'session-entry',
+    startX: 48,
+    startY: 48,
+    fillBetweenY: false,
+    entriesPerPage: 6,
+    gap: 12,
+    preserveAspectRatio: true,
+    uniformSlots: false,
+    divider: {
+      enabled: true,
+      startX: 40,
+      endX: 300,
+      width: 260,
+      thickness: 2,
+      color: '#336699',
+      opacity: 0.5
+    }
+  }
+
+  const withDivider = await exportProjectKeptEntriesCanvasPdf(
+    project([entry('first')]),
+    { ...layout(images), imagePlacementOptions: dividerOptions },
+    { imageDataUrls: new Map([['first', pngDataUrl(20, 10)]]) }
+  )
+  const withoutDivider = await exportProjectKeptEntriesCanvasPdf(
+    project([entry('first')]),
+    {
+      ...layout(images),
+      imagePlacementOptions: { ...dividerOptions, divider: undefined }
+    },
+    { imageDataUrls: new Map([['first', pngDataUrl(20, 10)]]) }
+  )
+
+  // Images sit at y 60 and 220 with height 100, so dividers land on the 792pt page at 632 and 472.
+  const enabled = decodeContent(withDivider)
+  assert.match(enabled, /40 632(\.\d+)? m/)
+  assert.match(enabled, /300 632(\.\d+)? l/)
+  assert.match(enabled, /40 472(\.\d+)? m/)
+
+  assert.doesNotMatch(decodeContent(withoutDivider), /40 632(\.\d+)? m/)
+})
 
 test('embeds image placements on every planned page of a reopenable PDF', async () => {
   const images = [

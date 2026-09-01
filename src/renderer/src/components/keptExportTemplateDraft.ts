@@ -5,13 +5,25 @@ import type {
   KeptEntriesPageSize
 } from '../../../shared/keptEntriesLayout'
 import { getCanvasPageDimensions } from '../lib/canvasScale'
-import type { KeptExportTemplate } from '../../../shared/keptExportTemplate'
+import type {
+  KeptExportDivider,
+  KeptExportRunningBalance,
+  KeptExportTemplate
+} from '../../../shared/keptExportTemplate'
 
 export type KeptExportLayoutMode = 'column-fill' | 'table-row'
 export type KeptExportTemplateTarget = 'page-one' | 'later-pages'
 export type KeptExportOverflowBehavior = 'wrap' | 'clip' | 'next-page'
 export type KeptExportSourceField =
-  'text' | 'payee' | 'date' | 'money-out' | 'money-in' | 'balance' | 'category' | 'reference'
+  | 'text'
+  | 'payee'
+  | 'date'
+  | 'money-out'
+  | 'money-in'
+  | 'balance'
+  | 'calculated-balance'
+  | 'category'
+  | 'reference'
 
 export type KeptExportSummaryField =
   | 'money-in-total'
@@ -52,8 +64,10 @@ export interface KeptExportPageTemplateDraft {
   fillBetweenY?: boolean
   startY?: number
   endY?: number
+  showReferenceUnderMainText?: boolean
   defaultTextStyle: KeptExportTextStyle
   columns: KeptExportColumnDraft[]
+  divider?: KeptExportDivider
   background?: KeptEntriesBackground
 }
 
@@ -62,6 +76,7 @@ export interface KeptExportTemplateDraft {
   pageOneTemplate: KeptExportPageTemplateDraft
   laterPagesTemplate: KeptExportPageTemplateDraft
   summaryFields: KeptExportSummaryField[]
+  runningBalance: KeptExportRunningBalance
 }
 
 export interface KeptExportTemplateValidationIssue {
@@ -100,8 +115,16 @@ export function cloneKeptExportPageTemplate(
       ...column,
       textStyle: column.textStyle ? cloneKeptExportTextStyle(column.textStyle) : undefined
     })),
+    divider: template.divider ? { ...template.divider } : undefined,
     background: template.background ? { ...template.background } : undefined
   }
+}
+
+function defaultReferenceUnderMainText(template: KeptExportPageTemplateDraft): boolean {
+  return (
+    template.showReferenceUnderMainText ||
+    !template.columns.some((column) => column.sourceField === 'reference')
+  )
 }
 
 export function cloneKeptExportTemplateDraft(
@@ -111,7 +134,17 @@ export function cloneKeptExportTemplateDraft(
     ...draft,
     pageOneTemplate: cloneKeptExportPageTemplate(draft.pageOneTemplate),
     laterPagesTemplate: cloneKeptExportPageTemplate(draft.laterPagesTemplate),
-    summaryFields: [...draft.summaryFields]
+    summaryFields: [...draft.summaryFields],
+    runningBalance: { ...draft.runningBalance }
+  }
+}
+
+export function createDefaultRunningBalance(): KeptExportRunningBalance {
+  return {
+    enabled: false,
+    fallback: 'first-existing-balance',
+    balanceFieldMode: 'add-calculated',
+    decimalPlaces: 2
   }
 }
 
@@ -124,7 +157,17 @@ export function createDefaultKeptExportPageTemplate(): KeptExportPageTemplateDra
     fillBetweenY: false,
     startY: 72,
     endY: 720,
+    showReferenceUnderMainText: true,
     defaultTextStyle: cloneKeptExportTextStyle(DEFAULT_TEXT_STYLE),
+    divider: {
+      enabled: false,
+      startX: 48,
+      endX: 564,
+      width: 516,
+      thickness: 1,
+      color: '#17231c',
+      opacity: 0.35
+    },
     columns: DEFAULT_COLUMN_SPECS.map((column) => ({
       ...column,
       y: 72,
@@ -141,7 +184,29 @@ export function createDefaultKeptExportTemplateDraft(): KeptExportTemplateDraft 
     useSeparateLaterPages: false,
     pageOneTemplate,
     laterPagesTemplate: cloneKeptExportPageTemplate(pageOneTemplate),
-    summaryFields: []
+    summaryFields: [],
+    runningBalance: createDefaultRunningBalance()
+  }
+}
+
+export function createKeptExportTemplateDraft(
+  template?: KeptExportTemplate
+): KeptExportTemplateDraft {
+  if (!template) return createDefaultKeptExportTemplateDraft()
+  const pageOneTemplate = cloneKeptExportPageTemplate(template.pageOneTemplate)
+  const laterPagesTemplate = cloneKeptExportPageTemplate(template.laterPagesTemplate)
+  return {
+    useSeparateLaterPages: template.useSeparateLaterPages,
+    pageOneTemplate: {
+      ...pageOneTemplate,
+      showReferenceUnderMainText: defaultReferenceUnderMainText(pageOneTemplate)
+    },
+    laterPagesTemplate: {
+      ...laterPagesTemplate,
+      showReferenceUnderMainText: defaultReferenceUnderMainText(laterPagesTemplate)
+    },
+    summaryFields: [...(template.summaryFields ?? [])],
+    runningBalance: { ...createDefaultRunningBalance(), ...template.runningBalance }
   }
 }
 
@@ -247,6 +312,32 @@ export function validateKeptExportPageTemplate(
   if (template.columns.length === 0) {
     issues.push({ path: `${label}.columns`, message: `${label} needs at least one column.` })
   }
+  if (template.divider?.enabled) {
+    const divider = template.divider
+    if (
+      ![divider.width, divider.thickness, divider.opacity, divider.startX, divider.endX].every(
+        Number.isFinite
+      )
+    ) {
+      issues.push({
+        path: `${label}.divider`,
+        message: `${label} divider contains an invalid number.`
+      })
+    } else if (
+      divider.width <= 0 ||
+      divider.thickness <= 0 ||
+      divider.opacity < 0 ||
+      divider.opacity > 1 ||
+      divider.startX < 0 ||
+      divider.endX <= divider.startX ||
+      divider.endX > dimensions.width
+    ) {
+      issues.push({
+        path: `${label}.divider`,
+        message: `${label} divider must have a positive width and thickness, stay inside the page, and use opacity from 0 to 1.`
+      })
+    }
+  }
   const ids = new Set<string>()
   template.columns.forEach((column, index) => {
     const columnLabel = `${label} column ${index + 1}`
@@ -302,6 +393,33 @@ export function validateKeptExportPageTemplate(
   return issues
 }
 
+export function validateKeptExportRunningBalance(
+  runningBalance: KeptExportRunningBalance
+): KeptExportTemplateValidationIssue[] {
+  if (!runningBalance.enabled) return []
+  const issues: KeptExportTemplateValidationIssue[] = []
+  if (
+    runningBalance.openingBalance !== undefined &&
+    !Number.isFinite(runningBalance.openingBalance)
+  ) {
+    issues.push({
+      path: 'runningBalance.openingBalance',
+      message: 'Opening balance must be a number, or left blank to use the fallback.'
+    })
+  }
+  if (
+    !Number.isInteger(runningBalance.decimalPlaces) ||
+    runningBalance.decimalPlaces < 0 ||
+    runningBalance.decimalPlaces > 6
+  ) {
+    issues.push({
+      path: 'runningBalance.decimalPlaces',
+      message: 'Calculated balance decimal places must be a whole number from 0 to 6.'
+    })
+  }
+  return issues
+}
+
 export function validateKeptExportTemplateDraft(
   draft: KeptExportTemplateDraft
 ): KeptExportTemplateValidationIssue[] {
@@ -309,17 +427,20 @@ export function validateKeptExportTemplateDraft(
     ...validateKeptExportPageTemplate(draft.pageOneTemplate, 'Page 1'),
     ...(draft.useSeparateLaterPages
       ? validateKeptExportPageTemplate(draft.laterPagesTemplate, 'Later pages')
-      : [])
+      : []),
+    ...validateKeptExportRunningBalance(draft.runningBalance)
   ]
 }
 
-export function toKeptExportTemplate(
-  draft: KeptExportTemplateDraft
-): KeptExportTemplate & { summaryFields: KeptExportSummaryField[] } {
+export function toKeptExportTemplate(draft: KeptExportTemplateDraft): KeptExportTemplate & {
+  summaryFields: KeptExportSummaryField[]
+  runningBalance: KeptExportRunningBalance
+} {
   return {
     useSeparateLaterPages: draft.useSeparateLaterPages,
     pageOneTemplate: cloneKeptExportPageTemplate(draft.pageOneTemplate),
     laterPagesTemplate: cloneKeptExportPageTemplate(draft.laterPagesTemplate),
-    summaryFields: [...draft.summaryFields]
+    summaryFields: [...draft.summaryFields],
+    runningBalance: { ...draft.runningBalance }
   }
 }

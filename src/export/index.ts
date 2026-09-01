@@ -26,6 +26,8 @@ export type {
   KeptImageSourceDescriptor
 } from './keptImageLayout'
 export { exportProjectKeptEntriesTemplatePdf } from './keptExportTemplatePdf'
+export { buildRunningBalanceValues } from './runningBalance'
+export type { RunningBalanceInputRow, RunningBalanceResult } from './runningBalance'
 export {
   getKeptEntriesCanvasWarnings,
   type KeptEntriesCanvasExportOptions,

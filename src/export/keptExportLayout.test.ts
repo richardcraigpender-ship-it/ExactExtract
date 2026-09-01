@@ -115,3 +115,60 @@ test('fills between Start Y and End Y before continuing to the next page', () =>
     ]
   )
 })
+
+test('adds a configured divider after every rendered entry', () => {
+  const current = template()
+  current.useSeparateLaterPages = false
+  current.pageOneTemplate.divider = {
+    enabled: true,
+    startX: 40,
+    endX: 300,
+    width: 260,
+    thickness: 1.5,
+    color: '#336699',
+    opacity: 0.4
+  }
+
+  const plan = buildKeptExportRenderPlan(rows.slice(0, 2), current)
+
+  assert.deepEqual(
+    plan.pages[0]?.dividers.map((divider) => [
+      divider.entryId,
+      divider.startX,
+      divider.endX,
+      divider.thickness,
+      divider.color,
+      divider.opacity
+    ]),
+    [
+      ['one', 40, 300, 1.5, '#336699', 0.4],
+      ['two', 40, 300, 1.5, '#336699', 0.4]
+    ]
+  )
+})
+
+test('renders references under the main text column when configured', () => {
+  const current = template()
+  current.useSeparateLaterPages = false
+  current.pageOneTemplate.showReferenceUnderMainText = true
+  const plan = buildKeptExportRenderPlan(
+    [
+      { entryId: 'one', values: { payee: 'One', reference: 'CARD-100' } },
+      { entryId: 'two', values: { payee: 'Two' } }
+    ],
+    current
+  )
+
+  assert.deepEqual(
+    plan.pages[0]?.placements.map((placement) => [
+      placement.entryId,
+      placement.columnId,
+      placement.text
+    ]),
+    [
+      ['one', 'payee', 'One'],
+      ['two', 'payee', 'Two'],
+      ['one', 'payee:reference', 'Ref: CARD-100']
+    ]
+  )
+})

@@ -1251,6 +1251,15 @@ button:disabled {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.currency-tool-symbol {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 18px;
+  font-size: 12px;
+  font-weight: 900;
+  line-height: 1;
+}
 .workspace-tool-strip button[aria-selected='true'] .right-workspace-tool-label {
   font-weight: 800;
   text-decoration: underline;
@@ -2702,6 +2711,157 @@ button:disabled {
   background: var(--studio-muted);
   font-size: 13px;
 }
+.currency-popup {
+  display: grid;
+  gap: 8px;
+  width: min(320px, calc(100vw - 32px));
+  padding: 8px;
+}
+.currency-popup > strong {
+  padding: 0 2px;
+  font-size: 12px;
+}
+.currency-popup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+}
+.currency-popup button {
+  display: grid;
+  grid-template-columns: 36px 42px 1fr;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding: 7px 8px;
+  border: 1px solid var(--studio-border);
+  border-radius: 7px;
+  color: var(--studio-text);
+  background: var(--studio-raised);
+  text-align: left;
+  cursor: pointer;
+}
+.currency-popup button:hover,
+.currency-popup button:focus-visible,
+.currency-popup button[aria-checked='true'] {
+  border-color: var(--studio-accent);
+  background: var(--studio-accent-soft);
+}
+.currency-popup button > span:first-child {
+  font-size: 16px;
+  font-weight: 900;
+}
+.currency-popup button > span:nth-child(2) {
+  font-size: 12px;
+  font-weight: 900;
+}
+.currency-popup button small {
+  overflow: hidden;
+  color: var(--studio-text-muted);
+  font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.currency-select-field {
+  display: inline-grid;
+  grid-template-columns: auto minmax(180px, 1fr);
+  align-items: center;
+  gap: 8px;
+  color: var(--studio-text-muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+.currency-select-field select {
+  max-width: 260px;
+  padding: 8px 10px;
+  border: 1px solid var(--studio-border);
+  border-radius: 7px;
+  color: var(--studio-text);
+  background: var(--studio-surface);
+  font: inherit;
+}
+.flow-currency-select {
+  margin-top: 10px;
+}
+.style-profile-panel {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  color: var(--studio-text);
+}
+.style-profile-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.style-profile-panel h3 {
+  margin: 2px 0 0;
+  font-size: 15px;
+}
+.style-profile-status,
+.style-profile-empty,
+.style-profile-warnings {
+  margin: 0;
+  color: var(--studio-text-muted);
+  font-size: 12px;
+}
+.style-profile-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+.style-profile-summary div,
+.style-cluster-list li {
+  padding: 9px;
+  border: 1px solid var(--studio-border);
+  border-radius: 7px;
+  background: var(--studio-raised);
+}
+.style-profile-summary dt,
+.style-cluster-list small {
+  color: var(--studio-text-muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+.style-profile-summary dd {
+  margin: 3px 0 0;
+  font-weight: 800;
+}
+.style-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.style-cluster-list,
+.style-profile-warnings {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  list-style: none;
+}
+.style-cluster-list li {
+  display: grid;
+  gap: 4px;
+}
+.style-colour-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 11px;
+}
+.style-colour-list span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.style-colour-list i {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--studio-border-strong);
+  border-radius: 50%;
+}
 .blocking-overlay {
   position: fixed;
   z-index: 90;
@@ -3104,6 +3264,12 @@ button:disabled {
   border-radius: 5px;
   color: var(--studio-text);
   background: var(--studio-surface);
+}
+.export-inline-status {
+  grid-column: 1 / -1;
+  color: var(--studio-text-muted);
+  font-size: 11px;
+  font-weight: 700;
 }
 .export-pdf-preview {
   width: min(1000px, 82vw);

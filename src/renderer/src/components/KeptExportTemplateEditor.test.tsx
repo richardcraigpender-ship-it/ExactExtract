@@ -21,6 +21,17 @@ test('renders the complete default page-template editor without applying changes
   assert.match(markup, /Column fill/)
   assert.match(markup, /Maximum entries per page/)
   assert.match(markup, /Fill between Start Y and End Y/)
+  assert.match(markup, /Show references under main text/)
+  assert.match(markup, /Entry divider/)
+  assert.match(markup, /Show dividers/)
+  assert.match(markup, /Calculated balance/)
+  assert.match(markup, /Add calculated running balance/)
+  assert.match(markup, /Opening balance/)
+  assert.match(markup, /Decimal places/)
+  assert.match(markup, /Width \(pt\)/)
+  assert.match(markup, /Thickness \(pt\)/)
+  assert.match(markup, /Start X \(pt\)/)
+  assert.match(markup, /End X \(pt\)/)
   assert.match(markup, /Start Y \(pt\)/)
   assert.match(markup, /End Y \(pt\)/)
   assert.match(markup, /value="20"/)
@@ -66,5 +77,61 @@ test('disables apply and export and reports invalid PDF-point columns', () => {
   assert.match(markup, /role="alert"/)
   assert.match(markup, /must fit inside the page/)
   assert.match(markup, /disabled=""[^>]*>.*Apply/)
+  assert.match(markup, /disabled=""[^>]*>.*Export PDF/)
+})
+
+test('offers calculated balance as a column source and keeps controls off by default', () => {
+  const markup = renderToStaticMarkup(
+    <KeptExportTemplateEditor onApply={() => {}} onExport={() => {}} />
+  )
+
+  assert.match(markup, /<option value="reference">Reference<\/option>/)
+  assert.match(markup, /<option value="calculated-balance">Calculated balance<\/option>/)
+  assert.match(markup, /Keep original balance/)
+  assert.match(markup, /Replace Balance columns/)
+  assert.match(markup, /Add calculated balance field/)
+  assert.match(markup, /Use first detected balance/)
+  assert.match(markup, /Start from zero/)
+})
+
+test('blocks apply and export when the running balance inputs are invalid', () => {
+  const draft = createDefaultKeptExportTemplateDraft()
+  draft.runningBalance.enabled = true
+  draft.runningBalance.decimalPlaces = 9
+
+  const markup = renderToStaticMarkup(
+    <KeptExportTemplateEditor initialDraft={draft} onApply={() => {}} onExport={() => {}} />
+  )
+
+  assert.match(markup, /decimal places must be a whole number from 0 to 6/)
+  assert.match(markup, /disabled=""[^>]*>.*Apply/)
+  assert.match(markup, /disabled=""[^>]*>.*Export PDF/)
+})
+
+test('accepts a blank opening balance as valid', () => {
+  const draft = createDefaultKeptExportTemplateDraft()
+  draft.runningBalance.enabled = true
+  draft.runningBalance.openingBalance = undefined
+
+  const markup = renderToStaticMarkup(
+    <KeptExportTemplateEditor initialDraft={draft} onApply={() => {}} onExport={() => {}} />
+  )
+
+  assert.doesNotMatch(markup, /Opening balance must be a number/)
+  assert.doesNotMatch(markup, /role="alert"/)
+})
+
+test('shows preview generation feedback while kept-text preview is running', () => {
+  const markup = renderToStaticMarkup(
+    <KeptExportTemplateEditor
+      onApply={() => {}}
+      onExport={() => {}}
+      onPreview={() => {}}
+      isPreviewing
+    />
+  )
+
+  assert.match(markup, /Generating preview\.\.\./)
+  assert.match(markup, /disabled=""[^>]*>Generating preview/)
   assert.match(markup, /disabled=""[^>]*>.*Export PDF/)
 })

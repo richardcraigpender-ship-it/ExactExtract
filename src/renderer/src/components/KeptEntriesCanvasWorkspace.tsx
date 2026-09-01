@@ -15,6 +15,7 @@ import { describeImageResolutionFailure } from '../lib/imageResolutionMessage'
 import { ExportCanvas } from './ExportCanvas'
 import { ExportEntriesPanel } from './ExportEntriesPanel'
 import { KeptEntriesExportPreview } from './KeptEntriesExportPreview'
+import { createKeptEntryPlacement } from './keptEntriesLayout'
 import { PlacementFontToolbar } from './PlacementFontToolbar'
 
 interface KeptEntriesCanvasWorkspaceProps {
@@ -95,6 +96,26 @@ export function KeptEntriesCanvasWorkspace({
     onLayoutChange({ ...layout, background })
   }
 
+  const placeTextEntry = (entry: ProjectEntry): void => {
+    const existing = layout.placements.find((placement) => placement.entryId === entry.id)
+    setSelectedImagePlacementId(null)
+    setPreviewMode('text')
+    if (existing) {
+      setSelectedPlacementId(existing.id)
+      setPage(existing.pageNumber ?? 1)
+      return
+    }
+    const placementsOnPage = layout.placements.filter(
+      (placement) => (placement.pageNumber ?? 1) === currentPage
+    )
+    const placement = {
+      ...createKeptEntryPlacement(entry, placementsOnPage.length),
+      pageNumber: currentPage
+    }
+    onLayoutChange({ ...layout, placements: [...layout.placements, placement] })
+    setSelectedPlacementId(placement.id)
+  }
+
   return (
     <KeptEntriesExportPreview
       isExporting={isExporting}
@@ -102,7 +123,12 @@ export function KeptEntriesCanvasWorkspace({
       onExport={onExport}
       onReset={onReset}
       entriesPanel={
-        <ExportEntriesPanel entries={entries} placements={layout.placements} allowCanvasDrag />
+        <ExportEntriesPanel
+          entries={entries}
+          placements={layout.placements}
+          allowCanvasDrag
+          onPlaceEntry={placeTextEntry}
+        />
       }
       canvas={
         <>

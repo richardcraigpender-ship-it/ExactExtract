@@ -72,6 +72,22 @@ function placementStyle(
   }
 }
 
+function imageDividerStyle(
+  placement: KeptImagePlacement,
+  divider: NonNullable<KeptEntriesCanvasLayout['imagePlacementOptions']>['divider'],
+  pageWidth: number,
+  pageHeight: number
+): React.CSSProperties | undefined {
+  if (!divider?.enabled) return undefined
+  return {
+    left: asPercent(divider.startX, pageWidth),
+    top: asPercent(placement.y + placement.height, pageHeight),
+    width: asPercent(Math.max(0, divider.endX - divider.startX), pageWidth),
+    borderTop: `${divider.thickness}px solid ${divider.color}`,
+    opacity: divider.opacity
+  }
+}
+
 export function ExportCanvas({
   layout,
   ariaLabel = 'Kept entries export page preview',
@@ -107,6 +123,7 @@ export function ExportCanvas({
   const visibleImages = (layout.images ?? []).filter(
     (placement) => placement.pageNumber === pageNumber
   )
+  const imageDivider = layout.imagePlacementOptions?.divider
 
   return (
     <div className="export-canvas-viewport">
@@ -192,131 +209,147 @@ export function ExportCanvas({
           </div>
         )}
         <div className="export-canvas-content">
-          {previewMode !== 'text' && visibleImages.map((placement) => {
-            const label = placement.entryId ?? placement.source.ref
-            const src = resolveImageSource?.(placement.source)
-            return (
+          {previewMode !== 'text' &&
+            visibleImages.map((placement) => {
+              const label = placement.entryId ?? placement.source.ref
+              const src = resolveImageSource?.(placement.source)
+              const dividerStyle = imageDividerStyle(
+                placement,
+                imageDivider,
+                dimensions.width,
+                dimensions.height
+              )
+              return (
+                <React.Fragment key={placement.id}>
+                  <div
+                    className={`export-canvas-image ${
+                      selectedImagePlacementId === placement.id ? 'is-selected' : ''
+                    }`}
+                    data-image-placement-id={placement.id}
+                    data-source-kind={placement.source.kind}
+                    data-fit={placement.fit}
+                    data-resolved={src ? 'true' : 'false'}
+                    role={imagesInteractive ? 'group' : undefined}
+                    aria-label={
+                      imagesInteractive
+                        ? `${selectedImagePlacementId === placement.id ? 'Selected. ' : ''}Move image: ${label}`
+                        : undefined
+                    }
+                    tabIndex={imagesInteractive ? 0 : undefined}
+                    style={{
+                      left: asPercent(placement.x, dimensions.width),
+                      top: asPercent(placement.y, dimensions.height),
+                      width: asPercent(placement.width, dimensions.width),
+                      height: asPercent(placement.height, dimensions.height)
+                    }}
+                    onClick={
+                      imagesInteractive ? () => onSelectImagePlacement?.(placement.id) : undefined
+                    }
+                    onKeyDown={
+                      imagesInteractive
+                        ? (event) => {
+                            if (event.key === 'Enter' || event.key === ' ') {
+                              event.preventDefault()
+                              onSelectImagePlacement?.(placement.id)
+                            }
+                          }
+                        : undefined
+                    }
+                    onPointerDown={
+                      imagesInteractive
+                        ? (event) => {
+                            onSelectImagePlacement?.(placement.id)
+                            imageDrag.beginDrag(event, placement, 'move')
+                          }
+                        : undefined
+                    }
+                    onPointerMove={imagesInteractive ? imageDrag.continueDrag : undefined}
+                    onPointerUp={imagesInteractive ? imageDrag.endDrag : undefined}
+                    onPointerCancel={imagesInteractive ? imageDrag.endDrag : undefined}
+                  >
+                    {src ? (
+                      <img src={src} alt="" data-fit={placement.fit} />
+                    ) : (
+                      <span className="export-canvas-image-placeholder">{`${label} (image not available)`}</span>
+                    )}
+                    {imagesInteractive && selectedImagePlacementId === placement.id && (
+                      <span
+                        className="export-canvas-resize-handle"
+                        role="button"
+                        aria-label={`Resize image: ${label}`}
+                        tabIndex={0}
+                        onPointerDown={(event) => imageDrag.beginDrag(event, placement, 'resize')}
+                        onPointerMove={imageDrag.continueDrag}
+                        onPointerUp={imageDrag.endDrag}
+                        onPointerCancel={imageDrag.endDrag}
+                      />
+                    )}
+                  </div>
+                  {dividerStyle && (
+                    <span
+                      className="export-canvas-image-divider"
+                      aria-hidden="true"
+                      style={dividerStyle}
+                    />
+                  )}
+                </React.Fragment>
+              )
+            })}
+          {previewMode !== 'images' &&
+            visiblePlacements.map((placement) => (
               <div
-                className={`export-canvas-image ${
-                  selectedImagePlacementId === placement.id ? 'is-selected' : ''
+                className={`export-canvas-placement ${
+                  selectedPlacementId === placement.id ? 'is-selected' : ''
                 }`}
-                data-image-placement-id={placement.id}
-                data-source-kind={placement.source.kind}
-                data-fit={placement.fit}
-                data-resolved={src ? 'true' : 'false'}
+                data-entry-id={placement.entryId}
+                data-placement-id={placement.id}
                 key={placement.id}
-                role={imagesInteractive ? 'group' : undefined}
+                role={interactive ? 'group' : undefined}
                 aria-label={
-                  imagesInteractive
-                    ? `${selectedImagePlacementId === placement.id ? 'Selected. ' : ''}Move image: ${label}`
+                  interactive
+                    ? `${selectedPlacementId === placement.id ? 'Selected. ' : ''}Move text box: ${placement.text}`
                     : undefined
                 }
-                tabIndex={imagesInteractive ? 0 : undefined}
-                style={{
-                  left: asPercent(placement.x, dimensions.width),
-                  top: asPercent(placement.y, dimensions.height),
-                  width: asPercent(placement.width, dimensions.width),
-                  height: asPercent(placement.height, dimensions.height)
-                }}
-                onClick={
-                  imagesInteractive ? () => onSelectImagePlacement?.(placement.id) : undefined
-                }
+                tabIndex={interactive ? 0 : undefined}
+                style={placementStyle(placement, dimensions.width, dimensions.height)}
+                onClick={interactive ? () => onSelectPlacement?.(placement.id) : undefined}
                 onKeyDown={
-                  imagesInteractive
+                  interactive
                     ? (event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault()
-                          onSelectImagePlacement?.(placement.id)
+                          onSelectPlacement?.(placement.id)
                         }
                       }
                     : undefined
                 }
                 onPointerDown={
-                  imagesInteractive
+                  interactive
                     ? (event) => {
-                        onSelectImagePlacement?.(placement.id)
-                        imageDrag.beginDrag(event, placement, 'move')
+                        onSelectPlacement?.(placement.id)
+                        drag.beginDrag(event, placement, 'move')
                       }
                     : undefined
                 }
-                onPointerMove={imagesInteractive ? imageDrag.continueDrag : undefined}
-                onPointerUp={imagesInteractive ? imageDrag.endDrag : undefined}
-                onPointerCancel={imagesInteractive ? imageDrag.endDrag : undefined}
+                onPointerMove={interactive ? drag.continueDrag : undefined}
+                onPointerUp={interactive ? drag.endDrag : undefined}
+                onPointerCancel={interactive ? drag.endDrag : undefined}
               >
-                {src ? (
-                  <img src={src} alt="" data-fit={placement.fit} />
-                ) : (
-                  <span className="export-canvas-image-placeholder">{`${label} (image not available)`}</span>
-                )}
-                {imagesInteractive && selectedImagePlacementId === placement.id && (
+                {placement.text}
+                {interactive && selectedPlacementId === placement.id && (
                   <span
                     className="export-canvas-resize-handle"
                     role="button"
-                    aria-label={`Resize image: ${label}`}
+                    aria-label={`Resize text box: ${placement.text}`}
                     tabIndex={0}
-                    onPointerDown={(event) => imageDrag.beginDrag(event, placement, 'resize')}
-                    onPointerMove={imageDrag.continueDrag}
-                    onPointerUp={imageDrag.endDrag}
-                    onPointerCancel={imageDrag.endDrag}
+                    onPointerDown={(event) => drag.beginDrag(event, placement, 'resize')}
+                    onPointerMove={drag.continueDrag}
+                    onPointerUp={drag.endDrag}
+                    onPointerCancel={drag.endDrag}
                   />
                 )}
               </div>
-            )
-          })}
-          {previewMode !== 'images' && visiblePlacements.map((placement) => (
-            <div
-              className={`export-canvas-placement ${
-                selectedPlacementId === placement.id ? 'is-selected' : ''
-              }`}
-              data-entry-id={placement.entryId}
-              data-placement-id={placement.id}
-              key={placement.id}
-              role={interactive ? 'group' : undefined}
-              aria-label={
-                interactive
-                  ? `${selectedPlacementId === placement.id ? 'Selected. ' : ''}Move text box: ${placement.text}`
-                  : undefined
-              }
-              tabIndex={interactive ? 0 : undefined}
-              style={placementStyle(placement, dimensions.width, dimensions.height)}
-              onClick={interactive ? () => onSelectPlacement?.(placement.id) : undefined}
-              onKeyDown={
-                interactive
-                  ? (event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        onSelectPlacement?.(placement.id)
-                      }
-                    }
-                  : undefined
-              }
-              onPointerDown={
-                interactive
-                  ? (event) => {
-                      onSelectPlacement?.(placement.id)
-                      drag.beginDrag(event, placement, 'move')
-                    }
-                  : undefined
-              }
-              onPointerMove={interactive ? drag.continueDrag : undefined}
-              onPointerUp={interactive ? drag.endDrag : undefined}
-              onPointerCancel={interactive ? drag.endDrag : undefined}
-            >
-              {placement.text}
-              {interactive && selectedPlacementId === placement.id && (
-                <span
-                  className="export-canvas-resize-handle"
-                  role="button"
-                  aria-label={`Resize text box: ${placement.text}`}
-                  tabIndex={0}
-                  onPointerDown={(event) => drag.beginDrag(event, placement, 'resize')}
-                  onPointerMove={drag.continueDrag}
-                  onPointerUp={drag.endDrag}
-                  onPointerCancel={drag.endDrag}
-                />
-              )}
-            </div>
-          ))}
+            ))}
         </div>
       </div>
     </div>

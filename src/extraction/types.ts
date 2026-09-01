@@ -1,5 +1,6 @@
 import type {
   BoundingBox,
+  DocumentStyleProfile,
   DocumentKind,
   DocumentPreflightResult,
   PageKind
@@ -17,6 +18,15 @@ export interface PdfTextItem {
   hasEOL?: boolean
 }
 
+export interface PageVisualRule {
+  orientation: 'horizontal' | 'vertical'
+  x: number
+  y: number
+  length: number
+  thickness: number
+  colour?: string
+}
+
 export interface TextLayerPageInput {
   documentId: string
   pageNumber: number
@@ -25,6 +35,7 @@ export interface TextLayerPageInput {
   rotation: PageRotation
   items: readonly PdfTextItem[]
   imageObjectCount?: number
+  visualRules?: readonly PageVisualRule[]
 }
 
 export interface ExtractedTextBlock {
@@ -113,6 +124,7 @@ export interface DocumentClassification {
 
 export interface ParserExtractionResult {
   documentId: string
+  styleProfile?: DocumentStyleProfile
   pages: ClassifiedPage[]
   blocks: ExtractedTextBlock[]
   lines: ExtractedLine[]

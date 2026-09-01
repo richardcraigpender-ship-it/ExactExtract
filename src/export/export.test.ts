@@ -47,10 +47,69 @@ function project(): ProjectState {
         name: 'source.pdf',
         size: 100,
         pageCount: 3,
+        removedPages: [3],
+        kind: 'financial',
+        styleProfile: {
+          id: 'style-profile-1',
+          documentId: 'document-1',
+          generatedAt: '2026-08-16T10:00:00.000Z',
+          detectorVersion: 1,
+          source: 'pdf-text',
+          confidence: 'high',
+          textStyles: [
+            {
+              id: 'body-style',
+              fontFamily: 'Helvetica',
+              fontSize: 11,
+              fontWeight: 'regular',
+              italic: false,
+              underline: false,
+              colour: { hex: '#17231c', name: 'Text' },
+              likelyRole: 'body',
+              role: 'body',
+              occurrenceCount: 4,
+              characterCount: 80,
+              pageNumbers: [1, 2],
+              sampleText: ['München']
+            }
+          ],
+          dividerStyles: [],
+          colourPalette: [{ hex: '#17231c', name: 'Text', occurrenceCount: 4, likelyRole: 'text' }],
+          pageSummaries: [],
+          warnings: []
+        },
         importedAt: '2026-08-16T09:00:00.000Z'
       }
     ],
-    pages: [],
+    pages: [
+      {
+        documentId: 'document-1',
+        pageNumber: 1,
+        width: 612,
+        height: 792,
+        rotation: 0,
+        kind: 'text',
+        confidence: 0.95
+      },
+      {
+        documentId: 'document-1',
+        pageNumber: 2,
+        width: 612,
+        height: 792,
+        rotation: 0,
+        kind: 'image',
+        confidence: 0.75
+      },
+      {
+        documentId: 'document-1',
+        pageNumber: 3,
+        width: 792,
+        height: 612,
+        rotation: 90,
+        kind: 'rotated',
+        confidence: 0.8
+      }
+    ],
     entries: [
       entry('maybe-1', 'maybe', 'Needs review', 2),
       entry('exclude-1', 'exclude', 'Private', 3),
@@ -58,11 +117,46 @@ function project(): ProjectState {
     ],
     preflight: [],
     extractionJobs: [],
+    preflight: [
+      {
+        documentId: 'document-1',
+        kind: 'financial',
+        confidence: 0.9,
+        completedAt: '2026-08-16T10:00:00.000Z',
+        pages: [
+          {
+            pageNumber: 1,
+            kind: 'text',
+            characterCount: 100,
+            confidence: 0.95,
+            ocrRecommended: false,
+            rotation: 0
+          },
+          {
+            pageNumber: 2,
+            kind: 'image',
+            characterCount: 0,
+            confidence: 0.75,
+            ocrRecommended: true,
+            rotation: 0
+          },
+          {
+            pageNumber: 3,
+            kind: 'rotated',
+            characterCount: 50,
+            confidence: 0.8,
+            ocrRecommended: true,
+            rotation: 90
+          }
+        ]
+      }
+    ],
     auditTrail: [],
     settings: {
       theme: 'system',
       extraction: { mode: 'balanced', ocrLanguages: ['eng'] },
-      splitPanePercent: 50
+      splitPanePercent: 50,
+      currencyCode: 'USD'
     }
   }
 }
@@ -80,6 +174,15 @@ test('builds immutable kept/maybe snapshots without leaking source paths', () =>
     ['maybe-1']
   )
   assert.equal(snapshot.sections.excluded, undefined)
+  assert.equal(snapshot.project.currencyCode, 'USD')
+  assert.equal(snapshot.documents[0]?.size, 100)
+  assert.equal(snapshot.documents[0]?.importedAt, '2026-08-16T09:00:00.000Z')
+  assert.deepEqual(snapshot.documents[0]?.removedPages, [3])
+  assert.equal(snapshot.documents[0]?.metadata?.textPageCount, 1)
+  assert.equal(snapshot.documents[0]?.metadata?.imagePageCount, 1)
+  assert.equal(snapshot.documents[0]?.metadata?.rotatedPageCount, 1)
+  assert.equal(snapshot.documents[0]?.metadata?.averageCharactersPerPage, 50)
+  assert.equal(snapshot.documents[0]?.metadata?.styleProfile?.textStyleCount, 1)
   assert.equal(snapshot.summary.excludedCount, 1)
   assert.equal(JSON.stringify(snapshot).includes('C:\\private'), false)
 

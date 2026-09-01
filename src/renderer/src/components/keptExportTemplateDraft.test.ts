@@ -5,6 +5,7 @@ import {
   applyTextStyle,
   createDefaultKeptExportTemplateDraft,
   createKeptExportColumn,
+  createKeptExportTemplateDraft,
   setSeparateLaterPages,
   updateDraftTemplate,
   validateKeptExportTemplateDraft
@@ -16,6 +17,7 @@ test('creates the financial table default with twenty entries per page', () => {
   assert.equal(draft.useSeparateLaterPages, false)
   assert.equal(draft.pageOneTemplate.layoutMode, 'table-row')
   assert.equal(draft.pageOneTemplate.entriesPerPage, 20)
+  assert.equal(draft.pageOneTemplate.showReferenceUnderMainText, true)
   assert.deepEqual(
     draft.pageOneTemplate.columns.map((column) => column.sourceField),
     ['payee', 'money-out', 'money-in', 'balance']
@@ -37,6 +39,22 @@ test('creates an independent later-pages template when separation is enabled', (
   assert.equal(changed.pageOneTemplate.entriesPerPage, 20)
   assert.equal(changed.laterPagesTemplate.entriesPerPage, 30)
   assert.equal(changed.pageOneTemplate.columns[0]?.name, 'Payee')
+})
+
+test('enables inline references for legacy templates without a reference column', () => {
+  const legacy = createDefaultKeptExportTemplateDraft()
+  legacy.pageOneTemplate.showReferenceUnderMainText = false
+  legacy.laterPagesTemplate.showReferenceUnderMainText = false
+
+  const draft = createKeptExportTemplateDraft({
+    useSeparateLaterPages: false,
+    pageOneTemplate: legacy.pageOneTemplate,
+    laterPagesTemplate: legacy.laterPagesTemplate,
+    summaryFields: []
+  })
+
+  assert.equal(draft.pageOneTemplate.showReferenceUnderMainText, true)
+  assert.equal(draft.laterPagesTemplate.showReferenceUnderMainText, true)
 })
 
 test('applies text style to every column or only the selected column', () => {

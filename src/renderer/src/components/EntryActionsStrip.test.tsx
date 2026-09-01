@@ -24,3 +24,12 @@ test('includes quick zoom actions in the right-side tool strip', () => {
   assert.match(markup, /aria-label="Zoom out"/)
   assert.match(markup, /aria-label="Zoom in"/)
 })
+
+test('includes a project currency command in the quick tool strip', () => {
+  const markup = renderToStaticMarkup(
+    <EntryActionsStrip mode="review" onModeChange={() => undefined} onCommand={() => undefined} />
+  )
+
+  assert.match(markup, /aria-label="Project currency"/)
+  assert.match(markup, /\$\/£/)
+})

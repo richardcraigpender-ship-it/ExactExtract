@@ -1,4 +1,5 @@
 import type {
+  KeptExportDividerPlacement,
   KeptExportColumn,
   KeptExportPage,
   KeptExportPageTemplate,
@@ -16,6 +17,18 @@ function valueFor(row: KeptExportSourceRow, field: KeptExportSourceField): strin
 
 function styleFor(template: KeptExportPageTemplate, column: KeptExportColumn): KeptExportTextStyle {
   return column.textStyle ?? template.defaultTextStyle
+}
+
+function referenceStyle(style: KeptExportTextStyle): KeptExportTextStyle {
+  return { ...style, fontSize: Math.max(6, style.fontSize - 2), fontWeight: 'normal' }
+}
+
+function referenceColumn(template: KeptExportPageTemplate): KeptExportColumn | undefined {
+  return (
+    template.columns.find((column) => column.sourceField === 'payee') ??
+    template.columns.find((column) => column.sourceField === 'text') ??
+    template.columns[0]
+  )
 }
 
 function pageTemplate(template: KeptExportTemplate, pageNumber: number): KeptExportPageTemplate {
@@ -60,6 +73,7 @@ export function buildKeptExportRenderPlan(
     const currentTemplate = pageTemplate(template, pageNumber)
     const pageRows = rows.slice(rowOffset, rowOffset + effectiveEntriesPerPage(currentTemplate))
     const placements: KeptExportPlacement[] = []
+    const dividers: KeptExportDividerPlacement[] = []
     const rowPlacements =
       currentTemplate.layoutMode === 'column-fill'
         ? currentTemplate.columns.flatMap((column) =>
@@ -102,7 +116,49 @@ export function buildKeptExportRenderPlan(
         style: styleFor(currentTemplate, column)
       })
     })
-    allPages.push({ pageNumber, template: currentTemplate, placements })
+    if (currentTemplate.showReferenceUnderMainText) {
+      const column = referenceColumn(currentTemplate)
+      if (column) {
+        for (const row of pageRows) {
+          const reference = valueFor(row, 'reference')
+          if (!reference) continue
+          const anchor = placements.find(
+            (placement) => placement.entryId === row.entryId && placement.columnId === column.id
+          )
+          if (!anchor) continue
+          const style = referenceStyle(anchor.style)
+          placements.push({
+            entryId: row.entryId,
+            columnId: `${column.id}:reference`,
+            pageNumber,
+            text: `Ref: ${reference}`,
+            x: anchor.x,
+            y: anchor.y + anchor.style.fontSize + 3,
+            width: anchor.width,
+            height: anchor.height,
+            style
+          })
+        }
+      }
+    }
+    if (currentTemplate.divider?.enabled) {
+      const divider = currentTemplate.divider
+      for (const row of pageRows) {
+        const rowPlacements = placements.filter((placement) => placement.entryId === row.entryId)
+        if (rowPlacements.length === 0) continue
+        dividers.push({
+          entryId: row.entryId,
+          pageNumber,
+          startX: divider.startX,
+          endX: divider.endX,
+          y: Math.max(...rowPlacements.map((placement) => placement.y + placement.height)),
+          thickness: divider.thickness,
+          color: divider.color,
+          opacity: divider.opacity
+        })
+      }
+    }
+    allPages.push({ pageNumber, template: currentTemplate, placements, dividers })
     rowOffset += pageRows.length
     pageNumber += 1
   }

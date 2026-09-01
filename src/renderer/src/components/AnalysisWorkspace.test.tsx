@@ -54,3 +54,23 @@ test('shows mapped payee evidence and keeps all-versus-kept dataset controls vis
   assert.match(markup, /Balance total is the sum of balance snapshots/)
   assert.equal(markup.match(/All monetary values in this section are in GBP\./g)?.length, 2)
 })
+
+test('formats monetary values with the project currency', () => {
+  const entries = [
+    entry('vendor-a', 'keep', '2026-03-12 Acme Supplies 10.00 0.00 90.00', 'Acme Supplies')
+  ]
+  const state = deriveAnalysisState(entries, DEFAULT_ANALYSIS_CONFIGURATION)
+  const markup = renderToStaticMarkup(
+    <AnalysisWorkspace
+      entries={entries}
+      configuration={DEFAULT_ANALYSIS_CONFIGURATION}
+      snapshot={state.snapshot}
+      currencyCode="USD"
+      onNavigateToEntry={() => undefined}
+      onConfigurationChange={() => undefined}
+    />
+  )
+
+  assert.match(markup, /All monetary values in this section are in USD\./)
+  assert.match(markup, /\$10\.00/)
+})

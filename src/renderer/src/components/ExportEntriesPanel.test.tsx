@@ -95,6 +95,21 @@ test('allows canvas dragging without enabling list reordering', () => {
   assert.match(markup, /class="export-entry-item\s*" draggable="true"/)
 })
 
+test('exposes kept text entries as canvas placement actions when supported', () => {
+  const markup = renderToStaticMarkup(
+    <ExportEntriesPanel
+      entries={[entry('a', 'keep', 'Alpha row')]}
+      placements={[]}
+      allowCanvasDrag
+      onPlaceEntry={() => undefined}
+    />
+  )
+
+  assert.match(markup, /role="button"/)
+  assert.match(markup, /tabIndex="0"|tabindex="0"/)
+  assert.match(markup, /aria-label="Place kept entry a on canvas"/)
+})
+
 test('reorders an entry before its drop target and preserves unknown ids', () => {
   assert.deepEqual(reorderEntryIds(['a', 'b', 'c'], 'a', 'c'), ['b', 'a', 'c'])
   assert.deepEqual(reorderEntryIds(['a', 'b', 'c'], 'c', 'a'), ['c', 'a', 'b'])

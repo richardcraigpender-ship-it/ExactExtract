@@ -27,7 +27,13 @@ async function loadPdfjs(): Promise<PdfjsModule> {
 async function openFixture(name: string): Promise<PdfDocument> {
   const pdfjs = await loadPdfjs()
   const data = new Uint8Array(await readFile(fixture(name)))
-  return pdfjs.getDocument({ data, useWorkerFetch: false, isEvalSupported: false }).promise
+  return pdfjs.getDocument({ data, useWorkerFetch: false, isEvalSupported: false } as object)
+    .promise
+}
+
+async function closePdf(pdf: PdfDocument): Promise<void> {
+  const destroy = (pdf as { destroy?: () => Promise<void> }).destroy
+  await destroy?.call(pdf)
 }
 
 // PT-A-011
@@ -36,7 +42,7 @@ test('renders a real multi-page fixture and reports a usable page count', async 
   try {
     assert.ok(pdf.numPages >= 1, 'fixture should expose at least one page')
   } finally {
-    await pdf.destroy()
+    await closePdf(pdf)
   }
 })
 
@@ -51,7 +57,7 @@ test('every page reports positive dimensions so the reserved box can be correcte
       assert.ok(viewport.height > 0, `page ${pageNumber} height`)
     }
   } finally {
-    await pdf.destroy()
+    await closePdf(pdf)
   }
 })
 
@@ -73,7 +79,7 @@ test('real fixtures include landscape pages, so a fixed placeholder cannot fit t
         ratios.push(viewport.width / viewport.height)
       }
     } finally {
-      await pdf.destroy()
+      await closePdf(pdf)
     }
   }
 
@@ -100,7 +106,7 @@ test('a thumbnail-width viewport keeps a sane pixel height for a real page', asy
     assert.ok(Math.round(scaled.width) === PAGE_THUMBNAIL_WIDTH)
     assert.ok(scaled.height > 0 && scaled.height < 1000)
   } finally {
-    await pdf.destroy()
+    await closePdf(pdf)
   }
 })
 

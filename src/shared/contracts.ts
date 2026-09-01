@@ -1,4 +1,6 @@
 import type { KeptEntriesCanvasLayout } from './keptEntriesLayout'
+import type { KeptExportTemplate } from './keptExportTemplate'
+import type { CurrencyCode } from './currencies'
 import type { LengthUnit } from './units'
 
 export const PROJECT_SCHEMA_VERSION = 1 as const
@@ -36,6 +38,7 @@ export interface ProjectDocument {
   pageCount?: number
   removedPages?: number[]
   kind?: DocumentKind
+  styleProfile?: DocumentStyleProfile
   importedAt: string
 }
 
@@ -47,6 +50,87 @@ export interface ProjectPage {
   rotation: 0 | 90 | 180 | 270
   kind: PageKind
   confidence?: number
+}
+
+export type DocumentStyleConfidence = 'high' | 'medium' | 'low'
+export type DocumentStyleSource = 'pdf-text' | 'ocr-image' | 'mixed'
+export type TextStyleRole = 'header' | 'body' | 'footer' | 'table' | 'small-print' | 'unknown'
+export type TextStyleWeight = 'regular' | 'medium' | 'semibold' | 'bold' | 'unknown'
+export type DividerStyleRole =
+  'table-rule' | 'section-divider' | 'underline' | 'margin-rule' | 'unknown'
+
+export interface StyleColour {
+  hex: string
+  name: string
+}
+
+export interface TextStyleCluster {
+  id: string
+  fontFamily: string
+  fontFace?: string
+  fontSize: number
+  fontWeight: TextStyleWeight
+  italic: boolean
+  underline: boolean | 'inferred'
+  colour?: StyleColour
+  role?: TextStyleRole
+  likelyRole: TextStyleRole
+  occurrenceCount: number
+  characterCount: number
+  pageNumbers: number[]
+  sampleText: string[]
+}
+
+export interface DividerStyleCluster {
+  id: string
+  orientation: 'horizontal' | 'vertical'
+  thickness: number
+  averageLength: number
+  colour?: StyleColour
+  likelyRole: DividerStyleRole
+  occurrenceCount: number
+  pageNumbers: number[]
+}
+
+export interface ColourCluster {
+  hex: string
+  name: string
+  occurrenceCount: number
+  likelyRole: 'text' | 'divider' | 'background' | 'unknown'
+}
+
+export interface PageStyleSummary {
+  pageNumber: number
+  textStyleClusterIds: string[]
+  dominantTextStyleId?: string
+  imageObjectCount: number
+  characterCount: number
+}
+
+export interface DocumentStyleWarning {
+  code:
+    | 'no-text'
+    | 'missing-font-name'
+    | 'missing-colour'
+    | 'image-only'
+    | 'partial-profile'
+    | 'missing-operator-list'
+  pageNumber?: number
+  message: string
+}
+
+export interface DocumentStyleProfile {
+  id: string
+  documentId: string
+  generatedAt: string
+  detectorVersion: 1
+  source: DocumentStyleSource
+  confidence: DocumentStyleConfidence
+  textStyles: TextStyleCluster[]
+  dividerStyles: DividerStyleCluster[]
+  colourPalette: ColourCluster[]
+  pageSummaries: PageStyleSummary[]
+  warnings: DocumentStyleWarning[]
 }
 
 export interface ProjectEntry {
@@ -118,6 +202,7 @@ export interface ProjectSettings {
   theme: 'light' | 'dark' | 'system'
   extraction: ExtractionSettings
   splitPanePercent: number
+  currencyCode?: CurrencyCode
   /** Display unit for coordinates and sizes. Stored values stay in PDF points regardless. */
   lengthUnit?: LengthUnit
 }
@@ -134,7 +219,9 @@ export interface ProjectState {
   preflight: DocumentPreflightResult[]
   extractionJobs: ExtractionJob[]
   auditTrail: AuditEvent[]
+  styleProfiles?: DocumentStyleProfile[]
   keptEntriesLayout?: KeptEntriesCanvasLayout
+  keptExportTemplate?: KeptExportTemplate
   settings: ProjectSettings
 }
 

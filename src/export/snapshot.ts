@@ -1,4 +1,6 @@
 import type { ProjectEntry, ProjectState, SourceRegion } from '../shared/contracts'
+import { resolveCurrencyCode } from '../shared/currencies'
+import { formatCurrencyAmount } from '../shared/currencyFormat'
 import type { ExportEntry, ExportOptions, ExportSnapshot } from './types'
 
 function cloneRegion(region: SourceRegion): SourceRegion {
@@ -17,28 +19,80 @@ function compareEntries(left: ProjectEntry, right: ProjectEntry): number {
   )
 }
 
-function cloneEntry(entry: ProjectEntry): ExportEntry {
+function cloneEntry(
+  entry: ProjectEntry,
+  currencyCode: ReturnType<typeof resolveCurrencyCode>
+): ExportEntry {
   return {
     ...entry,
+    normalizedText:
+      entry.numericValue === undefined
+        ? entry.normalizedText
+        : formatCurrencyAmount(entry.numericValue, currencyCode),
     regions: entry.regions.map(cloneRegion),
     tags: [...entry.tags].sort()
   }
 }
 
-function entriesByStatus(project: ProjectState, status: ProjectEntry['status']): ExportEntry[] {
+function entriesByStatus(
+  project: ProjectState,
+  status: ProjectEntry['status'],
+  currencyCode: ReturnType<typeof resolveCurrencyCode>
+): ExportEntry[] {
   return project.entries
     .filter((entry) => entry.status === status)
     .sort(compareEntries)
-    .map(cloneEntry)
+    .map((entry) => cloneEntry(entry, currencyCode))
+}
+
+function documentMetadata(
+  project: ProjectState,
+  documentId: string
+): ExportSnapshot['documents'][number]['metadata'] | undefined {
+  const pages = project.pages.filter((page) => page.documentId === documentId)
+  const preflight = project.preflight.find((candidate) => candidate.documentId === documentId)
+  const sourcePages = preflight?.pages ?? pages
+  const styleProfile =
+    project.documents.find((document) => document.id === documentId)?.styleProfile ??
+    project.styleProfiles?.find((profile) => profile.documentId === documentId)
+  if (sourcePages.length === 0 && !styleProfile) return undefined
+  const characterCounts = preflight?.pages.map((page) => page.characterCount) ?? []
+  return {
+    textPageCount: sourcePages.filter((page) => page.kind === 'text').length,
+    imagePageCount: sourcePages.filter((page) => page.kind === 'image').length,
+    mixedPageCount: sourcePages.filter((page) => page.kind === 'mixed').length,
+    rotatedPageCount: sourcePages.filter((page) => page.kind === 'rotated').length,
+    averageCharactersPerPage:
+      characterCounts.length === 0
+        ? 0
+        : Math.round(
+            characterCounts.reduce((sum, count) => sum + count, 0) / characterCounts.length
+          ),
+    ...(styleProfile
+      ? {
+          styleProfile: {
+            id: styleProfile.id,
+            generatedAt: styleProfile.generatedAt,
+            confidence: styleProfile.confidence,
+            source: styleProfile.source,
+            textStyleCount: styleProfile.textStyles.length,
+            dividerStyleCount: styleProfile.dividerStyles.length,
+            colourCount: styleProfile.colourPalette.length,
+            warningCount: styleProfile.warnings.length
+          }
+        }
+      : {})
+  }
 }
 
 export function buildExportSnapshot(
   project: ProjectState,
   options: ExportOptions = {}
 ): ExportSnapshot {
-  const kept = entriesByStatus(project, 'keep')
-  const maybe = entriesByStatus(project, 'maybe')
-  const excluded = entriesByStatus(project, 'exclude')
+  const currencyCode = resolveCurrencyCode(project.settings.currencyCode)
+  const kept = entriesByStatus(project, 'keep', currencyCode)
+  const maybe = entriesByStatus(project, 'maybe', currencyCode)
+  const excluded = entriesByStatus(project, 'exclude', currencyCode)
   return {
     exportSchemaVersion: 1,
     project: {
@@ -46,16 +100,26 @@ export function buildExportSnapshot(
       name: project.name,
       schemaVersion: project.schemaVersion,
       createdAt: project.createdAt,
-      updatedAt: project.updatedAt
+      updatedAt: project.updatedAt,
+      currencyCode
     },
     documents: [...project.documents]
       .sort((left, right) => left.id.localeCompare(right.id))
-      .map((document) => ({
-        id: document.id,
-        name: document.name,
-        ...(document.pageCount === undefined ? {} : { pageCount: document.pageCount }),
-        ...(document.kind === undefined ? {} : { kind: document.kind })
-      })),
+      .map((document) => {
+        const metadata = documentMetadata(project, document.id)
+        return {
+          id: document.id,
+          name: document.name,
+          size: document.size,
+          importedAt: document.importedAt,
+          ...(document.pageCount === undefined ? {} : { pageCount: document.pageCount }),
+          ...(document.removedPages === undefined
+            ? {}
+            : { removedPages: [...document.removedPages] }),
+          ...(document.kind === undefined ? {} : { kind: document.kind }),
+          ...(metadata ? { metadata } : {})
+        }
+      }),
     sections: {
       kept,
       maybe,

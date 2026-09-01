@@ -35,7 +35,22 @@ function fakeDocument(): PdfJsDocumentLike {
           }
         },
         async getOperatorList() {
-          return { fnArray: pageNumber === 1 ? [10, 85, 86, 20] : [83] }
+          return pageNumber === 1
+            ? {
+                fnArray: [2, 58, 91, 20, 85, 86],
+                argsArray: [
+                  [1],
+                  [0.2, 0.4, 0.6],
+                  [
+                    [13, 14, 13, 14, 19],
+                    [40, 700, 240, 700, 100, 100, 100, 300, 300, 200, 50, 40]
+                  ],
+                  [],
+                  [],
+                  []
+                ]
+              }
+            : { fnArray: [83], argsArray: [[]] }
         }
       }
     }
@@ -50,6 +65,22 @@ test('adapts PDF.js-shaped pages and filters unsupported text items', async () =
   assert.equal(pages[0]?.items[0]?.fontAscentRatio, 0.72)
   assert.equal(pages[0]?.items[1]?.fontAscentRatio, 0.8)
   assert.equal(pages[0]?.imageObjectCount, 2)
+  assert.deepEqual(
+    pages[0]?.visualRules?.map((rule) => [
+      rule.orientation,
+      rule.length,
+      rule.thickness,
+      rule.colour
+    ]),
+    [
+      ['horizontal', 200, 1, '#336699'],
+      ['vertical', 200, 1, '#336699'],
+      ['horizontal', 50, 1, '#336699'],
+      ['horizontal', 50, 1, '#336699'],
+      ['vertical', 40, 1, '#336699'],
+      ['vertical', 40, 1, '#336699']
+    ]
+  )
   assert.equal(pages[1]?.imageObjectCount, 1)
   assert.equal(pages[1]?.rotation, 90)
 })
@@ -71,6 +102,10 @@ test('falls back to zero images when operator lists are unavailable', async () =
   assert.deepEqual(
     pages.map((page) => page.imageObjectCount),
     [0, 0]
+  )
+  assert.deepEqual(
+    pages.map((page) => page.visualRules),
+    [undefined, undefined]
   )
 })
 

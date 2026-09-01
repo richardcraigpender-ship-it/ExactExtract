@@ -27,6 +27,41 @@ export interface KeptEntryPlacement {
 
 export type KeptImageSourceKind = 'session-entry' | 'uploaded-png'
 
+export interface KeptImageSourceDescriptor {
+  kind: KeptImageSourceKind
+  ref: string
+  entryId?: string
+  name?: string
+  naturalWidth: number
+  naturalHeight: number
+}
+
+export interface KeptEntriesDivider {
+  enabled: boolean
+  width: number
+  thickness: number
+  color: string
+  opacity: number
+  startX: number
+  endX: number
+}
+
+export interface KeptImagePlacementOptions {
+  sourceMode: KeptImageSourceKind
+  startX: number
+  startY: number
+  endY?: number
+  fillBetweenY: boolean
+  entriesPerPage: number
+  gap: number
+  width?: number
+  height?: number
+  preserveAspectRatio: boolean
+  uniformSlots: boolean
+  /** Drawn after every placed image when enabled. */
+  divider?: KeptEntriesDivider
+}
+
 /**
  * Image bytes are never persisted in the layout. `ref` identifies a kept entry (session) or a
  * project-managed PNG (upload) that the caller resolves at render time.
@@ -66,6 +101,8 @@ export interface KeptEntriesCanvasLayout {
   orientation: KeptEntriesOrientation
   placements: KeptEntryPlacement[]
   images?: KeptImagePlacement[]
+  imagePlacementOptions?: KeptImagePlacementOptions
+  uploadedImageSources?: KeptImageSourceDescriptor[]
   /** Planned page total; page numbers carried by placements can still exceed it. */
   pageCount?: number
   background?: KeptEntriesBackground

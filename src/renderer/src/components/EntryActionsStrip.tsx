@@ -7,6 +7,7 @@ import {
   EyeOff,
   FileSearch,
   FileText,
+  Fingerprint,
   Images,
   ListChecks,
   Save,
@@ -17,14 +18,24 @@ import {
 } from 'lucide-react'
 
 export type ContextMode =
-  'source-pdf' | 'review' | 'analysis' | 'export' | 'pages' | 'warnings' | 'remove-pages' | 'marks'
-export type EntryActionCommand = 'zoom-in' | 'zoom-out' | 'import' | 'save' | 'jump'
+  | 'source-pdf'
+  | 'review'
+  | 'analysis'
+  | 'export'
+  | 'style'
+  | 'pages'
+  | 'warnings'
+  | 'remove-pages'
+  | 'marks'
+export type EntryActionCommand =
+  'zoom-in' | 'zoom-out' | 'import' | 'save' | 'jump' | 'currency' | 'detect-style'
 
 const contextModes = [
   { id: 'source-pdf', label: 'Source PDF', shortLabel: 'Source', icon: FileText },
   { id: 'review', label: 'Review and bulk actions', shortLabel: 'Review', icon: ListChecks },
   { id: 'analysis', label: 'Analysis', shortLabel: 'Stats', icon: BarChart3 },
   { id: 'export', label: 'Export', shortLabel: 'Export', icon: Download },
+  { id: 'style', label: 'Document style profile', shortLabel: 'Style', icon: Fingerprint },
   { id: 'pages', label: 'Page previewer', shortLabel: 'Pages', icon: Images },
   { id: 'warnings', label: 'Warnings and duplicates', shortLabel: 'Issues', icon: AlertTriangle },
   { id: 'remove-pages', label: 'Remove pages', shortLabel: 'Remove', icon: Trash2 },
@@ -36,7 +47,9 @@ const commands = [
   { id: 'zoom-in', label: 'Zoom in', shortLabel: 'Zoom +', icon: ZoomIn },
   { id: 'import', label: 'Add PDFs', shortLabel: 'Add', icon: Upload },
   { id: 'save', label: 'Save project', shortLabel: 'Save', icon: Save },
-  { id: 'jump', label: 'Jump to page', shortLabel: 'Jump', icon: FileSearch }
+  { id: 'jump', label: 'Jump to page', shortLabel: 'Jump', icon: FileSearch },
+  { id: 'detect-style', label: 'Detect style', shortLabel: 'Style', icon: Fingerprint },
+  { id: 'currency', label: 'Project currency', shortLabel: '$/£', icon: null }
 ] as const
 
 interface EntryActionsStripProps {
@@ -58,8 +71,6 @@ export const EntryActionsStrip = React.memo(function EntryActionsStrip({
     <nav className="workspace-tool-strip" aria-label="Workspace tools">
       <div role="tablist" aria-label="Context panel">
         {contextModes.map(({ id, label, shortLabel, icon: Icon }) => {
-          // The marks tab mirrors overlay visibility so the current state is readable
-          // without opening the panel.
           const isMarks = id === 'marks'
           const TabIcon = isMarks && !highlightsVisible ? EyeOff : Icon
           const tabLabel = isMarks && !highlightsVisible ? `${label} (highlights hidden)` : label
@@ -115,7 +126,13 @@ export const EntryActionsStrip = React.memo(function EntryActionsStrip({
               }
             }}
           >
-            <Icon size={17} aria-hidden="true" />
+            {Icon ? (
+              <Icon size={17} aria-hidden="true" />
+            ) : (
+              <span className="currency-tool-symbol" aria-hidden="true">
+                $/£
+              </span>
+            )}
             <span className="right-workspace-tool-label" aria-hidden="true">
               {shortLabel}
             </span>

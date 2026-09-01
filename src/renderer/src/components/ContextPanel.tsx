@@ -6,6 +6,7 @@ const contextLabels: Record<ContextMode, string> = {
   review: 'Review and bulk actions',
   analysis: 'Analysis',
   export: 'Export',
+  style: 'Document style profile',
   pages: 'Page previewer',
   warnings: 'Warnings and duplicates',
   'remove-pages': 'Remove pages',

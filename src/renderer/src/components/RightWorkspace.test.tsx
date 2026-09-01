@@ -12,6 +12,7 @@ const contexts: Record<RightWorkspaceMode, React.ReactNode> = {
   review: <p>Bulk controls</p>,
   analysis: <p>Metrics</p>,
   export: <p>Export controls</p>,
+  style: <p>Style profile</p>,
   pages: <p>Page thumbnails</p>,
   warnings: <p>Warning details</p>,
   'remove-pages': <p>Remove pages</p>,

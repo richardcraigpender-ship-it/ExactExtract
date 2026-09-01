@@ -3,6 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 
 import { PROJECT_SCHEMA_VERSION, type ProjectState, type RecentProject } from '../shared/contracts'
+import { isCurrencyCode } from '../shared/currencies'
 import { isLengthUnit } from '../shared/units'
 
 const PROJECT_ID_PATTERN = /^[A-Za-z0-9_-]+$/
@@ -51,6 +52,27 @@ function requireExtractionSettings(value: unknown, field: string): void {
   ) {
     throw new Error(`Invalid project field: ${field}.selectedPages`)
   }
+}
+
+function requireStyleProfile(value: unknown, field: string): void {
+  requireRecord(value, field)
+  requireString(value.id, `${field}.id`)
+  requireString(value.documentId, `${field}.documentId`)
+  requireString(value.generatedAt, `${field}.generatedAt`)
+  if (value.detectorVersion !== 1) {
+    throw new Error(`Invalid project field: ${field}.detectorVersion`)
+  }
+  if (!['pdf-text', 'ocr-image', 'mixed'].includes(String(value.source))) {
+    throw new Error(`Invalid project field: ${field}.source`)
+  }
+  if (!['high', 'medium', 'low'].includes(String(value.confidence))) {
+    throw new Error(`Invalid project field: ${field}.confidence`)
+  }
+  requireArray(value.textStyles, `${field}.textStyles`)
+  requireArray(value.dividerStyles, `${field}.dividerStyles`)
+  requireArray(value.colourPalette, `${field}.colourPalette`)
+  requireArray(value.pageSummaries, `${field}.pageSummaries`)
+  requireArray(value.warnings, `${field}.warnings`)
 }
 
 function requireSourceRegion(value: unknown, field: string): void {
@@ -104,6 +126,9 @@ export function assertProjectState(value: unknown): asserts value is ProjectStat
         document.removedPages.some((page) => !Number.isInteger(page) || Number(page) < 1))
     ) {
       throw new Error(`Invalid project field: ${field}.removedPages`)
+    }
+    if (document.styleProfile !== undefined) {
+      requireStyleProfile(document.styleProfile, `${field}.styleProfile`)
     }
   }
 
@@ -171,6 +196,12 @@ export function assertProjectState(value: unknown): asserts value is ProjectStat
   }
   requireExtractionSettings(project.settings.extraction, 'settings.extraction')
   requireFiniteNumber(project.settings.splitPanePercent, 'settings.splitPanePercent')
+  if (
+    project.settings.currencyCode !== undefined &&
+    !isCurrencyCode(project.settings.currencyCode)
+  ) {
+    throw new Error('Invalid project field: settings.currencyCode')
+  }
   if (project.settings.lengthUnit !== undefined && !isLengthUnit(project.settings.lengthUnit)) {
     throw new Error('Invalid project field: settings.lengthUnit')
   }
@@ -222,7 +253,8 @@ export class ProjectStore {
       settings: {
         theme: 'system',
         extraction: { mode: 'balanced', ocrLanguages: ['eng'] },
-        splitPanePercent: 50
+        splitPanePercent: 50,
+        currencyCode: 'GBP'
       }
     }
   }

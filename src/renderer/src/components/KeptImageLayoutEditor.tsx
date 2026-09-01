@@ -2,7 +2,11 @@ import React from 'react'
 import { Images } from 'lucide-react'
 
 import type { KeptImagePlan, KeptImageSourceDescriptor } from '../../../export'
-import type { KeptEntriesOrientation, KeptEntriesPageSize } from '../../../shared/keptEntriesLayout'
+import type {
+  KeptEntriesOrientation,
+  KeptEntriesPageSize,
+  KeptImagePlacementOptions
+} from '../../../shared/keptEntriesLayout'
 import { KeptImagePlacementSection } from './KeptImagePlacementSection'
 
 interface KeptImageLayoutEditorProps {
@@ -14,6 +18,12 @@ interface KeptImageLayoutEditorProps {
   onUploadPngs: (files: File[]) => Promise<KeptImageSourceDescriptor[]>
   onPreviewPlacedImages: () => void
   onClose: () => void
+  initialOptions?: KeptImagePlacementOptions
+  initialUploadedSources?: readonly KeptImageSourceDescriptor[]
+  onConfigurationChange: (
+    options: KeptImagePlacementOptions,
+    uploadedSources: readonly KeptImageSourceDescriptor[]
+  ) => void
 }
 
 export function KeptImageLayoutEditor({
@@ -24,7 +34,10 @@ export function KeptImageLayoutEditor({
   onPlaceImages,
   onUploadPngs,
   onPreviewPlacedImages,
-  onClose
+  onClose,
+  initialOptions,
+  initialUploadedSources,
+  onConfigurationChange
 }: KeptImageLayoutEditorProps): React.JSX.Element {
   return (
     <section className="kept-image-layout-editor" aria-labelledby="kept-image-layout-editor-title">
@@ -44,6 +57,9 @@ export function KeptImageLayoutEditor({
           onUploadPngs={onUploadPngs}
           placedImageCount={placedImageCount}
           onPreviewPlacedImages={onPreviewPlacedImages}
+          initialOptions={initialOptions}
+          initialUploadedSources={initialUploadedSources}
+          onConfigurationChange={onConfigurationChange}
         />
       </div>
       <footer className="kept-image-layout-editor-footer">

@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react'
 import type { ProjectEntry } from '../../../shared/contracts'
+import { DEFAULT_CURRENCY_CODE, type CurrencyCode } from '../../../shared/currencies'
 import {
   calculateStatementStats,
   reconcileFinancialEntries,
@@ -15,6 +16,7 @@ interface AnalysisWorkspaceProps {
   entries: readonly ProjectEntry[]
   configuration: AnalysisConfiguration
   snapshot: AnalysisSnapshot
+  currencyCode?: CurrencyCode
   onNavigateToEntry: (entryId: string) => void
   onConfigurationChange: (configuration: AnalysisConfiguration) => void
 }
@@ -23,6 +25,7 @@ export const AnalysisWorkspace = React.memo(function AnalysisWorkspace({
   entries,
   configuration,
   snapshot,
+  currencyCode = DEFAULT_CURRENCY_CODE,
   onNavigateToEntry,
   onConfigurationChange
 }: AnalysisWorkspaceProps): React.JSX.Element {
@@ -36,7 +39,6 @@ export const AnalysisWorkspace = React.memo(function AnalysisWorkspace({
     () => calculateStatementStats(entries, configuration.financialMapping, dataset),
     [configuration.financialMapping, dataset, entries]
   )
-  const currencyCode = 'GBP'
   const currency = useMemo(
     () =>
       new Intl.NumberFormat(undefined, {

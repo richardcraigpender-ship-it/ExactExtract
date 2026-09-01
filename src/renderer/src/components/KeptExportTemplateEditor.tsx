@@ -1,7 +1,11 @@
-import React, { useState } from 'react'
+import React, { useEffect, useState } from 'react'
 import { Check, FileOutput, Plus, RotateCcw, Trash2 } from 'lucide-react'
 
 import type { KeptEntriesFontRef } from '../../../shared/keptEntriesLayout'
+import type {
+  KeptExportDivider,
+  KeptExportRunningBalance
+} from '../../../shared/keptExportTemplate'
 import { getCanvasPageDimensions } from '../lib/canvasScale'
 import { CanvasBackgroundControls } from './CanvasBackgroundControls'
 import { FontPicker } from './FontPicker'
@@ -29,11 +33,17 @@ import './KeptExportTemplateEditor.css'
 
 interface KeptExportTemplateEditorProps {
   initialDraft?: KeptExportTemplateDraft
+  onDraftChange?: (draft: KeptExportTemplateDraft) => void
   onApply: (draft: KeptExportTemplateDraft) => void
   onExport: (draft: KeptExportTemplateDraft) => void
   onPreview?: (draft: KeptExportTemplateDraft) => void
   onCancel?: () => void
   isExporting?: boolean
+  isPreviewing?: boolean
+  autoCloseAfterAction?: boolean
+  onAutoCloseAfterActionChange?: (value: boolean) => void
+  actionStatus?: string | null
+  currencySymbol?: string
 }
 
 const STANDARD_FONTS: Array<Extract<KeptEntriesFontRef, { kind: 'standard-14' }>['family']> = [
@@ -50,6 +60,7 @@ const SOURCE_FIELDS: Array<{ value: KeptExportSourceField; label: string }> = [
   { value: 'money-out', label: 'Money out' },
   { value: 'money-in', label: 'Money in' },
   { value: 'balance', label: 'Balance' },
+  { value: 'calculated-balance', label: 'Calculated balance' },
   { value: 'category', label: 'Category' },
   { value: 'reference', label: 'Reference' }
 ]
@@ -63,6 +74,15 @@ const SUMMARY_FIELDS: Array<{ value: KeptExportSummaryField; label: string }> = 
   { value: 'calculated-closing-balance', label: 'Calculated closing balance' },
   { value: 'statement-closing-balance', label: 'Statement closing balance' },
   { value: 'reconciliation-difference', label: 'Reconciliation difference' }
+]
+
+const BALANCE_FIELD_MODES: Array<{
+  value: KeptExportRunningBalance['balanceFieldMode']
+  label: string
+}> = [
+  { value: 'keep-original', label: 'Keep original balance' },
+  { value: 'replace-original', label: 'Replace Balance columns' },
+  { value: 'add-calculated', label: 'Add calculated balance field' }
 ]
 
 function numberValue(value: string, fallback: number): number {
@@ -83,13 +103,32 @@ function updateColumn(
   }
 }
 
+function defaultDivider(pageWidth: number): KeptExportDivider {
+  const startX = 48
+  return {
+    enabled: false,
+    startX,
+    endX: pageWidth - 48,
+    width: pageWidth - startX - 48,
+    thickness: 1,
+    color: '#17231c',
+    opacity: 0.35
+  }
+}
+
 export function KeptExportTemplateEditor({
   initialDraft,
+  onDraftChange,
   onApply,
   onExport,
   onPreview,
   onCancel,
-  isExporting = false
+  isExporting = false,
+  isPreviewing = false,
+  autoCloseAfterAction = false,
+  onAutoCloseAfterActionChange,
+  actionStatus,
+  currencySymbol = '£'
 }: KeptExportTemplateEditorProps): React.JSX.Element {
   const [draft, setDraft] = useState<KeptExportTemplateDraft>(() =>
     cloneKeptExportTemplateDraft(initialDraft ?? createDefaultKeptExportTemplateDraft())
@@ -104,7 +143,13 @@ export function KeptExportTemplateEditor({
   const selectedColumn = template.columns.find((column) => column.id === selectedColumnId)
   const textStyle = selectedColumn?.textStyle ?? template.defaultTextStyle
   const dimensions = getCanvasPageDimensions(template.pageSize, template.orientation)
+  const divider = template.divider ?? defaultDivider(dimensions.width)
+  const runningBalance = draft.runningBalance
   const issues = validateKeptExportTemplateDraft(draft)
+
+  useEffect(() => {
+    onDraftChange?.(cloneKeptExportTemplateDraft(draft))
+  }, [draft, onDraftChange])
 
   const setTemplate = (
     update: (current: KeptExportPageTemplateDraft) => KeptExportPageTemplateDraft
@@ -119,6 +164,19 @@ export function KeptExportTemplateEditor({
       fontRef: patch.fontRef ? { ...patch.fontRef } : { ...textStyle.fontRef }
     }
     setTemplate((current) => applyTextStyle(current, nextStyle, applyToAll, selectedColumn?.id))
+  }
+
+  const setDivider = (update: (current: KeptExportDivider) => KeptExportDivider): void => {
+    setTemplate((current) => ({
+      ...current,
+      divider: update(current.divider ?? defaultDivider(dimensions.width))
+    }))
+  }
+
+  const setRunningBalance = (
+    update: (current: KeptExportRunningBalance) => KeptExportRunningBalance
+  ): void => {
+    setDraft((current) => ({ ...current, runningBalance: update(current.runningBalance) }))
   }
 
   const resetActiveTemplate = (): void => {
@@ -264,6 +322,19 @@ export function KeptExportTemplateEditor({
               />
               Fill between Start Y and End Y
             </label>
+            <label>
+              <input
+                type="checkbox"
+                checked={template.showReferenceUnderMainText ?? false}
+                onChange={(event) =>
+                  setTemplate((current) => ({
+                    ...current,
+                    showReferenceUnderMainText: event.target.checked
+                  }))
+                }
+              />
+              Show references under main text
+            </label>
             <LengthField
               label="Start Y"
               min={0}
@@ -302,6 +373,186 @@ export function KeptExportTemplateEditor({
               Column fill
             </label>
           </fieldset>
+        </section>
+
+        <section className="kept-template-section" aria-labelledby="kept-template-divider-title">
+          <div className="kept-template-section-heading">
+            <div>
+              <h3 id="kept-template-divider-title">Entry divider</h3>
+              <p>Draw a horizontal divider after every exported entry.</p>
+            </div>
+            <label className="kept-template-change-all">
+              <input
+                type="checkbox"
+                checked={divider.enabled}
+                onChange={(event) =>
+                  setDivider((current) => ({ ...current, enabled: event.target.checked }))
+                }
+              />
+              Show dividers
+            </label>
+          </div>
+          <div className="kept-template-grid kept-template-divider-grid">
+            <LengthField
+              label="Width"
+              min={1}
+              value={divider.width}
+              disabled={!divider.enabled}
+              onChange={(width) =>
+                setDivider((current) => ({ ...current, width, endX: current.startX + width }))
+              }
+            />
+            <LengthField
+              label="Thickness"
+              min={0.1}
+              value={divider.thickness}
+              disabled={!divider.enabled}
+              onChange={(thickness) => setDivider((current) => ({ ...current, thickness }))}
+            />
+            <label>
+              <span>Color</span>
+              <input
+                type="color"
+                value={divider.color}
+                disabled={!divider.enabled}
+                onChange={(event) =>
+                  setDivider((current) => ({ ...current, color: event.target.value }))
+                }
+              />
+            </label>
+            <label>
+              <span>Opacity</span>
+              <input
+                type="number"
+                min="0"
+                max="1"
+                step="0.05"
+                value={divider.opacity}
+                disabled={!divider.enabled}
+                onChange={(event) =>
+                  setDivider((current) => ({
+                    ...current,
+                    opacity: Math.max(
+                      0,
+                      Math.min(1, numberValue(event.target.value, current.opacity))
+                    )
+                  }))
+                }
+              />
+            </label>
+            <LengthField
+              label="Start X"
+              min={0}
+              value={divider.startX}
+              disabled={!divider.enabled}
+              onChange={(startX) =>
+                setDivider((current) => ({ ...current, startX, endX: startX + current.width }))
+              }
+            />
+            <LengthField
+              label="End X"
+              min={0}
+              value={divider.endX}
+              disabled={!divider.enabled}
+              onChange={(endX) =>
+                setDivider((current) => ({ ...current, endX, width: endX - current.startX }))
+              }
+            />
+          </div>
+        </section>
+
+        <section className="kept-template-section" aria-labelledby="kept-template-balance-title">
+          <div className="kept-template-section-heading">
+            <div>
+              <h3 id="kept-template-balance-title">Calculated balance</h3>
+              <p>
+                Runs through kept entries in export order, adding money in and taking money out.
+              </p>
+            </div>
+            <label className="kept-template-change-all">
+              <input
+                type="checkbox"
+                checked={runningBalance.enabled}
+                onChange={(event) =>
+                  setRunningBalance((current) => ({ ...current, enabled: event.target.checked }))
+                }
+              />
+              Add calculated running balance
+            </label>
+          </div>
+          <div className="kept-template-grid kept-template-balance-grid">
+            <label>
+              <span>Opening balance ({currencySymbol})</span>
+              <input
+                type="number"
+                step="0.01"
+                placeholder="Blank"
+                value={runningBalance.openingBalance ?? ''}
+                disabled={!runningBalance.enabled}
+                onChange={(event) =>
+                  setRunningBalance((current) => ({
+                    ...current,
+                    openingBalance:
+                      event.target.value.trim() === '' ? undefined : Number(event.target.value)
+                  }))
+                }
+              />
+            </label>
+            <label>
+              <span>If blank</span>
+              <select
+                value={runningBalance.fallback}
+                disabled={!runningBalance.enabled}
+                onChange={(event) =>
+                  setRunningBalance((current) => ({
+                    ...current,
+                    fallback: event.target.value as KeptExportRunningBalance['fallback']
+                  }))
+                }
+              >
+                <option value="first-existing-balance">Use first detected balance</option>
+                <option value="zero">Start from zero</option>
+              </select>
+            </label>
+            <label>
+              <span>Decimal places</span>
+              <input
+                type="number"
+                min="0"
+                max="6"
+                step="1"
+                value={runningBalance.decimalPlaces}
+                disabled={!runningBalance.enabled}
+                onChange={(event) =>
+                  setRunningBalance((current) => ({
+                    ...current,
+                    decimalPlaces: numberValue(event.target.value, current.decimalPlaces)
+                  }))
+                }
+              />
+            </label>
+          </div>
+          <fieldset className="kept-template-choice">
+            <legend>Original balance output</legend>
+            {BALANCE_FIELD_MODES.map((mode) => (
+              <label key={mode.value}>
+                <input
+                  type="radio"
+                  name={`balance-field-mode-${activeTarget}`}
+                  checked={runningBalance.balanceFieldMode === mode.value}
+                  disabled={!runningBalance.enabled}
+                  onChange={() =>
+                    setRunningBalance((current) => ({ ...current, balanceFieldMode: mode.value }))
+                  }
+                />
+                {mode.label}
+              </label>
+            ))}
+          </fieldset>
+          <p className="context-help">
+            Leave the opening balance blank to infer it from the first detected balance, otherwise
+            the run starts from zero. Replacing sends calculated values to existing Balance columns.
+          </p>
         </section>
 
         <section className="kept-template-section" aria-labelledby="kept-template-columns-title">
@@ -578,6 +829,21 @@ export function KeptExportTemplateEditor({
       )}
 
       <footer className="kept-template-editor-footer">
+        <div className="kept-template-editor-footer-meta">
+          <label className="kept-template-auto-close">
+            <input
+              type="checkbox"
+              checked={autoCloseAfterAction}
+              onChange={(event) => onAutoCloseAfterActionChange?.(event.target.checked)}
+            />
+            Auto-close after actions
+          </label>
+          {actionStatus && (
+            <span className="kept-template-action-status" role="status" aria-live="polite">
+              {actionStatus}
+            </span>
+          )}
+        </div>
         {onCancel && (
           <button className="secondary-button" type="button" onClick={onCancel}>
             Cancel
@@ -595,16 +861,16 @@ export function KeptExportTemplateEditor({
           <button
             className="secondary-button"
             type="button"
-            disabled={issues.length > 0 || isExporting}
+            disabled={issues.length > 0 || isExporting || isPreviewing}
             onClick={() => onPreview(cloneKeptExportTemplateDraft(draft))}
           >
-            Preview
+            {isPreviewing ? 'Generating preview...' : 'Preview'}
           </button>
         )}
         <button
           className="primary-button"
           type="button"
-          disabled={issues.length > 0 || isExporting}
+          disabled={issues.length > 0 || isExporting || isPreviewing}
           onClick={() => onExport(cloneKeptExportTemplateDraft(draft))}
         >
           <FileOutput size={15} aria-hidden="true" />

@@ -126,6 +126,11 @@
   outline-offset: 2px;
 }
 
+.export-canvas-image-divider {
+  position: absolute;
+  pointer-events: none;
+}
+
 .export-canvas-resize-handle {
   position: absolute;
   right: -1px;

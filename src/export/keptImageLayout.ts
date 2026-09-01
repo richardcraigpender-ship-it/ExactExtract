@@ -6,19 +6,13 @@ import {
   type KeptEntriesPageSize,
   type KeptImageFit,
   type KeptImagePlacement,
-  type KeptImageSourceKind,
+  type KeptImagePlacementOptions,
+  type KeptImageSourceDescriptor,
   KEPT_ENTRIES_LAYOUT_VERSION
 } from '../shared/keptEntriesLayout'
 import { buildEntryImageCrops } from './entryImages'
 
-export interface KeptImageSourceDescriptor {
-  kind: KeptImageSourceKind
-  ref: string
-  entryId?: string
-  name?: string
-  naturalWidth: number
-  naturalHeight: number
-}
+export type { KeptImageSourceDescriptor } from '../shared/keptEntriesLayout'
 
 export interface KeptImagePlanOptions {
   pageSize: KeptEntriesPageSize
@@ -56,6 +50,7 @@ export interface KeptImagePlan {
   placements: KeptImagePlacement[]
   pageCount: number
   warnings: KeptImagePlanWarning[]
+  options?: KeptImagePlacementOptions
 }
 
 /**
@@ -208,6 +203,7 @@ export function withKeptImagePlacements(
     ...layout,
     version: KEPT_ENTRIES_LAYOUT_VERSION,
     images: plan.placements.map((placement) => ({ ...placement })),
+    imagePlacementOptions: plan.options ?? layout.imagePlacementOptions,
     pageCount: Math.max(plan.pageCount, 1, ...textPages)
   }
 }

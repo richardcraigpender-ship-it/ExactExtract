@@ -2,9 +2,17 @@ import { PDFDocument, StandardFonts, rgb, type PDFFont } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
 import type { ProjectState } from '../shared/contracts'
 import { mapFinancialEntry, type FinancialColumnMapping } from '../analysis'
-import type { KeptExportSourceRow, KeptExportTemplate } from '../shared/keptExportTemplate'
+import { resolveCurrencyCode } from '../shared/currencies'
+import { formatCurrencyAmount } from '../shared/currencyFormat'
+import { extractEntryReferences } from '../review'
+import {
+  DEFAULT_KEPT_EXPORT_RUNNING_BALANCE,
+  type KeptExportSourceRow,
+  type KeptExportTemplate
+} from '../shared/keptExportTemplate'
 import { calculateStatementStats } from '../analysis'
 import { buildKeptExportRenderPlan } from './keptExportLayout'
+import { buildRunningBalanceValues, type RunningBalanceInputRow } from './runningBalance'
 
 type SummaryField =
   | 'money-in-total'
@@ -42,9 +50,10 @@ function pdfColor(value: string): ReturnType<typeof rgb> {
 function decodeImage(dataUrl: string): { kind: 'png' | 'jpg'; bytes: Uint8Array } | undefined {
   const match = /^data:(image\/png|image\/(?:jpeg|jpg));base64,(.+)$/i.exec(dataUrl)
   if (!match) return undefined
+  const binary = atob(match[2])
   return {
     kind: match[1].toLowerCase() === 'image/png' ? 'png' : 'jpg',
-    bytes: Uint8Array.from(Buffer.from(match[2], 'base64'))
+    bytes: Uint8Array.from(binary, (character) => character.charCodeAt(0))
   }
 }
 
@@ -99,36 +108,67 @@ function mappingForStats(): FinancialColumnMapping {
   }
 }
 
-function sourceRows(project: ProjectState): KeptExportSourceRow[] {
+function referenceForEntry(entry: ProjectState['entries'][number], rowReference?: string): string {
+  const explicit = rowReference?.trim() || entry.notes?.trim()
+  if (explicit) return explicit
+  return extractEntryReferences(entry).join(', ')
+}
+
+function sourceRows(project: ProjectState, template?: KeptExportTemplate): KeptExportSourceRow[] {
   const mapping = mappingForStats()
-  return project.entries
-    .filter((entry) => entry.status === 'keep')
-    .flatMap((entry) => {
-      const row = mapFinancialEntry(entry, mapping)
-      if (!row) return []
-      return [
-        {
-          entryId: entry.id,
-          values: {
-            text: entry.normalizedText,
-            payee: entry.payee ?? row.payee ?? row.description,
-            date: row.date,
-            'money-out': row.moneyOut ? row.moneyOut.toFixed(2) : '',
-            'money-in': row.moneyIn ? row.moneyIn.toFixed(2) : '',
-            balance: row.balance === undefined ? '' : row.balance.toFixed(2),
-            category: row.category,
-            reference: row.reference
-          }
-        }
-      ]
-    })
+  const currencyCode = resolveCurrencyCode(project.settings.currencyCode)
+  const kept = project.entries.filter((entry) => entry.status === 'keep')
+  const mapped = kept.map((entry) => ({ entry, row: mapFinancialEntry(entry, mapping) }))
+
+  const runningBalance = template?.runningBalance ?? DEFAULT_KEPT_EXPORT_RUNNING_BALANCE
+  let calculated: Map<string, number> | undefined
+  let decimalPlaces = DEFAULT_KEPT_EXPORT_RUNNING_BALANCE.decimalPlaces
+  if (runningBalance.enabled) {
+    decimalPlaces = Math.max(0, Math.min(6, Math.trunc(runningBalance.decimalPlaces)))
+    const inputRows: RunningBalanceInputRow[] = mapped.map(({ entry, row }) => ({
+      entryId: entry.id,
+      moneyIn: row?.moneyIn,
+      moneyOut: row?.moneyOut,
+      balance: row?.balance,
+      financiallyMapped: row !== null
+    }))
+    calculated = buildRunningBalanceValues(inputRows, runningBalance).values
+  }
+
+  return mapped.map(({ entry, row }) => {
+    // Non-financial entries still export; only the money/date columns stay blank.
+    const originalBalance =
+      row?.balance === undefined ? '' : formatCurrencyAmount(row.balance, currencyCode)
+    const calculatedValue = calculated?.get(entry.id)
+    const calculatedBalance =
+      calculatedValue === undefined
+        ? ''
+        : formatCurrencyAmount(calculatedValue, currencyCode, { decimalPlaces })
+    return {
+      entryId: entry.id,
+      values: {
+        text: entry.normalizedText,
+        payee: entry.payee ?? row?.payee ?? row?.description ?? '',
+        date: row?.date ?? entry.date ?? '',
+        'money-out': row?.moneyOut ? formatCurrencyAmount(row.moneyOut, currencyCode) : '',
+        'money-in': row?.moneyIn ? formatCurrencyAmount(row.moneyIn, currencyCode) : '',
+        balance:
+          runningBalance.enabled && runningBalance.balanceFieldMode === 'replace-original'
+            ? calculatedBalance
+            : originalBalance,
+        'calculated-balance': calculatedBalance,
+        category: row?.category ?? entry.category ?? '',
+        reference: referenceForEntry(entry, row?.reference)
+      }
+    }
+  })
 }
 
 export async function exportProjectKeptEntriesTemplatePdf(
   project: ProjectState,
   template: KeptExportTemplate
 ): Promise<Uint8Array> {
-  const plan = buildKeptExportRenderPlan(sourceRows(project), template)
+  const plan = buildKeptExportRenderPlan(sourceRows(project, template), template)
   if (plan.warnings.some((warning) => warning.code === 'no-columns')) {
     throw new Error('The export template needs at least one column.')
   }
@@ -162,6 +202,15 @@ export async function exportProjectKeptEntriesTemplatePdf(
         size: placement.style.fontSize,
         font,
         color: pdfColor(placement.style.color)
+      })
+    }
+    for (const divider of renderedPage.dividers) {
+      page.drawLine({
+        start: { x: divider.startX, y: pageSize.height - divider.y },
+        end: { x: divider.endX, y: pageSize.height - divider.y },
+        thickness: divider.thickness,
+        color: pdfColor(divider.color),
+        opacity: divider.opacity
       })
     }
     const summaryFields = (template as KeptExportTemplate & { summaryFields?: SummaryField[] })

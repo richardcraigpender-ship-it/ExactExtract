@@ -29,6 +29,7 @@ import { RecentProjectsPanel } from './components/RecentProjectsPanel'
 import { ProductUpdatesPanel } from './components/ProductUpdatesPanel'
 import { RemovePagesPanel } from './components/RemovePagesPanel'
 import { HighlightToolPanel } from './components/HighlightToolPanel'
+import { StyleProfilePanel } from './components/StyleProfilePanel'
 import {
   applyHighlightGeometry,
   measureHighlight,
@@ -74,16 +75,37 @@ import { useIncrementalReviewFilter } from './hooks/useIncrementalReviewFilter'
 import { normalizeReviewQuery } from './hooks/reviewFiltering'
 import { classifyPdfFailure, validatePdfImportBatch, validatePdfLimits } from '../../hardening'
 import { hasPdfHeader, remapPageNumber, restoreOriginalPageNumber } from './lib/removePdfPages'
+import { detectDocumentStyleProfile } from './lib/documentStyle'
 import type {
+  DocumentStyleProfile,
   ExtractionSettings,
   ProjectDocument,
   ProjectEntry,
   ReviewStatus,
   ProjectState
 } from '../../shared/contracts'
-import type { KeptEntriesCanvasLayout } from '../../shared/keptEntriesLayout'
+import {
+  currencySymbol,
+  POPULAR_CURRENCIES,
+  resolveCurrencyCode,
+  type CurrencyCode
+} from '../../shared/currencies'
+import type {
+  KeptEntriesCanvasLayout,
+  KeptImagePlacementOptions,
+  KeptImageSourceDescriptor
+} from '../../shared/keptEntriesLayout'
 import type { KeptImageSourceRef } from '../../shared/keptEntriesLayout'
 import type { KeptExportTemplate } from '../../shared/keptExportTemplate'
+import {
+  dividerStyleToKeptExportDivider,
+  textStyleToKeptExportTextStyle,
+  type TextStyleCluster
+} from '../../shared/documentStyle'
+import {
+  createKeptExportTemplateDraft,
+  toKeptExportTemplate
+} from './components/keptExportTemplateDraft'
 import { LengthField } from './components/LengthField'
 import { LengthUnitSelect } from './components/LengthUnitSelect'
 import { CANONICAL_LENGTH_UNIT, isLengthUnit, type LengthUnit } from '../../shared/units'
@@ -95,6 +117,7 @@ import {
   type SaveRecoveryState
 } from '../../recovery'
 import {
+  copyKeptEntryReferencesToNotes,
   detectReviewIssues,
   findEntryDirectlyAbove,
   findPreferredSourceRegion,
@@ -143,6 +166,8 @@ interface IncomingDocument {
   name: string
   size: number
 }
+
+type StyledLocalParserResult = LocalParserResult & { styleProfile?: DocumentStyleProfile }
 
 const modeOptions: Array<{ id: ExtractionMode; label: string; description: string }> = [
   { id: 'fast', label: 'Fast', description: 'Use embedded PDF text where available.' },
@@ -267,6 +292,9 @@ function App(): React.JSX.Element {
     const saved = localStorage.getItem('studio-length-unit')
     return isLengthUnit(saved) ? saved : CANONICAL_LENGTH_UNIT
   })
+  const [currencyCode, setCurrencyCode] = useState<CurrencyCode>(() =>
+    resolveCurrencyCode(localStorage.getItem('studio-currency-code'))
+  )
   const [isDragging, setIsDragging] = useState(false)
   const [isImporting, setIsImporting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -280,6 +308,7 @@ function App(): React.JSX.Element {
   const [tableTopY, setTableTopY] = useState('')
   const [tableBottomY, setTableBottomY] = useState('')
   const [tableTemplateStatus, setTableTemplateStatus] = useState<string | null>(null)
+  const [styleDetectionStatus, setStyleDetectionStatus] = useState<string | null>(null)
   const [tableColumns, setTableColumns] = useState<TableColumnDefinition[]>([
     { name: 'Description', type: 'text', xStart: 36, xEnd: 300, required: true },
     { name: 'Amount', type: 'currency', xStart: 300, xEnd: 576, required: true }
@@ -322,6 +351,7 @@ function App(): React.JSX.Element {
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null)
   const [selectedReviewIds, setSelectedReviewIds] = useState<Set<string>>(() => new Set())
   const [bulkTag, setBulkTag] = useState('')
+  const [referenceCopyStatus, setReferenceCopyStatus] = useState('')
   const [workspaceMode, setWorkspaceMode] = useState<RightWorkspaceMode>('review')
   const [analysisConfiguration, setAnalysisConfiguration] = useState<AnalysisConfiguration>(
     DEFAULT_ANALYSIS_CONFIGURATION
@@ -329,7 +359,7 @@ function App(): React.JSX.Element {
   const [exportState, setExportState] = useState({ isSaving: false, status: 'Ready to export' })
   const [exportRowHeight, setExportRowHeight] = useState('18')
   const [commandPopup, setCommandPopup] = useState<{
-    kind: 'search' | 'goto'
+    kind: 'search' | 'goto' | 'currency'
     x: number
     y: number
     value: string
@@ -340,6 +370,7 @@ function App(): React.JSX.Element {
   const [keptEntriesLayout, setKeptEntriesLayout] = useState<KeptEntriesCanvasLayout>(
     DEFAULT_KEPT_ENTRIES_LAYOUT
   )
+  const [keptExportTemplate, setKeptExportTemplate] = useState<KeptExportTemplate | undefined>()
   const [showKeptCanvas, setShowKeptCanvas] = useState(false)
   // Session crops are regenerated for display only and dropped when the canvas closes.
   const [sessionImageUrls, setSessionImageUrls] = useState<ReadonlyMap<string, string>>(new Map())
@@ -349,6 +380,7 @@ function App(): React.JSX.Element {
     () => documents.find((document) => document.path === activePath) ?? documents[0],
     [activePath, documents]
   )
+  const activeStyleProfile = activeDocument?.styleProfile
 
   const projectRef = useRef(project)
   const documentsRef = useRef(documents)
@@ -910,20 +942,24 @@ function App(): React.JSX.Element {
         theme,
         extraction: extractionSettings,
         splitPanePercent: panePercent,
-        lengthUnit
+        lengthUnit,
+        currencyCode
       },
-      keptEntriesLayout
+      keptEntriesLayout,
+      keptExportTemplate
     }
   }, [
     analysisSnapshot,
     documents,
     extractionSettings,
     lengthUnit,
+    currencyCode,
     panePercent,
     persistedAnalysisState,
     preflight,
     project,
     theme,
+    keptExportTemplate,
     keptEntriesLayout
   ])
 
@@ -946,6 +982,10 @@ function App(): React.JSX.Element {
     setStoredLengthUnit(lengthUnit)
     localStorage.setItem('studio-length-unit', lengthUnit)
   }, [lengthUnit])
+
+  useEffect(() => {
+    localStorage.setItem('studio-currency-code', currencyCode)
+  }, [currencyCode])
 
   useEffect(() => {
     screenHeadingRef.current?.focus()
@@ -1068,8 +1108,14 @@ function App(): React.JSX.Element {
       const created = await window.studio.projects.create(
         `PDF Review ${new Date().toLocaleDateString()}`
       )
-      setProject(created)
+      const selectedCurrencyCode = currencyCode
+      setProject({
+        ...created,
+        settings: { ...created.settings, currencyCode: selectedCurrencyCode }
+      })
+      setCurrencyCode(selectedCurrencyCode)
       setAnalysisConfiguration(DEFAULT_ANALYSIS_CONFIGURATION)
+      setKeptExportTemplate(undefined)
       setWorkspaceMode('review')
       setDocuments([])
       setPreflight({})
@@ -1109,6 +1155,7 @@ function App(): React.JSX.Element {
       setKeptEntriesLayout(
         loaded.keptEntriesLayout ?? createDefaultKeptEntriesLayout(loaded.entries)
       )
+      setKeptExportTemplate(loaded.keptExportTemplate)
       setAnalysisConfiguration(savedAnalysis?.configuration ?? DEFAULT_ANALYSIS_CONFIGURATION)
       setWorkspaceMode('review')
       setDocuments(loaded.documents)
@@ -1119,6 +1166,7 @@ function App(): React.JSX.Element {
       setOcrLanguages(loaded.settings.extraction.ocrLanguages)
       setPanePercent(loaded.settings.splitPanePercent)
       setLengthUnit(loaded.settings.lengthUnit ?? CANONICAL_LENGTH_UNIT)
+      setCurrencyCode(resolveCurrencyCode(loaded.settings.currencyCode))
       if (loaded.settings.theme !== 'system') setTheme(loaded.settings.theme)
       setScreen(loaded.documents.length > 0 ? 'workspace' : 'import')
       undoStackRef.current = []
@@ -1204,17 +1252,27 @@ function App(): React.JSX.Element {
         : current
     )
     try {
-      const results = await runExtractionBatch<LocalParserResult>(documents, {
+      const results = await runExtractionBatch<StyledLocalParserResult>(documents, {
         signal: controller.signal,
         onDocumentStart: (document) => setExtractionStage(`Parsing ${document.name}`),
         extract: async (document, onProgress) => {
           const data = await window.studio.documents.readPdf(document.path)
-          return extractPdfLocally(document.id, new Uint8Array(data), {
+          const sourceBytes = new Uint8Array(data)
+          const result = await extractPdfLocally(document.id, sourceBytes, {
             settings: extractionSettings,
             tableTemplate,
             signal: controller.signal,
             onOcrProgress: onProgress
           })
+          try {
+            const styleProfile = await detectDocumentStyleProfile(document.id, sourceBytes)
+            return { ...result, styleProfile }
+          } catch (styleError) {
+            const message =
+              styleError instanceof Error ? styleError.message : 'Style detection failed.'
+            setStyleDetectionStatus(`Style detection warning for ${document.name}: ${message}`)
+            return result
+          }
         },
         onProgress: (batchProgress) => {
           const progress = batchProgress.ocr
@@ -1250,7 +1308,23 @@ function App(): React.JSX.Element {
         }
       })
       const entries = results.flatMap((result) => result.entries)
+      const styleProfiles = new Map(
+        results.flatMap((result) =>
+          result.styleProfile ? [[result.extraction.documentId, result.styleProfile] as const] : []
+        )
+      )
       const completedAt = new Date().toISOString()
+      if (styleProfiles.size > 0) {
+        setDocuments((current) =>
+          current.map((document) => {
+            const styleProfile = styleProfiles.get(document.id)
+            return styleProfile ? { ...document, styleProfile } : document
+          })
+        )
+        setStyleDetectionStatus(
+          `Style profile updated for ${styleProfiles.size} document${styleProfiles.size === 1 ? '' : 's'}.`
+        )
+      }
       setProject((current) =>
         current
           ? {
@@ -1557,6 +1631,43 @@ function App(): React.JSX.Element {
     })
     setBulkTag('')
   }, [bulkTag])
+
+  const copyKeptReferencesToNotes = useCallback((): void => {
+    const occurredAt = new Date().toISOString()
+    setProject((current) => {
+      if (!current) return current
+      const result = copyKeptEntryReferencesToNotes(current.entries, occurredAt)
+      if (result.updatedEntryCount === 0) {
+        setReferenceCopyStatus('No kept-entry references found to copy.')
+        return current
+      }
+      undoStackRef.current = [...undoStackRef.current, current.entries]
+      redoStackRef.current = []
+      setHistoryState({ undoCount: undoStackRef.current.length, redoCount: 0 })
+      setReferenceCopyStatus(
+        `Copied ${result.copiedReferenceCount} reference${result.copiedReferenceCount === 1 ? '' : 's'} into ${result.updatedEntryCount} kept entr${result.updatedEntryCount === 1 ? 'y' : 'ies'}.`
+      )
+      return {
+        ...current,
+        entries: result.entries,
+        auditTrail: [
+          ...current.auditTrail,
+          {
+            id: crypto.randomUUID(),
+            occurredAt,
+            action: 'kept-references-copied-to-notes',
+            entityType: 'project',
+            entityId: current.id,
+            details: {
+              entries: result.updatedEntryCount,
+              references: result.copiedReferenceCount
+            }
+          }
+        ],
+        updatedAt: occurredAt
+      }
+    })
+  }, [])
 
   const navigateToEntry = useCallback((entryId: string): void => {
     const entry = projectRef.current?.entries.find((candidate) => candidate.id === entryId)
@@ -2274,12 +2385,17 @@ function App(): React.JSX.Element {
     if (!commandPopup) return
     if (commandPopup.kind === 'search') {
       setReviewQuery(commandPopup.value)
-    } else {
+    } else if (commandPopup.kind === 'goto') {
       const page = Number(commandPopup.value)
       if (Number.isFinite(page)) navigateToReviewPage(page)
     }
     setCommandPopup(null)
   }
+
+  const selectCurrencyCode = useCallback((nextCurrencyCode: CurrencyCode): void => {
+    setCurrencyCode(nextCurrencyCode)
+    setCommandPopup(null)
+  }, [])
 
   const customSettingsInvalid =
     mode === 'custom' &&
@@ -2301,13 +2417,47 @@ function App(): React.JSX.Element {
     setActivePath(path)
   }, [])
 
+  const detectActiveDocumentStyle = useCallback(async (): Promise<void> => {
+    if (!activeDocument) {
+      setStyleDetectionStatus('Select a source PDF before detecting style.')
+      return
+    }
+    setWorkspaceMode('style')
+    setStyleDetectionStatus(`Detecting style for ${activeDocument.name}...`)
+    try {
+      const data =
+        pdfData ?? new Uint8Array(await window.studio.documents.readPdf(activeDocument.path))
+      const styleProfile = await detectDocumentStyleProfile(activeDocument.id, data)
+      setDocuments((current) =>
+        current.map((document) =>
+          document.id === activeDocument.id ? { ...document, styleProfile } : document
+        )
+      )
+      setStyleDetectionStatus(
+        `Detected ${styleProfile.textStyles.length} text style${styleProfile.textStyles.length === 1 ? '' : 's'} for ${activeDocument.name}.`
+      )
+    } catch (styleError) {
+      setStyleDetectionStatus(
+        styleError instanceof Error ? styleError.message : 'Style detection failed.'
+      )
+    }
+  }, [activeDocument, pdfData])
+
   const handleRightWorkspaceCommand = useCallback(
     (command: RightWorkspaceCommand) => {
       if (command === 'zoom-out') pdfViewerRef.current?.zoomOut()
       else if (command === 'zoom-in') pdfViewerRef.current?.zoomIn()
       else if (command === 'import') void choosePdfs()
       else if (command === 'save') void retrySave()
-      else {
+      else if (command === 'detect-style') void detectActiveDocumentStyle()
+      else if (command === 'currency') {
+        setCommandPopup({
+          kind: 'currency',
+          x: 84,
+          y: Math.max(16, window.innerHeight - 360),
+          value: currencyCode
+        })
+      } else {
         setCommandPopup({
           kind: 'goto',
           x: Math.max(16, window.innerWidth - 300),
@@ -2316,8 +2466,45 @@ function App(): React.JSX.Element {
         })
       }
     },
-    [choosePdfs, retrySave]
+    [choosePdfs, currencyCode, detectActiveDocumentStyle, retrySave]
   )
+
+  const applyStyleProfileTextStyle = useCallback((style: TextStyleCluster): void => {
+    setKeptExportTemplate((current) => {
+      const draft = createKeptExportTemplateDraft(current)
+      const textStyle = textStyleToKeptExportTextStyle(style)
+      draft.pageOneTemplate.defaultTextStyle = textStyle
+      draft.pageOneTemplate.columns = draft.pageOneTemplate.columns.map((column) => ({
+        ...column,
+        textStyle
+      }))
+      if (draft.useSeparateLaterPages) {
+        draft.laterPagesTemplate.defaultTextStyle = textStyle
+        draft.laterPagesTemplate.columns = draft.laterPagesTemplate.columns.map((column) => ({
+          ...column,
+          textStyle
+        }))
+      }
+      return toKeptExportTemplate(draft)
+    })
+    setStyleDetectionStatus(
+      `Applied detected ${style.role} style to the kept text export template.`
+    )
+  }, [])
+
+  const applyStyleProfileDivider = useCallback((): void => {
+    const divider = activeStyleProfile?.dividerStyles[0]
+    if (!divider) return
+    setKeptExportTemplate((current) => {
+      const draft = createKeptExportTemplateDraft(current)
+      draft.pageOneTemplate.divider = dividerStyleToKeptExportDivider(divider)
+      if (draft.useSeparateLaterPages) {
+        draft.laterPagesTemplate.divider = dividerStyleToKeptExportDivider(divider)
+      }
+      return toKeptExportTemplate(draft)
+    })
+    setStyleDetectionStatus('Applied detected divider style to the kept text export template.')
+  }, [activeStyleProfile])
 
   const selectVisibleEntries = useCallback(() => {
     setSelectedReviewIds(new Set(pagedEntries.map((entry) => entry.id)))
@@ -2346,6 +2533,20 @@ function App(): React.JSX.Element {
   const handlePlaceKeptImages = useCallback((plan: KeptImagePlan) => {
     setKeptEntriesLayout((current) => withKeptImagePlacements(current, plan))
   }, [])
+
+  const handleImagePlacementConfigurationChange = useCallback(
+    (
+      imagePlacementOptions: KeptImagePlacementOptions,
+      uploadedImageSources: readonly KeptImageSourceDescriptor[]
+    ) => {
+      setKeptEntriesLayout((current) => ({
+        ...current,
+        imagePlacementOptions,
+        uploadedImageSources: uploadedImageSources ? [...uploadedImageSources] : undefined
+      }))
+    },
+    []
+  )
 
   // Uploaded images stream from managed storage; session crops must be regenerated for display.
   const resolveCanvasImageSource = useCallback(
@@ -2621,6 +2822,16 @@ function App(): React.JSX.Element {
               onMerge={mergeSelectedReviewEntries}
               onSplit={splitSelectedReviewEntry}
             />
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={
+                (project?.entries.some((entry) => entry.status === 'keep') ?? false) === false
+              }
+              onClick={copyKeptReferencesToNotes}
+            >
+              Copy refs to notes
+            </button>
             <div className="review-tag-actions">
               <label className="bulk-tag-field">
                 <span className="sr-only">Tag selected entries</span>
@@ -2645,6 +2856,11 @@ function App(): React.JSX.Element {
                 Add
               </button>
             </div>
+            {referenceCopyStatus && (
+              <span className="review-selection-count" role="status" aria-live="polite">
+                {referenceCopyStatus}
+              </span>
+            )}
           </div>
         </section>
       </div>
@@ -2653,6 +2869,7 @@ function App(): React.JSX.Element {
       addBulkTag,
       bulkTag,
       clearReviewSelection,
+      copyKeptReferencesToNotes,
       filteredEntries,
       hasSearchQuery,
       historyState.redoCount,
@@ -2666,6 +2883,7 @@ function App(): React.JSX.Element {
       reviewSource,
       reviewStatus,
       resetReviewFilters,
+      referenceCopyStatus,
       selectedEntry,
       selectedReviewEntries,
       selectedReviewIds,
@@ -2713,42 +2931,79 @@ function App(): React.JSX.Element {
       )}
       {commandPopup && (
         <div className="command-popup" style={{ left: commandPopup.x, top: commandPopup.y }}>
-          <label>
-            <span className="sr-only">
-              {commandPopup.kind === 'search' ? 'Search entries' : 'Go to page'}
-            </span>
-            <input
-              type={commandPopup.kind === 'goto' ? 'number' : 'text'}
-              min={commandPopup.kind === 'goto' ? 1 : undefined}
-              autoFocus
-              placeholder={commandPopup.kind === 'search' ? 'Search entries...' : 'Go to page...'}
-              value={commandPopup.value}
-              onChange={(event) =>
-                setCommandPopup((current) =>
-                  current ? { ...current, value: event.target.value } : current
-                )
-              }
+          {commandPopup.kind === 'currency' ? (
+            <div
+              className="currency-popup"
+              role="menu"
+              aria-label="Choose project currency"
               onKeyDown={(event) => {
-                if (event.key === 'Enter') {
-                  event.preventDefault()
-                  submitCommandPopup()
-                } else if (event.key === 'Escape') {
+                if (event.key === 'Escape') {
                   event.preventDefault()
                   setCommandPopup(null)
                 }
               }}
               onBlur={(event) => {
                 const nextFocusTarget = event.relatedTarget as Node | null
-                if (
-                  nextFocusTarget &&
-                  event.currentTarget.parentElement?.contains(nextFocusTarget)
-                ) {
-                  return
-                }
+                if (nextFocusTarget && event.currentTarget.contains(nextFocusTarget)) return
                 setCommandPopup(null)
               }}
-            />
-          </label>
+            >
+              <strong>Project currency</strong>
+              <div className="currency-popup-grid">
+                {POPULAR_CURRENCIES.map((currency) => (
+                  <button
+                    key={currency.code}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={currency.code === currencyCode}
+                    autoFocus={currency.code === currencyCode}
+                    onClick={() => selectCurrencyCode(currency.code)}
+                  >
+                    <span>{currency.symbol}</span>
+                    <span>{currency.code}</span>
+                    <small>{currency.name}</small>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <label>
+              <span className="sr-only">
+                {commandPopup.kind === 'search' ? 'Search entries' : 'Go to page'}
+              </span>
+              <input
+                type={commandPopup.kind === 'goto' ? 'number' : 'text'}
+                min={commandPopup.kind === 'goto' ? 1 : undefined}
+                autoFocus
+                placeholder={commandPopup.kind === 'search' ? 'Search entries...' : 'Go to page...'}
+                value={commandPopup.value}
+                onChange={(event) =>
+                  setCommandPopup((current) =>
+                    current ? { ...current, value: event.target.value } : current
+                  )
+                }
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter') {
+                    event.preventDefault()
+                    submitCommandPopup()
+                  } else if (event.key === 'Escape') {
+                    event.preventDefault()
+                    setCommandPopup(null)
+                  }
+                }}
+                onBlur={(event) => {
+                  const nextFocusTarget = event.relatedTarget as Node | null
+                  if (
+                    nextFocusTarget &&
+                    event.currentTarget.parentElement?.contains(nextFocusTarget)
+                  ) {
+                    return
+                  }
+                  setCommandPopup(null)
+                }}
+              />
+            </label>
+          )}
         </div>
       )}
       {showShortcutsHelp && (
@@ -2963,6 +3218,19 @@ function App(): React.JSX.Element {
               Import source documents
             </h1>
             <p>Add one or more PDFs. Duplicate paths are ignored.</p>
+            <label className="currency-select-field flow-currency-select">
+              <span>Currency</span>
+              <select
+                value={currencyCode}
+                onChange={(event) => selectCurrencyCode(event.target.value as CurrencyCode)}
+              >
+                {POPULAR_CURRENCIES.map((currency) => (
+                  <option key={currency.code} value={currency.code}>
+                    {currency.symbol} {currency.code} - {currency.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
           <div
             className={`drop-zone ${isDragging ? 'is-dragging' : ''}`}
@@ -3553,7 +3821,7 @@ function App(): React.JSX.Element {
                       </div>
                       <div className="review-source-page-nav" aria-label="Source page navigation">
                         <label className="review-source-page-select">
-                          <span>Start page</span>
+                          <span>Page</span>
                           <select
                             value={reviewSourcePage}
                             onChange={handleSelectReviewSourcePage}
@@ -3648,6 +3916,7 @@ function App(): React.JSX.Element {
                       entries={project?.entries ?? []}
                       configuration={analysisConfiguration}
                       snapshot={analysisSnapshot}
+                      currencyCode={currencyCode}
                       onConfigurationChange={setAnalysisConfiguration}
                       onNavigateToEntry={focusEntryInReview}
                     />
@@ -3666,12 +3935,28 @@ function App(): React.JSX.Element {
                       keptEntries={projectSnapshot.entries}
                       onTemplateExport={handleTemplateExport}
                       onTemplatePreview={handleTemplatePreview}
+                      keptExportTemplate={keptExportTemplate}
+                      onTemplateApply={setKeptExportTemplate}
+                      currencySymbol={currencySymbol(currencyCode)}
                       onPlaceKeptImages={handlePlaceKeptImages}
                       onOpenKeptCanvas={() => setShowKeptCanvas(true)}
                       placedImageCount={keptEntriesLayout.images?.length ?? 0}
                       onPreviewPlacedImages={() => setShowKeptCanvas(true)}
+                      imagePlacementOptions={keptEntriesLayout.imagePlacementOptions}
+                      uploadedImageSources={keptEntriesLayout.uploadedImageSources}
+                      onImagePlacementConfigurationChange={handleImagePlacementConfigurationChange}
                     />
                   ) : null,
+                  style: (
+                    <StyleProfilePanel
+                      profile={activeStyleProfile}
+                      status={styleDetectionStatus}
+                      onDetect={() => void detectActiveDocumentStyle()}
+                      onApplyBodyStyle={applyStyleProfileTextStyle}
+                      onApplyHeaderStyle={applyStyleProfileTextStyle}
+                      onApplyDividerStyle={applyStyleProfileDivider}
+                    />
+                  ),
                   pages: (
                     <PagePreviewStrip
                       pageCount={sourcePageCount}

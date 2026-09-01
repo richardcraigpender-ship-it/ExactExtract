@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useMemo, useState } from 'react'
+import React, { lazy, Suspense, useMemo, useRef, useState } from 'react'
 import { Download, Eye, FileJson, FileText, FileOutput, Images, Table } from 'lucide-react'
 import {
   buildSessionKeptImageSources,
@@ -6,6 +6,10 @@ import {
   type KeptImagePlan
 } from '../../../export'
 import type { ProjectEntry } from '../../../shared/contracts'
+import type {
+  KeptImagePlacementOptions,
+  KeptImageSourceDescriptor
+} from '../../../shared/keptEntriesLayout'
 import { ExportPreview } from './ExportPreview'
 import { uploadProjectPngs } from '../lib/projectImageUploads'
 import { WorkspaceToolWindow } from './WorkspaceToolWindow'
@@ -13,7 +17,7 @@ import { KeptImageLayoutEditor } from './KeptImageLayoutEditor'
 import { KeptExportTemplateEditor } from './KeptExportTemplateEditor'
 import {
   cloneKeptExportTemplateDraft,
-  createDefaultKeptExportTemplateDraft,
+  createKeptExportTemplateDraft,
   toKeptExportTemplate,
   type KeptExportTemplateDraft
 } from './keptExportTemplateDraft'
@@ -51,10 +55,19 @@ interface ExportPanelProps {
   keptEntries?: readonly ProjectEntry[]
   onTemplateExport?: (template: KeptExportTemplate) => void
   onTemplatePreview?: (template: KeptExportTemplate) => Promise<Uint8Array>
+  keptExportTemplate?: KeptExportTemplate
+  onTemplateApply?: (template: KeptExportTemplate) => void
+  currencySymbol?: string
   onPlaceKeptImages?: (plan: KeptImagePlan) => void
   onOpenKeptCanvas?: () => void
   placedImageCount?: number
   onPreviewPlacedImages?: () => void
+  imagePlacementOptions?: KeptImagePlacementOptions
+  uploadedImageSources?: readonly KeptImageSourceDescriptor[]
+  onImagePlacementConfigurationChange?: (
+    options: KeptImagePlacementOptions,
+    uploadedSources: readonly KeptImageSourceDescriptor[]
+  ) => void
 }
 
 export const ExportPanel = React.memo(function ExportPanel({
@@ -70,23 +83,50 @@ export const ExportPanel = React.memo(function ExportPanel({
   keptEntries = [],
   onTemplateExport,
   onTemplatePreview,
+  keptExportTemplate,
+  onTemplateApply,
+  currencySymbol = '£',
   onPlaceKeptImages,
   onOpenKeptCanvas,
   placedImageCount,
-  onPreviewPlacedImages
+  onPreviewPlacedImages,
+  imagePlacementOptions,
+  uploadedImageSources,
+  onImagePlacementConfigurationChange
 }: ExportPanelProps): React.JSX.Element {
   const [previewFormat, setPreviewFormat] = useState<PdfExportFormat>('pdf')
   const [previewData, setPreviewData] = useState<Uint8Array | null>(null)
   const [isPreviewing, setIsPreviewing] = useState(false)
+  const [previewError, setPreviewError] = useState<string | null>(null)
+  const [templateStatus, setTemplateStatus] = useState<string | null>(null)
+  const [autoCloseTemplateEditor, setAutoCloseTemplateEditor] = useState(
+    () =>
+      typeof localStorage !== 'undefined' &&
+      localStorage.getItem('studio-kept-template-auto-close') === 'true'
+  )
   const [showTemplateEditor, setShowTemplateEditor] = useState(false)
   const [showImageLayoutEditor, setShowImageLayoutEditor] = useState(false)
   const [templateDraft, setTemplateDraft] = useState<KeptExportTemplateDraft>(() =>
-    createDefaultKeptExportTemplateDraft()
+    createKeptExportTemplateDraft(keptExportTemplate)
   )
+  const latestTemplateDraftRef = useRef(templateDraft)
   const sessionImageSources = useMemo(
     () => buildSessionKeptImageSources(keptEntries),
     [keptEntries]
   )
+  const applyTemplateDraft = (draft: KeptExportTemplateDraft): void => {
+    const savedDraft = cloneKeptExportTemplateDraft(draft)
+    latestTemplateDraftRef.current = savedDraft
+    setTemplateDraft(savedDraft)
+    onTemplateApply?.(toKeptExportTemplate(savedDraft))
+    setTemplateStatus('Kept text export template applied.')
+  }
+  const changeAutoCloseTemplateEditor = (value: boolean): void => {
+    setAutoCloseTemplateEditor(value)
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('studio-kept-template-auto-close', String(value))
+    }
+  }
 
   return (
     <aside className="export-panel" aria-label="Export reviewed project">
@@ -138,10 +178,20 @@ export const ExportPanel = React.memo(function ExportPanel({
                 className="secondary-button"
                 type="button"
                 disabled={isSaving || keptEntries.length === 0}
-                onClick={() => setShowTemplateEditor(true)}
+                onClick={() => {
+                  const draft = createKeptExportTemplateDraft(keptExportTemplate)
+                  latestTemplateDraftRef.current = draft
+                  setTemplateDraft(draft)
+                  setShowTemplateEditor(true)
+                }}
               >
                 <FileOutput size={13} /> Configure kept text export
               </button>
+            )}
+            {templateStatus && (
+              <span className="export-inline-status" role="status" aria-live="polite">
+                {templateStatus}
+              </span>
             )}
             {onPlaceKeptImages && (
               <button
@@ -276,26 +326,62 @@ export const ExportPanel = React.memo(function ExportPanel({
         <WorkspaceToolWindow
           title="Configure kept text export"
           className="workspace-tool-window--kept-template"
-          onClose={() => setShowTemplateEditor(false)}
+          onClose={() => {
+            applyTemplateDraft(latestTemplateDraftRef.current)
+            setShowTemplateEditor(false)
+          }}
         >
           <KeptExportTemplateEditor
             initialDraft={templateDraft}
+            onDraftChange={(draft) => {
+              latestTemplateDraftRef.current = draft
+            }}
             onCancel={() => setShowTemplateEditor(false)}
             onApply={(draft) => {
-              setTemplateDraft(cloneKeptExportTemplateDraft(draft))
-              setShowTemplateEditor(false)
+              applyTemplateDraft(draft)
+              if (autoCloseTemplateEditor) setShowTemplateEditor(false)
             }}
             onExport={(draft) => {
-              setTemplateDraft(cloneKeptExportTemplateDraft(draft))
+              applyTemplateDraft(draft)
               onTemplateExport(toKeptExportTemplate(draft))
-              setShowTemplateEditor(false)
+              if (autoCloseTemplateEditor) setShowTemplateEditor(false)
             }}
             onPreview={(draft) => {
               if (!onTemplatePreview) return
-              void onTemplatePreview(toKeptExportTemplate(draft)).then(setPreviewData)
+              setPreviewError(null)
+              setTemplateStatus('Generating kept text preview...')
+              setIsPreviewing(true)
+              void onTemplatePreview(toKeptExportTemplate(draft))
+                .then((data) => {
+                  setPreviewData(data)
+                  setTemplateStatus(
+                    autoCloseTemplateEditor
+                      ? 'Kept text preview generated.'
+                      : 'Kept text preview generated. Close this window to view it.'
+                  )
+                  if (autoCloseTemplateEditor) setShowTemplateEditor(false)
+                })
+                .catch((error: unknown) =>
+                  setPreviewError(
+                    error instanceof Error
+                      ? error.message
+                      : 'Unable to generate the kept-text preview.'
+                  )
+                )
+                .finally(() => setIsPreviewing(false))
             }}
             isExporting={isSaving}
+            isPreviewing={isPreviewing}
+            autoCloseAfterAction={autoCloseTemplateEditor}
+            onAutoCloseAfterActionChange={changeAutoCloseTemplateEditor}
+            actionStatus={templateStatus}
+            currencySymbol={currencySymbol}
           />
+          {previewError && (
+            <p className="kept-template-errors" role="alert">
+              {previewError}
+            </p>
+          )}
         </WorkspaceToolWindow>
       )}
       {showImageLayoutEditor && onPlaceKeptImages && (
@@ -313,6 +399,9 @@ export const ExportPanel = React.memo(function ExportPanel({
             onUploadPngs={uploadProjectPngs}
             onPreviewPlacedImages={onPreviewPlacedImages ?? onOpenKeptCanvas ?? (() => undefined)}
             onClose={() => setShowImageLayoutEditor(false)}
+            initialOptions={imagePlacementOptions}
+            initialUploadedSources={uploadedImageSources}
+            onConfigurationChange={onImagePlacementConfigurationChange ?? (() => undefined)}
           />
         </WorkspaceToolWindow>
       )}

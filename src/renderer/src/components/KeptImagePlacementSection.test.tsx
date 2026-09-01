@@ -42,6 +42,56 @@ const sessionSources: KeptImageSourceDescriptor[] = [
   }
 ]
 
+test('offers divider controls that stay disabled until the divider is enabled', () => {
+  const markup = renderToStaticMarkup(
+    <KeptImagePlacementSection
+      pageSize="letter"
+      orientation="portrait"
+      sessionSources={sessionSources}
+      onPlaceImages={() => {}}
+    />
+  )
+
+  assert.match(markup, /Entry divider/)
+  assert.match(markup, /Show a divider after every image/)
+  assert.match(markup, /Thickness \(pt\)/)
+  assert.match(markup, /Opacity/)
+  assert.match(markup, /type="color"[^>]*disabled=""/)
+})
+
+test('enables the divider fields once the divider is turned on', () => {
+  const markup = renderToStaticMarkup(
+    <KeptImagePlacementSection
+      pageSize="letter"
+      orientation="portrait"
+      sessionSources={sessionSources}
+      onPlaceImages={() => {}}
+      initialOptions={{
+        sourceMode: 'session-entry',
+        startX: 48,
+        startY: 48,
+        fillBetweenY: false,
+        entriesPerPage: 6,
+        gap: 12,
+        preserveAspectRatio: true,
+        uniformSlots: false,
+        divider: {
+          enabled: true,
+          startX: 40,
+          endX: 300,
+          width: 260,
+          thickness: 2,
+          color: '#336699',
+          opacity: 0.5
+        }
+      }}
+    />
+  )
+
+  assert.match(markup, /value="#336699"/)
+  assert.doesNotMatch(markup, /type="color"[^>]*disabled=""/)
+})
+
 test('offers both image sources and the documented placement controls', () => {
   const markup = renderToStaticMarkup(
     <KeptImagePlacementSection

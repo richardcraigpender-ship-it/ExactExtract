@@ -148,6 +148,60 @@ test('persists removed source pages across project reopen', async () => {
   })
 })
 
+test('persists compact document style profiles across project reopen', async () => {
+  await withStore(async (store, directory) => {
+    const project = store.create('Styled document', 'styled-document')
+    project.documents.push({
+      id: 'document-1',
+      path: 'statement.pdf',
+      name: 'statement.pdf',
+      size: 100,
+      importedAt: project.createdAt,
+      styleProfile: {
+        id: 'style-profile-1',
+        documentId: 'document-1',
+        generatedAt: project.createdAt,
+        detectorVersion: 1,
+        source: 'pdf-text',
+        confidence: 'high',
+        textStyles: [
+          {
+            id: 'body-style',
+            fontFamily: 'Helvetica',
+            fontSize: 11,
+            fontWeight: 'regular',
+            italic: false,
+            underline: false,
+            colour: { hex: '#17231c', name: 'Text' },
+            likelyRole: 'body',
+            occurrenceCount: 8,
+            characterCount: 120,
+            pageNumbers: [1],
+            sampleText: ['Transaction row']
+          }
+        ],
+        dividerStyles: [],
+        colourPalette: [{ hex: '#17231c', name: 'Text', occurrenceCount: 8, likelyRole: 'text' }],
+        pageSummaries: [
+          {
+            pageNumber: 1,
+            textStyleClusterIds: ['body-style'],
+            dominantTextStyleId: 'body-style',
+            imageObjectCount: 0,
+            characterCount: 120
+          }
+        ],
+        warnings: []
+      }
+    })
+
+    await store.save(project)
+    const reopened = await new ProjectStore(directory).load(project.id)
+
+    assert.deepEqual(reopened.documents[0]?.styleProfile, project.documents[0]?.styleProfile)
+  })
+})
+
 test('removing a recent project preserves its file and global payees', async () => {
   await withStore(async (store, directory) => {
     const payeeStore = new PayeeStore(directory)

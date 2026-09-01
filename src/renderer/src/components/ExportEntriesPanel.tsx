@@ -9,6 +9,7 @@ interface ExportEntriesPanelProps {
   entries: readonly ProjectEntry[]
   placements: readonly KeptEntryPlacement[]
   onEntryTextChange?: (entryId: string, normalizedText: string) => void
+  onPlaceEntry?: (entry: ProjectEntry) => void
   onReorder?: (entryIds: string[]) => void
   allowCanvasDrag?: boolean
 }
@@ -17,6 +18,7 @@ export function ExportEntriesPanel({
   entries,
   placements,
   onEntryTextChange,
+  onPlaceEntry,
   onReorder,
   allowCanvasDrag = false
 }: ExportEntriesPanelProps): React.JSX.Element {
@@ -56,6 +58,15 @@ export function ExportEntriesPanel({
             className={`export-entry-item ${placedEntryIds.has(entry.id) ? 'is-placed' : ''}`}
             key={entry.id}
             draggable={Boolean(onReorder) || allowCanvasDrag}
+            tabIndex={onPlaceEntry ? 0 : undefined}
+            role={onPlaceEntry ? 'button' : undefined}
+            aria-label={onPlaceEntry ? `Place kept entry ${entry.id} on canvas` : undefined}
+            onClick={() => onPlaceEntry?.(entry)}
+            onKeyDown={(event) => {
+              if (!onPlaceEntry || (event.key !== 'Enter' && event.key !== ' ')) return
+              event.preventDefault()
+              onPlaceEntry(entry)
+            }}
             onDragStart={(event) => {
               setDraggedEntryId(entry.id)
               setKeptEntryDragData(event.dataTransfer, entry.id)

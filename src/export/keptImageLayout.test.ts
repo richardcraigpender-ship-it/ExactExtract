@@ -249,3 +249,37 @@ test('applying a plan widens the layout version and keeps text placements', () =
   assert.equal(updated.images?.length, 2)
   assert.deepEqual(updated.placements, layout.placements)
 })
+
+test('applying a plan preserves image placement options atomically', () => {
+  const layout: KeptEntriesCanvasLayout = {
+    version: 1,
+    pageSize: 'letter',
+    orientation: 'portrait',
+    placements: []
+  }
+  const plan = planKeptEntryImagePlacements([source('a')], options({ entriesPerPage: 1 }))
+  plan.options = {
+    sourceMode: 'uploaded-png',
+    startX: 48,
+    startY: 60,
+    fillBetweenY: false,
+    gap: 10,
+    entriesPerPage: 1,
+    preserveAspectRatio: true,
+    uniformSlots: false,
+    divider: {
+      enabled: true,
+      width: 240,
+      thickness: 2,
+      color: '#336699',
+      opacity: 0.5,
+      startX: 40,
+      endX: 280
+    }
+  }
+
+  const updated = withKeptImagePlacements(layout, plan)
+
+  assert.equal(updated.imagePlacementOptions?.divider?.enabled, true)
+  assert.equal(updated.imagePlacementOptions?.divider?.endX, 280)
+})

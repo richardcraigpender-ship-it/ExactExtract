@@ -4,6 +4,7 @@ import { groupPageLines } from './layout'
 import { buildDocumentPreflight } from './preflight'
 import { detectTableCandidates } from './tables'
 import { parseTextLayerPage } from './textLayer'
+import { detectDocumentStyleProfile } from '../style'
 import type { ParserExtractionResult, TableTemplate, TextLayerPageInput } from './types'
 
 export function extractDocumentTextLayer(
@@ -28,9 +29,11 @@ export function extractDocumentTextLayer(
   )
   const classification = detectDocumentKind(pages)
   const preflight = buildDocumentPreflight(documentId, pages, completedAt)
+  const styleProfile = detectDocumentStyleProfile(documentId, pageInputs, completedAt)
 
   return {
     documentId,
+    styleProfile,
     pages,
     blocks: pages.flatMap((page) => page.blocks),
     lines,

@@ -23,8 +23,20 @@ test('extracts ordered blocks and frozen-contract preflight data', () => {
         height: 792,
         rotation: 0,
         items: [
-          { str: 'INVOICE', transform: [1, 0, 0, 10, 40, 700], width: 80, height: 10 },
-          { str: 'Amount due 200', transform: [1, 0, 0, 10, 40, 680], width: 100, height: 10 }
+          {
+            str: 'INVOICE',
+            fontName: 'ABCDEE+InvoiceSans-Bold',
+            transform: [1, 0, 0, 16, 40, 700],
+            width: 80,
+            height: 16
+          },
+          {
+            str: 'Amount due 200',
+            fontName: 'ABCDEE+InvoiceSans-Regular',
+            transform: [1, 0, 0, 10, 40, 680],
+            width: 100,
+            height: 10
+          }
         ]
       }
     ],
@@ -39,6 +51,9 @@ test('extracts ordered blocks and frozen-contract preflight data', () => {
   assert.equal(result.preflight.pages[1]?.ocrRecommended, true)
   assert.equal(result.preflight.completedAt, '2026-08-15T12:00:00.000Z')
   assert.equal(result.blocks.length, 2)
+  assert.equal(result.styleProfile?.source, 'pdf-text')
+  assert.equal(result.styleProfile?.generatedAt, '2026-08-15T12:00:00.000Z')
+  assert.ok(result.styleProfile?.textStyles.some((style) => style.likelyRole === 'header'))
 })
 
 test('rejects pages from another document', () => {

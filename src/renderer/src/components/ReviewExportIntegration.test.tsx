@@ -33,9 +33,18 @@ const snapshot: ExportSnapshot = {
     name: 'Review project',
     schemaVersion: 1,
     createdAt: '2026-08-16T10:00:00.000Z',
-    updatedAt: '2026-08-16T11:00:00.000Z'
+    updatedAt: '2026-08-16T11:00:00.000Z',
+    currencyCode: 'GBP'
   },
-  documents: [{ id: 'document-1', name: 'source.pdf', pageCount: 1 }],
+  documents: [
+    {
+      id: 'document-1',
+      name: 'source.pdf',
+      size: 100,
+      importedAt: '2026-08-16T10:00:00.000Z',
+      pageCount: 1
+    }
+  ],
   sections: { kept: [], maybe: [] },
   summary: { documentCount: 1, keptCount: 0, maybeCount: 0, excludedCount: 0 }
 }
@@ -60,6 +69,42 @@ test('renders PDF, CSV, and JSON save commands with preview status', () => {
   assert.match(markup, /Kept original layout/)
   assert.match(markup, /Ready to export/)
   assert.match(markup, /Review project/)
+})
+
+test('shows currency symbols for numeric kept entries in the export preview', () => {
+  const keptSnapshot: ExportSnapshot = {
+    ...snapshot,
+    sections: {
+      kept: [
+        {
+          id: 'entry-1',
+          rawText: '125',
+          normalizedText: '$125.00',
+          numericValue: 125,
+          source: 'parser',
+          status: 'keep',
+          confidence: 0.9,
+          regions: [{ documentId: 'document-1', pageNumber: 1 }],
+          tags: [],
+          createdAt: '2026-08-16T10:00:00.000Z',
+          updatedAt: '2026-08-16T10:00:00.000Z'
+        }
+      ],
+      maybe: []
+    },
+    summary: { documentCount: 1, keptCount: 1, maybeCount: 0, excludedCount: 0 }
+  }
+
+  const markup = renderToStaticMarkup(
+    <ExportPanel
+      snapshot={keptSnapshot}
+      status="Ready to export"
+      isSaving={false}
+      onSave={() => {}}
+    />
+  )
+
+  assert.match(markup, /\$125\.00/)
 })
 
 test('separates kept text and PNG layout configuration commands', () => {

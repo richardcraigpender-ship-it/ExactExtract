@@ -43,6 +43,26 @@ if (!app.commandLine.hasSwitch('user-data-dir')) {
   app.setPath('userData', join(app.getPath('appData'), 'pdf-extract-review-studio'))
 }
 
+// Keep Chromium disk cache out of the shared profile during dev to prevent lock contention
+// when multiple local runs overlap.
+if (is.dev) {
+  app.setPath('sessionData', join(app.getPath('temp'), 'pdf-extract-review-studio-session'))
+}
+
+// Multiple dev launches can race over Chromium cache files under the same user-data directory.
+// Keep a single app instance and focus it when a second launch is attempted.
+const hasSingleInstanceLock = app.requestSingleInstanceLock()
+if (!hasSingleInstanceLock) {
+  app.quit()
+}
+
+app.on('second-instance', () => {
+  const [window] = BrowserWindow.getAllWindows()
+  if (!window) return
+  if (window.isMinimized()) window.restore()
+  window.focus()
+})
+
 interface PdfFileDescriptor {
   path: string
   name: string

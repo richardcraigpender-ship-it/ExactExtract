@@ -188,9 +188,11 @@ export async function exportProjectPdf(
   heading('Source documents')
   if (snapshot.documents.length === 0) drawLines(['No source documents.'], 10, regular)
   for (const document of snapshot.documents) {
+    const metadata = document.metadata
+    const styleMetadata = metadata?.styleProfile
     drawLines(
       wrapText(
-        `${document.name}${document.pageCount ? ` | ${document.pageCount} pages` : ''}${document.kind ? ` | ${document.kind}` : ''}`,
+        `${document.name}${document.pageCount ? ` | ${document.pageCount} pages` : ''}${document.kind ? ` | ${document.kind}` : ''} | imported ${document.importedAt} | ${document.size} bytes`,
         regular,
         10,
         CONTENT_WIDTH
@@ -198,6 +200,32 @@ export async function exportProjectPdf(
       10,
       regular
     )
+    if (metadata) {
+      drawLines(
+        wrapText(
+          `Source metadata: text ${metadata.textPageCount}, image ${metadata.imagePageCount}, mixed ${metadata.mixedPageCount}, rotated ${metadata.rotatedPageCount}, avg chars/page ${metadata.averageCharactersPerPage}${document.removedPages?.length ? `, removed pages ${document.removedPages.join('/')}` : ''}`,
+          regular,
+          8,
+          CONTENT_WIDTH
+        ),
+        8,
+        regular,
+        rgb(0.38, 0.43, 0.39)
+      )
+    }
+    if (styleMetadata) {
+      drawLines(
+        wrapText(
+          `Style profile: ${styleMetadata.textStyleCount} text styles, ${styleMetadata.dividerStyleCount} rules, ${styleMetadata.colourCount} colours, ${styleMetadata.confidence} confidence, ${styleMetadata.warningCount} warnings`,
+          regular,
+          8,
+          CONTENT_WIDTH
+        ),
+        8,
+        regular,
+        rgb(0.38, 0.43, 0.39)
+      )
+    }
   }
 
   if ((options.metrics ?? []).length > 0) {
