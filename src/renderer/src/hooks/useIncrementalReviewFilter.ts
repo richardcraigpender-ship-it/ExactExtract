@@ -36,12 +36,23 @@ export function preserveIdentityIfUnchanged<T>(current: T[], next: T[]): T[] {
     : next
 }
 
+export function getInitialFilteredItems<T>(
+  items: readonly T[],
+  predicate: (item: T) => boolean,
+  enabled: boolean
+): T[] {
+  return enabled ? items.filter(predicate) : (items as T[])
+}
+
 export function useIncrementalReviewFilter<T>(
   items: readonly T[],
   filterKey: string,
-  predicate: (item: T) => boolean
+  predicate: (item: T) => boolean,
+  enabled = true
 ): T[] {
-  const [filteredItems, setFilteredItems] = useState<T[]>(() => items.filter(predicate))
+  const [filteredItems, setFilteredItems] = useState<T[]>(() =>
+    getInitialFilteredItems(items, predicate, enabled)
+  )
   const predicateRef = useRef(predicate)
   // Kept in a ref, and updated in an effect rather than during render, so that changing the
   // predicate identity every render does not retrigger the filter effect below. This effect is
@@ -51,6 +62,7 @@ export function useIncrementalReviewFilter<T>(
   }, [predicate])
 
   useEffect(() => {
+    if (!enabled) return
     const controller = new AbortController()
     void filterInChunks(
       items,
@@ -64,7 +76,7 @@ export function useIncrementalReviewFilter<T>(
       setFilteredItems((current) => preserveIdentityIfUnchanged(current, matches))
     })
     return () => controller.abort()
-  }, [filterKey, items])
+  }, [enabled, filterKey, items])
 
-  return filteredItems
+  return enabled ? filteredItems : (items as T[])
 }

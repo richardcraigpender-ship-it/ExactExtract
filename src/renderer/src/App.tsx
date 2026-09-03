@@ -72,7 +72,11 @@ import {
 } from './lib/keptImageResolution'
 import { useDebouncedValue } from './hooks/useDebouncedValue'
 import { useIncrementalReviewFilter } from './hooks/useIncrementalReviewFilter'
-import { normalizeReviewQuery } from './hooks/reviewFiltering'
+import {
+  entryMatchesReviewFilters,
+  hasActiveReviewFilters,
+  normalizeReviewQuery
+} from './hooks/reviewFiltering'
 import { classifyPdfFailure, validatePdfImportBatch, validatePdfLimits } from '../../hardening'
 import { hasPdfHeader, remapPageNumber, restoreOriginalPageNumber } from './lib/removePdfPages'
 import { detectDocumentStyleProfile } from './lib/documentStyle'
@@ -521,31 +525,15 @@ function App(): React.JSX.Element {
     return index
   }, [reviewIssues])
   const normalizedDebouncedReviewQuery = normalizeReviewQuery(debouncedReviewQuery)
-  const debouncedReviewFilterKey = [
-    normalizedDebouncedReviewQuery,
-    reviewStatus,
-    reviewSource,
-    reviewCategory,
-    reviewIssueFilter
-  ].join('|')
-  const matchesReviewEntry = useCallback(
-    (entry: ProjectEntry): boolean => {
-      const matchesStatus = reviewStatus === 'all' || entry.status === reviewStatus
-      const matchesSource = reviewSource === 'all' || entry.source === reviewSource
-      const matchesCategory = reviewCategory === 'all' || entry.category === reviewCategory
-      const matchesIssue = Boolean(
-        reviewIssueFilter === 'all' ||
-        issuesByEntry.get(entry.id)?.some((issue) => issue.code === reviewIssueFilter)
-      )
-      const matchesQuery =
-        normalizedDebouncedReviewQuery.length === 0 ||
-        entry.normalizedText.toLocaleLowerCase().includes(normalizedDebouncedReviewQuery) ||
-        entry.tags.some((tag) =>
-          tag.toLocaleLowerCase().includes(normalizedDebouncedReviewQuery)
-        ) ||
-        Boolean(entry.category?.toLocaleLowerCase().includes(normalizedDebouncedReviewQuery))
-      return matchesStatus && matchesSource && matchesCategory && matchesIssue && matchesQuery
-    },
+  const reviewFilterOptions = useMemo(
+    () => ({
+      query: normalizedDebouncedReviewQuery,
+      reviewStatus,
+      reviewSource,
+      reviewCategory,
+      reviewIssueFilter,
+      issuesByEntry
+    }),
     [
       issuesByEntry,
       normalizedDebouncedReviewQuery,
@@ -555,11 +543,24 @@ function App(): React.JSX.Element {
       reviewStatus
     ]
   )
+  const shouldFilterReviewEntries = hasActiveReviewFilters(reviewFilterOptions)
+  const debouncedReviewFilterKey = [
+    normalizedDebouncedReviewQuery,
+    reviewStatus,
+    reviewSource,
+    reviewCategory,
+    reviewIssueFilter
+  ].join('|')
+  const matchesReviewEntry = useCallback(
+    (entry: ProjectEntry): boolean => entryMatchesReviewFilters(entry, reviewFilterOptions),
+    [reviewFilterOptions]
+  )
   const projectEntries = useMemo(() => project?.entries ?? [], [project?.entries])
   const filteredEntries = useIncrementalReviewFilter(
     projectEntries,
     debouncedReviewFilterKey,
-    matchesReviewEntry
+    matchesReviewEntry,
+    shouldFilterReviewEntries
   )
   const activeDocumentId = activeDocument?.id
   const sourcePageCount = useMemo(
@@ -2875,6 +2876,7 @@ function App(): React.JSX.Element {
       historyState.redoCount,
       historyState.undoCount,
       mergeSelectedReviewEntries,
+      project?.entries,
       redoReview,
       reviewCategories,
       reviewCategory,
