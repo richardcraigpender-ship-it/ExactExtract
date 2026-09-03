@@ -19,6 +19,7 @@ test('configures worker, core, and trained data from bundled offline assets', ()
   assert.equal(options?.corePath, 'exact-extract-ocr://assets/core')
   assert.equal(options?.langPath, 'exact-extract-ocr://assets/tessdata')
   assert.equal(options?.gzip, true)
+  assert.equal(options?.cacheMethod, 'none')
   assert.equal(JSON.stringify(options).includes('https://'), false)
 })
 

@@ -11,14 +11,14 @@ import { PRODUCT_UPDATES } from '../productUpdates'
 test('renders dated product changes with meaningful update types', () => {
   const markup = renderToStaticMarkup(<ProductUpdatesPanel />)
 
-  assert.equal(PRODUCT_UPDATES.length, 54)
+  assert.equal(PRODUCT_UPDATES.length, 58)
   assert.match(markup, /What’s new/)
-  assert.match(markup, /dateTime="2026-08-30"/)
+  assert.match(markup, /dateTime="2026-09-01"/)
   assert.match(markup, /Feature/)
   assert.match(markup, /Changed/)
   assert.match(markup, /Fixed/)
   assert.match(markup, /Kept image layouts/)
-  assert.match(markup, /View all 54 updates/)
+  assert.match(markup, /View all 58 updates/)
   assert.match(markup, /aria-expanded="false"/)
   assert.doesNotMatch(markup, /Final PDF preview/)
 })

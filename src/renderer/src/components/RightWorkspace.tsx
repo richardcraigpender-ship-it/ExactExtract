@@ -8,6 +8,7 @@ export type RightWorkspaceCommand = EntryActionCommand
 interface RightWorkspaceProps {
   mode: RightWorkspaceMode
   entries: ReactNode
+  reviewControls: ReactNode
   contexts: Record<RightWorkspaceMode, ReactNode>
   onModeChange: (mode: RightWorkspaceMode) => void
   onCommand: (command: RightWorkspaceCommand) => void
@@ -18,19 +19,24 @@ interface RightWorkspaceProps {
 export const RightWorkspace = React.memo(function RightWorkspace({
   mode,
   entries,
+  reviewControls,
   contexts,
   onModeChange,
   onCommand,
   warningCount = 0,
   highlightsVisible = true
 }: RightWorkspaceProps): React.JSX.Element {
+  const displayedMode = mode === 'review' ? 'source-pdf' : mode
   return (
     <>
       <aside className="left-workspace" aria-label="Workspace tools">
-        <ContextPanel mode={mode}>{contexts[mode]}</ContextPanel>
+        <section className="persistent-review-controls" aria-label="Review controls">
+          {reviewControls}
+        </section>
+        <ContextPanel mode={displayedMode}>{contexts[displayedMode]}</ContextPanel>
       </aside>
       <EntryActionsStrip
-        mode={mode}
+        mode={displayedMode}
         warningCount={warningCount}
         highlightsVisible={highlightsVisible}
         onModeChange={onModeChange}

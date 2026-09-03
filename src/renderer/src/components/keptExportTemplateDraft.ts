@@ -5,9 +5,11 @@ import type {
   KeptEntriesPageSize
 } from '../../../shared/keptEntriesLayout'
 import { getCanvasPageDimensions } from '../lib/canvasScale'
-import type {
-  KeptExportDivider,
-  KeptExportRunningBalance,
+import {
+  DEFAULT_KEPT_EXPORT_PAGE_NUMBERS,
+  type KeptExportDivider,
+  type KeptExportPageNumbers,
+  type KeptExportRunningBalance,
   KeptExportTemplate
 } from '../../../shared/keptExportTemplate'
 
@@ -77,6 +79,7 @@ export interface KeptExportTemplateDraft {
   laterPagesTemplate: KeptExportPageTemplateDraft
   summaryFields: KeptExportSummaryField[]
   runningBalance: KeptExportRunningBalance
+  pageNumbers: KeptExportPageNumbers
 }
 
 export interface KeptExportTemplateValidationIssue {
@@ -135,8 +138,23 @@ export function cloneKeptExportTemplateDraft(
     pageOneTemplate: cloneKeptExportPageTemplate(draft.pageOneTemplate),
     laterPagesTemplate: cloneKeptExportPageTemplate(draft.laterPagesTemplate),
     summaryFields: [...draft.summaryFields],
-    runningBalance: { ...draft.runningBalance }
+    runningBalance: { ...draft.runningBalance },
+    pageNumbers: cloneKeptExportPageNumbers(draft.pageNumbers)
   }
+}
+
+export function cloneKeptExportPageNumbers(
+  pageNumbers: KeptExportPageNumbers
+): KeptExportPageNumbers {
+  return {
+    ...pageNumbers,
+    format: { ...pageNumbers.format },
+    textStyle: cloneKeptExportTextStyle(pageNumbers.textStyle)
+  }
+}
+
+export function createDefaultKeptExportPageNumbers(): KeptExportPageNumbers {
+  return cloneKeptExportPageNumbers(DEFAULT_KEPT_EXPORT_PAGE_NUMBERS)
 }
 
 export function createDefaultRunningBalance(): KeptExportRunningBalance {
@@ -185,7 +203,8 @@ export function createDefaultKeptExportTemplateDraft(): KeptExportTemplateDraft 
     pageOneTemplate,
     laterPagesTemplate: cloneKeptExportPageTemplate(pageOneTemplate),
     summaryFields: [],
-    runningBalance: createDefaultRunningBalance()
+    runningBalance: createDefaultRunningBalance(),
+    pageNumbers: createDefaultKeptExportPageNumbers()
   }
 }
 
@@ -206,7 +225,10 @@ export function createKeptExportTemplateDraft(
       showReferenceUnderMainText: defaultReferenceUnderMainText(laterPagesTemplate)
     },
     summaryFields: [...(template.summaryFields ?? [])],
-    runningBalance: { ...createDefaultRunningBalance(), ...template.runningBalance }
+    runningBalance: { ...createDefaultRunningBalance(), ...template.runningBalance },
+    pageNumbers: template.pageNumbers
+      ? cloneKeptExportPageNumbers(template.pageNumbers)
+      : createDefaultKeptExportPageNumbers()
   }
 }
 
@@ -428,8 +450,47 @@ export function validateKeptExportTemplateDraft(
     ...(draft.useSeparateLaterPages
       ? validateKeptExportPageTemplate(draft.laterPagesTemplate, 'Later pages')
       : []),
-    ...validateKeptExportRunningBalance(draft.runningBalance)
+    ...validateKeptExportRunningBalance(draft.runningBalance),
+    ...validateKeptExportPageNumbers(draft.pageNumbers)
   ]
+}
+
+export function validateKeptExportPageNumbers(
+  pageNumbers: KeptExportPageNumbers
+): KeptExportTemplateValidationIssue[] {
+  if (!pageNumbers.enabled) return []
+  const issues: KeptExportTemplateValidationIssue[] = []
+  if (!pageNumbers.format.template.includes('{n}')) {
+    issues.push({
+      path: 'pageNumbers.format.template',
+      message: 'The page number format needs a {n} placeholder for the page number.'
+    })
+  }
+  if (!Number.isInteger(pageNumbers.format.startAt)) {
+    issues.push({
+      path: 'pageNumbers.format.startAt',
+      message: 'Page numbers must start from a whole number.'
+    })
+  }
+  if (![pageNumbers.offsetX, pageNumbers.offsetY].every(Number.isFinite)) {
+    issues.push({
+      path: 'pageNumbers.offset',
+      message: 'Page number position offsets must be numbers.'
+    })
+  }
+  if (!Number.isFinite(pageNumbers.scale) || pageNumbers.scale <= 0 || pageNumbers.scale > 5) {
+    issues.push({
+      path: 'pageNumbers.scale',
+      message: 'Page number scale must be greater than 0 and no more than 5.'
+    })
+  }
+  if (!Number.isFinite(pageNumbers.textStyle.fontSize) || pageNumbers.textStyle.fontSize <= 0) {
+    issues.push({
+      path: 'pageNumbers.textStyle.fontSize',
+      message: 'Page number font size must be a positive number.'
+    })
+  }
+  return issues
 }
 
 export function toKeptExportTemplate(draft: KeptExportTemplateDraft): KeptExportTemplate & {
@@ -441,6 +502,7 @@ export function toKeptExportTemplate(draft: KeptExportTemplateDraft): KeptExport
     pageOneTemplate: cloneKeptExportPageTemplate(draft.pageOneTemplate),
     laterPagesTemplate: cloneKeptExportPageTemplate(draft.laterPagesTemplate),
     summaryFields: [...draft.summaryFields],
-    runningBalance: { ...draft.runningBalance }
+    runningBalance: { ...draft.runningBalance },
+    pageNumbers: cloneKeptExportPageNumbers(draft.pageNumbers)
   }
 }

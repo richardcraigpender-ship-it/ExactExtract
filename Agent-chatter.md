@@ -266,6 +266,18 @@ Definition of done:
 - Focused validation passed: 23/23 tests across style detection, Style panel, toolbar/workspace integration, and project-store persistence. Full `npm run typecheck` passed after formatting Agent C-touched files.
 - MVP boundary: divider/operator-list detection remains Agent B-owned; the Agent C panel and apply-divider action are wired and remain disabled until divider clusters exist.
 
+### Agent C completion — OCR Reference Re-Scan (2026-09-01)
+
+- No dedicated `OCR Reference Re-Scan` sprint section was present in this file when Agent C picked up the request. I implemented the Agent C workflow/integration slice around the in-flight reference scan route already present in `App.tsx`, `src/renderer/src/lib/pdf.ts`, and `src/review/references.ts`.
+- Added `ReviewReferenceTools` as an accessible review-panel surface for copying references already present in kept/OCR-derived entries and re-scanning the active source PDF for nearby source references.
+- Replaced loose review-toolbar reference buttons with the new component, preserving the existing note-copy callbacks, status messages, and undo-stack behavior.
+- Hardened source-reference matching so distant same-page references no longer attach to unrelated kept entries; references must now be close enough to the candidate kept row.
+- Added focused UI coverage for no-kept-entry disabled state, no-active-document disabled state, scanning feedback, and live status output.
+- Validation passed: `src/review/references.test.ts` + `ReviewReferenceTools.test.tsx` passed 9/9; `npm run typecheck:web` passed; `npm run typecheck:node` passed.
+- Completed follow-up wiring after the formal sprint plan landed: the dedicated References workspace now presents the ordered fast-entry/PDF-text/OCR recovery flow with a result summary; OCR scans show progress, can be cancelled, and leave notes unchanged on cancellation.
+- All reference actions are disabled while another scan, extraction, or export is active. OCR note updates are one undo transaction and record `ocr-reference-scan-notes-updated` audit details for scanned pages, candidates, matched entries, and copied references.
+- Focused OCR/reference/UI/export validation previously passed 17/17 after these workflow changes. Current editor diagnostics are clean; terminal output was unavailable for the final rerun in this session.
+
 ### Shared Work Order
 
 1. Agent A lands the style contract and digital PDF text-style detector.
@@ -292,6 +304,167 @@ npm run typecheck
 npx tsx --import ./test-setup.cjs --test --test-reporter=spec src/style/*.test.ts src/renderer/src/components/StyleProfilePanel.test.tsx
 npm run build
 ```
+
+## 2026-09-01 3-Agent Sprint Plan: OCR Reference Re-Scan
+
+**Goal:** Add a second troubleshooting button that performs a slower OCR/reference re-scan of the active PDF, specifically looking for tiny reference notes underneath payee/description entries, then anchors those references into the `notes` field of the nearest kept parent entry.
+
+**User flow:**
+
+1. First click: `Copy refs to notes` — fast pass over existing kept entry text.
+2. Second click: `OCR scan source refs` — slower active-PDF scan using source text/OCR to find small references that were not promoted into entries.
+
+**Total estimate:** 18 SP · **Risk:** Medium · **Target:** active PDF/current document first, not full project batch.
+
+### Agent A — Reference OCR Engine + Parent Matching
+
+Owner: pure matching logic, OCR reference extraction contract, and kept-only note update behaviour. **Estimate: 7 SP**
+
+Likely files:
+
+- `src/review/references.ts`
+- `src/review/references.test.ts`
+- `src/ocr/referenceScan.ts`
+- `src/ocr/referenceScan.test.ts`
+- `src/ocr/index.ts`
+
+Tasks:
+
+1. Define `OcrReferenceCandidate` with document/page, text, bbox, confidence, and `source: 'ocr-reference-scan'`.
+2. Extract reference candidates from OCR-recognized blocks using markers such as `Ref`, `Reference`, `Card`, `Txn`, `Transaction`, `Receipt`, `Order`, `Invoice`, `ID`, and `PO`.
+3. Match candidates to parent kept entries by same document/page, nearby row bbox, and preference for text just underneath the payee/description row.
+4. Reject candidates too far away vertically or on the wrong page/document.
+5. Append missing references to `entry.notes`, preserve existing notes, skip duplicates, and leave Maybe/Exclude entries untouched.
+6. Return a summary: scanned pages, candidate count, matched kept entries, copied reference count, and unmatched candidate count.
+
+Acceptance criteria:
+
+- OCR candidates below a kept parent entry are copied to that entry's notes.
+- Candidates near Maybe/Exclude entries are ignored.
+- Multiple references can attach to one kept entry.
+- Existing notes are preserved and duplicate references are skipped.
+- Unmatched candidates are reported, not silently discarded.
+- Pure tests cover close-below, too-far-away, same-page-only, duplicate, and kept-only behaviour.
+
+Definition of done:
+
+- A pure matcher can take OCR/reference candidates plus project entries and return updated kept entries with a useful summary.
+- No UI or Electron dependency in the pure matching logic.
+- Tests pass without requiring the real OCR runtime.
+
+### Agent A completion — OCR Reference Re-Scan (2026-09-01)
+
+- Added the OCR-reference candidate contract in `src/ocr/referenceScan.ts`: `OcrReferenceCandidate`, `OcrReferenceScanSummary`, `OcrReferenceScanResult`, progress/dependency types, and `extractOcrReferenceCandidates()` for turning OCR blocks into reference candidates without needing the real OCR runtime in tests.
+- Preserved the existing `runOcrReferenceScan()` pipeline surface for Agent B and exported the new APIs from `src/ocr/index.ts`.
+- Extended `src/review/references.ts` so source/OCR candidates can carry explicit `references`, `confidence`, and `source` metadata while still supporting fast text-derived references.
+- Hardened parent matching for kept entries only: same document/page required, PDF-point source regions required, far-away candidates rejected, duplicates skipped, existing notes preserved, and Maybe/Exclude entries left untouched.
+- Extended the copy result summary with candidate count, matched entry count, unmatched candidate count, and scanned page count so Agent C can show useful status.
+- Added focused tests in `src/ocr/referenceScan.test.ts` and `src/review/references.test.ts` covering OCR extraction, low-confidence skipping, no mutation, close-below parent matching, too-far and wrong-page rejection, duplicate skipping, and kept-only updates.
+- Validation: `npx tsx --import ./test-setup.cjs --test --test-reporter=spec src/review/references.test.ts src/ocr/referenceScan.test.ts` passed 10/10; `npm run typecheck` passed; Agent A files formatted with Prettier.
+
+### Agent B — OCR Re-Scan Pipeline
+
+Owner: slow OCR execution path for the active PDF/document. **Estimate: 6 SP**
+
+Likely files:
+
+- `src/ocr/ocrOrchestrator.ts`
+- `src/ocr/pdfjsRasterizer.ts`
+- `src/ocr/tesseractProvider.ts`
+- `src/ocr/referenceScan.ts`
+- `src/renderer/src/lib/pdf.ts`
+- possibly `src/main/ocrAssets.ts`
+
+Tasks:
+
+1. Add an active-document reference scan function that accepts document ID, PDF bytes, OCR language/settings, optional page range, and cancellation signal.
+2. Rasterize pages at a reference-friendly scale with bounded max pixel dimensions.
+3. OCR only the active document, preferably only pages containing kept entries for MVP performance.
+4. Convert OCR candidate coordinates back to PDF points.
+5. Filter to reference-marker text blocks and small text below/near larger row text.
+6. Ensure cleanup: release raster buffers, terminate Tesseract workers, and handle cancellation/failure without mutating project state.
+
+Acceptance criteria:
+
+- Active PDF can be re-scanned without overwriting existing extracted entries.
+- OCR candidates include page number and PDF-point bbox.
+- Scan reports progress/status and can be cancelled/fail cleanly.
+- OCR worker and raster cleanup paths remain covered.
+- Existing OCR tests still pass.
+
+Definition of done:
+
+- Renderer/main can call a slow OCR reference scan and receive candidates.
+- No full extraction overwrite happens.
+- Source PDF bytes are read once and cleaned up safely.
+
+### Agent B completion — OCR Re-Scan Pipeline (2026-09-01)
+
+- Added `runOcrReferenceScan(documentId, pdf, options)` in `src/ocr/referenceScan.ts`: rasterizes only the requested pages via `rasterizePdfPages` at `scale: 3` / `maxPixels: 24_000_000`, OCRs them with `recognizeTesseractPages` for the caller-supplied languages, converts normalized OCR bboxes back to PDF points per page (`x = bbox.x * page.width`, `y = page.height - (bbox.y + bbox.height) * page.height`), then filters to reference candidates via Agent A's `extractOcrReferenceCandidates`.
+- Cancellation is checked before rasterizing, after rasterizing, and after recognition (`AbortSignal` → `DOMException('AbortError')`); rasterized canvases are always released (`width`/`height` set to `0`) in a `finally` block, including on cancellation before recognition ever runs, so no project state is touched on failure/cancel.
+- `dependencies` (`rasterize`/`recognize`) are injectable so the pipeline is fully testable without the real OCR runtime; default wiring uses the real `pdfjsRasterizer`/`tesseractProvider`.
+- Reports three progress stages (`rasterizing`, `recognizing`, `filtering`) with page number/progress so the UI can show live status.
+- Wired into the renderer at `src/renderer/src/lib/pdf.ts` (`scanPdfReferenceCandidates`): resolves the page set from explicit `pageNumbers`, else pages containing kept entries for the active document, else all pages; opens the PDF through the existing `withPdfDocument` lifecycle so the document is always destroyed after the scan.
+- Exported `runOcrReferenceScan` and its supporting types from `src/ocr/index.ts` for Agent A/Agent C to consume.
+- Added `src/ocr/referenceScan.test.ts` covering: selected-page OCR with language forwarding, PDF-point bbox conversion, progress stage sequencing, and canvas cleanup on success; and cancellation before recognition (raster released, recognize never called, `AbortError` rejection).
+- Validation: `npm run typecheck` (node + web) passed; focused run of `src/ocr/referenceScan.test.ts`, `src/review/references.test.ts`, and `src/renderer/src/lib/pdfResourceLifecycle.test.ts` passed 15/15; full `npm test` passed with no failures; `npm run lint` and `npm run build` run clean.
+- Left for other owners: this only changes files in Agent B's lane (`src/ocr/referenceScan.ts`, `src/ocr/referenceScan.test.ts`, `src/ocr/index.ts`) plus the renderer call site already wired in `pdf.ts`/`App.tsx`; UI button, undo/audit transaction, and export-preview confirmation remain Agent C-owned (already landed per Agent C's completion note above).
+
+### Agent C — UI Button, Troubleshooting Flow, Persistence, and Status
+
+Owner: second troubleshooting button and user-facing flow. **Estimate: 5 SP**
+
+Likely files:
+
+- `src/renderer/src/App.tsx`
+- `src/renderer/src/components/EntryActionsStrip.tsx` or the Review actions panel
+- `src/renderer/src/components/EntriesList.tsx` if status badges are needed
+- `src/shared/contracts.ts` if audit/event details need expansion
+- focused Review/export integration tests
+
+Tasks:
+
+1. Add the second Review action button: `OCR scan source refs`.
+2. Disable it when there is no active document, no kept entries, extraction/export is running, or another reference scan is active.
+3. Hook the button to Agent B's OCR scan and Agent A's matcher.
+4. Add status messages: scanning, copied count, no matches, cancelled, and failed.
+5. Add undo + audit as one transaction: action `ocr-reference-scan-notes-updated` with pages scanned, candidates, matched entries, and copied refs.
+6. Keep `Copy refs to notes` as the first fast troubleshooting click; this is the slower second click, not a replacement.
+
+Acceptance criteria:
+
+- User can run OCR reference scan from Review tools.
+- Only kept entries are updated.
+- Existing notes are preserved and duplicates skipped.
+- Undo reverses note additions.
+- Review list refreshes after notes update.
+- Failed/cancelled scan does not change project state.
+- Export preview renders references under main text after the scan.
+
+Definition of done:
+
+- The UI presents the troubleshooting order clearly: `Copy refs to notes` first, `OCR scan source refs` second.
+- The second button updates kept entries' notes from OCR-detected source references.
+- The user receives a clear result count.
+
+### Shared Acceptance Criteria
+
+- The first fast button still works.
+- The second OCR button scans active PDF source text/image content.
+- OCR reference candidates are matched to nearby kept parent entries.
+- Maybe/Exclude entries are untouched.
+- Existing notes are not overwritten.
+- Duplicate references are skipped.
+- Export preview renders references under main text after the scan.
+- OCR failure/cancellation leaves the project unchanged.
+- Tests cover pure matching, OCR candidate conversion, UI button state, and note update behaviour.
+
+### Suggested Work Order
+
+1. Agent A lands the pure OCR/reference candidate and matching contract.
+2. Agent B adds OCR candidate generation from the active PDF.
+3. Agent C wires the second button, status, audit, undo, and export-preview confirmation.
+4. Joint validation: `npm run typecheck`, focused OCR/reference tests, export preview smoke test, and `npm run build`.
 
 ## 2026-08-30 2-Agent Sprint Plan: Calculated Running Balance Export
 

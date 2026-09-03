@@ -135,3 +135,40 @@ test('shows preview generation feedback while kept-text preview is running', () 
   assert.match(markup, /disabled=""[^>]*>Generating preview/)
   assert.match(markup, /disabled=""[^>]*>.*Export PDF/)
 })
+
+test('renders the page numbers section with matching disabled by default', () => {
+  const markup = renderToStaticMarkup(
+    <KeptExportTemplateEditor onApply={() => {}} onExport={() => {}} />
+  )
+
+  assert.match(markup, /Page numbers/)
+  assert.match(markup, /Add page numbers/)
+  assert.match(markup, /<option value="bottom-center"[^>]*>Bottom center<\/option>/)
+  assert.match(markup, /<option value="top-left"[^>]*>Top left<\/option>/)
+  assert.doesNotMatch(markup, /Match source page numbers/)
+})
+
+test('offers a detect action when onDetectPageNumbers is supplied', () => {
+  const markup = renderToStaticMarkup(
+    <KeptExportTemplateEditor
+      onApply={() => {}}
+      onExport={() => {}}
+      onDetectPageNumbers={async () => undefined}
+    />
+  )
+
+  assert.match(markup, /Match source page numbers/)
+})
+
+test('reports an invalid page number format that is missing the {n} placeholder', () => {
+  const draft = createDefaultKeptExportTemplateDraft()
+  draft.pageNumbers.enabled = true
+  draft.pageNumbers.format.template = 'Page'
+
+  const markup = renderToStaticMarkup(
+    <KeptExportTemplateEditor initialDraft={draft} onApply={() => {}} onExport={() => {}} />
+  )
+
+  assert.match(markup, /needs a \{n\} placeholder/)
+  assert.match(markup, /disabled=""[^>]*>.*Apply/)
+})

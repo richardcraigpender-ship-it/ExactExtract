@@ -30,6 +30,7 @@ import { ProductUpdatesPanel } from './components/ProductUpdatesPanel'
 import { RemovePagesPanel } from './components/RemovePagesPanel'
 import { HighlightToolPanel } from './components/HighlightToolPanel'
 import { StyleProfilePanel } from './components/StyleProfilePanel'
+import { ReferenceToolsPanel, type ReferenceToolResult } from './components/ReferenceToolsPanel'
 import {
   applyHighlightGeometry,
   measureHighlight,
@@ -58,7 +59,10 @@ import {
 } from './analysisPersistence'
 import {
   analyzePdf,
+  detectSourcePageNumberStyle,
   extractPdfLocally,
+  scanPdfReferenceCandidates,
+  scanPdfTextReferenceCandidates,
   type LocalParserResult,
   type PdfPreflightResult
 } from './lib/pdf'
@@ -118,6 +122,7 @@ import {
 } from '../../recovery'
 import {
   copyKeptEntryReferencesToNotes,
+  copySourceReferencesToKeptEntryNotes,
   detectReviewIssues,
   findEntryDirectlyAbove,
   findPreferredSourceRegion,
@@ -267,6 +272,7 @@ function App(): React.JSX.Element {
   const pageRemovalUndoRef = useRef<PageRemovalHistorySnapshot[]>([])
   const pageRemovalRedoRef = useRef<PageRemovalHistorySnapshot[]>([])
   const extractionAbortRef = useRef<AbortController | null>(null)
+  const referenceScanAbortRef = useRef<AbortController | null>(null)
   const lastOcrProgressAtRef = useRef(0)
   const lastSavedSnapshotRef = useRef<ProjectState | null>(null)
   const pdfViewerRef = useRef<PdfViewerHandle>(null)
@@ -352,7 +358,11 @@ function App(): React.JSX.Element {
   const [selectedReviewIds, setSelectedReviewIds] = useState<Set<string>>(() => new Set())
   const [bulkTag, setBulkTag] = useState('')
   const [referenceCopyStatus, setReferenceCopyStatus] = useState('')
-  const [workspaceMode, setWorkspaceMode] = useState<RightWorkspaceMode>('review')
+  const [referenceToolResults, setReferenceToolResults] = useState<
+    Partial<Record<ReferenceToolResult['action'], ReferenceToolResult>>
+  >({})
+  const [isScanningSourceReferences, setIsScanningSourceReferences] = useState(false)
+  const [workspaceMode, setWorkspaceMode] = useState<RightWorkspaceMode>('source-pdf')
   const [analysisConfiguration, setAnalysisConfiguration] = useState<AnalysisConfiguration>(
     DEFAULT_ANALYSIS_CONFIGURATION
   )
@@ -1637,6 +1647,16 @@ function App(): React.JSX.Element {
     setProject((current) => {
       if (!current) return current
       const result = copyKeptEntryReferencesToNotes(current.entries, occurredAt)
+      setReferenceToolResults((current) => ({
+        ...current,
+        existing: {
+          action: 'existing',
+          candidateCount: result.copiedReferenceCount,
+          matchedEntryCount: result.updatedEntryCount,
+          copiedReferenceCount: result.copiedReferenceCount,
+          unmatchedCandidateCount: 0
+        }
+      }))
       if (result.updatedEntryCount === 0) {
         setReferenceCopyStatus('No kept-entry references found to copy.')
         return current
@@ -1667,6 +1687,202 @@ function App(): React.JSX.Element {
         updatedAt: occurredAt
       }
     })
+  }, [])
+
+  const scanPdfTextReferencesToNotes = useCallback(async (): Promise<void> => {
+    const proj = projectRef.current
+    if (!proj || !activeDocument) {
+      setReferenceCopyStatus('Select a source document before scanning references.')
+      return
+    }
+    setIsScanningSourceReferences(true)
+    setReferenceCopyStatus('Scanning selectable PDF text for references...')
+    try {
+      const editedData = editedPdfDataRef.current.get(activeDocument.path)
+      const data =
+        editedData ?? new Uint8Array(await window.studio.documents.readPdf(activeDocument.path))
+      const scannedPages = new Set(
+        proj.entries
+          .filter((entry) => entry.status === 'keep')
+          .flatMap((entry) =>
+            entry.regions.flatMap((region) =>
+              region.documentId === activeDocument.id ? [region.pageNumber] : []
+            )
+          )
+      )
+      const references = await scanPdfTextReferenceCandidates(activeDocument.id, data, scannedPages)
+      const occurredAt = new Date().toISOString()
+      const scannedPageCount = scannedPages.size
+      setProject((current) => {
+        if (!current) return current
+        const result = copySourceReferencesToKeptEntryNotes(
+          current.entries,
+          references,
+          occurredAt,
+          {
+            scannedPageCount
+          }
+        )
+        setReferenceToolResults((current) => ({
+          ...current,
+          'pdf-text': {
+            action: 'pdf-text',
+            scannedPageCount,
+            candidateCount: result.candidateCount,
+            matchedCandidateCount: result.matchedCandidateCount,
+            matchedEntryCount: result.matchedEntryCount,
+            copiedReferenceCount: result.copiedReferenceCount,
+            unmatchedCandidateCount: result.unmatchedCandidateCount,
+            noSamePageParentCount: result.noSamePageParentCount,
+            tooFarCandidateCount: result.tooFarCandidateCount,
+            closestUnmatchedScore: result.closestUnmatchedScore,
+            alreadyPresentReferenceCount: result.alreadyPresentReferenceCount
+          }
+        }))
+        if (result.updatedEntryCount === 0) {
+          setReferenceCopyStatus('No PDF text references matched kept entries.')
+          return current
+        }
+        undoStackRef.current = [...undoStackRef.current, current.entries]
+        redoStackRef.current = []
+        setHistoryState({ undoCount: undoStackRef.current.length, redoCount: 0 })
+        setReferenceCopyStatus(
+          `PDF text scan copied ${result.copiedReferenceCount} reference${result.copiedReferenceCount === 1 ? '' : 's'} into ${result.updatedEntryCount} kept entr${result.updatedEntryCount === 1 ? 'y' : 'ies'}.`
+        )
+        return { ...current, entries: result.entries, updatedAt: occurredAt }
+      })
+    } catch (scanError) {
+      setReferenceCopyStatus(
+        scanError instanceof Error ? scanError.message : 'Unable to scan PDF text references.'
+      )
+    } finally {
+      setIsScanningSourceReferences(false)
+    }
+  }, [activeDocument])
+
+  const scanSourceReferencesToNotes = useCallback(async (): Promise<void> => {
+    const proj = projectRef.current
+    if (!proj || !activeDocument) {
+      setReferenceCopyStatus('Select a source document before scanning references.')
+      return
+    }
+    const controller = new AbortController()
+    referenceScanAbortRef.current = controller
+    setIsScanningSourceReferences(true)
+    setReferenceCopyStatus('Scanning source PDF references...')
+    try {
+      const editedData = editedPdfDataRef.current.get(activeDocument.path)
+      const data =
+        editedData ?? new Uint8Array(await window.studio.documents.readPdf(activeDocument.path))
+      const references = await scanPdfReferenceCandidates(activeDocument.id, data, {
+        entries: proj.entries,
+        languages: proj.settings.extraction.ocrLanguages,
+        signal: controller.signal,
+        onProgress: (progress) => {
+          const label =
+            progress.stage === 'rasterizing'
+              ? 'Preparing page image'
+              : progress.stage === 'recognizing'
+                ? progress.status || 'Reading reference text'
+                : 'Filtering reference candidates'
+          setReferenceCopyStatus(
+            progress.pageNumber
+              ? `${label} ${progress.pageNumber} · ${Math.round(progress.progress * 100)}%`
+              : `${label} · ${Math.round(progress.progress * 100)}%`
+          )
+        }
+      })
+      const occurredAt = new Date().toISOString()
+      const scannedPageCount = new Set(
+        proj.entries
+          .filter((entry) => entry.status === 'keep')
+          .flatMap((entry) =>
+            entry.regions.flatMap((region) =>
+              region.documentId === activeDocument.id ? [region.pageNumber] : []
+            )
+          )
+      ).size
+      setProject((current) => {
+        if (!current) return current
+        const result = copySourceReferencesToKeptEntryNotes(
+          current.entries,
+          references,
+          occurredAt,
+          {
+            scannedPageCount
+          }
+        )
+        setReferenceToolResults((current) => ({
+          ...current,
+          ocr: {
+            action: 'ocr',
+            scannedPageCount: result.scannedPageCount ?? scannedPageCount,
+            candidateCount: result.candidateCount,
+            matchedCandidateCount: result.matchedCandidateCount,
+            matchedEntryCount: result.matchedEntryCount,
+            copiedReferenceCount: result.copiedReferenceCount,
+            unmatchedCandidateCount: result.unmatchedCandidateCount,
+            noSamePageParentCount: result.noSamePageParentCount,
+            tooFarCandidateCount: result.tooFarCandidateCount,
+            closestUnmatchedScore: result.closestUnmatchedScore,
+            alreadyPresentReferenceCount: result.alreadyPresentReferenceCount
+          }
+        }))
+        if (result.updatedEntryCount === 0) {
+          setReferenceCopyStatus(
+            `${result.candidateCount ?? 0} OCR candidates found; ${result.matchedCandidateCount ?? 0} matched a kept entry, ${result.noSamePageParentCount ?? 0} had no kept parent on the same page, ${result.tooFarCandidateCount ?? 0} were too far away, and ${result.alreadyPresentReferenceCount ?? 0} references were already in notes. No new notes were added.`
+          )
+          return current
+        }
+        undoStackRef.current = [...undoStackRef.current, current.entries]
+        redoStackRef.current = []
+        setHistoryState({ undoCount: undoStackRef.current.length, redoCount: 0 })
+        setReferenceCopyStatus(
+          `OCR re-scan: ${result.copiedReferenceCount} reference${result.copiedReferenceCount === 1 ? '' : 's'} copied to ${result.updatedEntryCount} kept entr${result.updatedEntryCount === 1 ? 'y' : 'ies'} from ${result.candidateCount ?? 0} candidate${result.candidateCount === 1 ? '' : 's'}.`
+        )
+        return {
+          ...current,
+          entries: result.entries,
+          auditTrail: [
+            ...current.auditTrail,
+            {
+              id: crypto.randomUUID(),
+              occurredAt,
+              action: 'ocr-reference-scan-notes-updated',
+              entityType: 'document',
+              entityId: activeDocument.id,
+              details: {
+                pagesScanned: result.scannedPageCount ?? scannedPageCount,
+                candidates: result.candidateCount ?? references.length,
+                matchedEntries: result.matchedEntryCount ?? 0,
+                entries: result.updatedEntryCount,
+                references: result.copiedReferenceCount
+              }
+            }
+          ],
+          updatedAt: occurredAt
+        }
+      })
+    } catch (scanError) {
+      const cancelled =
+        controller.signal.aborted ||
+        (scanError instanceof DOMException && scanError.name === 'AbortError')
+      setReferenceCopyStatus(
+        cancelled
+          ? 'Reference re-scan cancelled. No entry notes were changed.'
+          : scanError instanceof Error
+            ? scanError.message
+            : 'Unable to scan source references.'
+      )
+    } finally {
+      if (referenceScanAbortRef.current === controller) referenceScanAbortRef.current = null
+      setIsScanningSourceReferences(false)
+    }
+  }, [activeDocument])
+
+  const cancelSourceReferenceScan = useCallback((): void => {
+    referenceScanAbortRef.current?.abort()
+    setReferenceCopyStatus('Cancelling reference re-scan...')
   }, [])
 
   const navigateToEntry = useCallback((entryId: string): void => {
@@ -2443,6 +2659,13 @@ function App(): React.JSX.Element {
     }
   }, [activeDocument, pdfData])
 
+  const detectActivePageNumberStyle = useCallback(async () => {
+    if (!activeDocument) return undefined
+    const data =
+      pdfData ?? new Uint8Array(await window.studio.documents.readPdf(activeDocument.path))
+    return detectSourcePageNumberStyle(activeDocument.id, data, activeDocument.styleProfile)
+  }, [activeDocument, pdfData])
+
   const handleRightWorkspaceCommand = useCallback(
     (command: RightWorkspaceCommand) => {
       if (command === 'zoom-out') pdfViewerRef.current?.zoomOut()
@@ -2822,16 +3045,6 @@ function App(): React.JSX.Element {
               onMerge={mergeSelectedReviewEntries}
               onSplit={splitSelectedReviewEntry}
             />
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={
-                (project?.entries.some((entry) => entry.status === 'keep') ?? false) === false
-              }
-              onClick={copyKeptReferencesToNotes}
-            >
-              Copy refs to notes
-            </button>
             <div className="review-tag-actions">
               <label className="bulk-tag-field">
                 <span className="sr-only">Tag selected entries</span>
@@ -2856,11 +3069,6 @@ function App(): React.JSX.Element {
                 Add
               </button>
             </div>
-            {referenceCopyStatus && (
-              <span className="review-selection-count" role="status" aria-live="polite">
-                {referenceCopyStatus}
-              </span>
-            )}
           </div>
         </section>
       </div>
@@ -2869,7 +3077,6 @@ function App(): React.JSX.Element {
       addBulkTag,
       bulkTag,
       clearReviewSelection,
-      copyKeptReferencesToNotes,
       filteredEntries,
       hasSearchQuery,
       historyState.redoCount,
@@ -2883,7 +3090,6 @@ function App(): React.JSX.Element {
       reviewSource,
       reviewStatus,
       resetReviewFilters,
-      referenceCopyStatus,
       selectedEntry,
       selectedReviewEntries,
       selectedReviewIds,
@@ -3807,6 +4013,7 @@ function App(): React.JSX.Element {
                 highlightsVisible={highlightsVisible}
                 onModeChange={setWorkspaceMode}
                 onCommand={handleRightWorkspaceCommand}
+                reviewControls={reviewBulkContext}
                 entries={
                   <section className="review-results" aria-label="Extracted entries">
                     <div className="review-results-header">
@@ -3910,7 +4117,25 @@ function App(): React.JSX.Element {
                       onAddPdfs={handleNavAddPdfs}
                     />
                   ),
-                  review: reviewBulkContext,
+                  review: null,
+                  references: (
+                    <ReferenceToolsPanel
+                      hasKeptEntries={
+                        project?.entries.some((entry) => entry.status === 'keep') ?? false
+                      }
+                      hasActiveDocument={Boolean(activeDocument)}
+                      isScanning={isScanningSourceReferences}
+                      isBusy={extractionProgress !== null || exportState.isSaving}
+                      ocrLanguages={ocrLanguages}
+                      status={referenceCopyStatus}
+                      results={referenceToolResults}
+                      onCopyExisting={copyKeptReferencesToNotes}
+                      onScanPdfText={() => void scanPdfTextReferencesToNotes()}
+                      onScanOcr={() => void scanSourceReferencesToNotes()}
+                      onCancelScan={cancelSourceReferenceScan}
+                      onToggleOcrLanguage={toggleOcrLanguage}
+                    />
+                  ),
                   analysis: (
                     <AnalysisWorkspace
                       entries={project?.entries ?? []}
@@ -3945,6 +4170,7 @@ function App(): React.JSX.Element {
                       imagePlacementOptions={keptEntriesLayout.imagePlacementOptions}
                       uploadedImageSources={keptEntriesLayout.uploadedImageSources}
                       onImagePlacementConfigurationChange={handleImagePlacementConfigurationChange}
+                      onDetectPageNumbers={detectActivePageNumberStyle}
                     />
                   ) : null,
                   style: (

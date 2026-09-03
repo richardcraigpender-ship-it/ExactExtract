@@ -6,14 +6,14 @@ import { EntryActionsStrip } from './EntryActionsStrip'
 
 void React
 
-test('does not offer a standalone search button from review mode', () => {
+test('does not offer a Review tab because review controls are persistent', () => {
   const markup = renderToStaticMarkup(
     <EntryActionsStrip mode="review" onModeChange={() => undefined} onCommand={() => undefined} />
   )
 
-  assert.doesNotMatch(markup, /aria-label="Open search and filters"/)
-  assert.doesNotMatch(markup, />Search</)
-  assert.match(markup, /aria-label="Review and bulk actions"/)
+  assert.doesNotMatch(markup, /aria-label="Review and bulk actions"/)
+  assert.match(markup, /aria-label="Quick commands"[\s\S]*aria-label="Zoom out"/)
+  assert.match(markup, /aria-label="Quick commands"[\s\S]*aria-label="Project currency"/)
 })
 
 test('includes quick zoom actions in the right-side tool strip', () => {

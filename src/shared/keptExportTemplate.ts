@@ -65,6 +65,44 @@ export const DEFAULT_KEPT_EXPORT_RUNNING_BALANCE: KeptExportRunningBalance = {
   decimalPlaces: 2
 }
 
+export type KeptExportPageNumberAnchor =
+  'top-left' | 'top-center' | 'top-right' | 'bottom-left' | 'bottom-center' | 'bottom-right'
+
+export interface KeptExportPageNumberFormat {
+  /** Use {n} for the current page number and {total} for the page count. */
+  template: string
+  startAt: number
+}
+
+export interface KeptExportPageNumbers {
+  enabled: boolean
+  /** When true, position/format/style were filled in from the detected source page numbers. */
+  matchSourceStyle: boolean
+  anchor: KeptExportPageNumberAnchor
+  offsetX: number
+  offsetY: number
+  format: KeptExportPageNumberFormat
+  textStyle: KeptExportTextStyle
+  scale: number
+}
+
+export const DEFAULT_KEPT_EXPORT_PAGE_NUMBERS: KeptExportPageNumbers = {
+  enabled: false,
+  matchSourceStyle: true,
+  anchor: 'bottom-center',
+  offsetX: 0,
+  offsetY: 24,
+  format: { template: '{n}', startAt: 1 },
+  textStyle: {
+    fontRef: { kind: 'standard-14', family: 'Helvetica' },
+    fontSize: 9,
+    color: '#657067',
+    fontWeight: 'normal',
+    fontStyle: 'normal'
+  },
+  scale: 1
+}
+
 export interface KeptExportColumn {
   id: string
   name: string
@@ -100,6 +138,7 @@ export interface KeptExportTemplate {
   laterPagesTemplate: KeptExportPageTemplate
   summaryFields?: KeptExportSummaryField[]
   runningBalance?: KeptExportRunningBalance
+  pageNumbers?: KeptExportPageNumbers
 }
 
 export interface KeptExportSourceRow {

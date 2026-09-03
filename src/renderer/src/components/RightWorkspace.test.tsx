@@ -16,13 +16,15 @@ const contexts: Record<RightWorkspaceMode, React.ReactNode> = {
   pages: <p>Page thumbnails</p>,
   warnings: <p>Warning details</p>,
   'remove-pages': <p>Remove pages</p>,
-  marks: <p>Highlight tools</p>
+  marks: <p>Highlight tools</p>,
+  references: <p>Reference tools</p>
 }
 
 test('separates full-height tools from the extracted entries panel', () => {
   const markup = renderToStaticMarkup(
     <RightWorkspace
       mode="analysis"
+      reviewControls={<p>Persistent review controls</p>}
       entries={
         <ol>
           <li>Entry 1</li>
@@ -36,6 +38,8 @@ test('separates full-height tools from the extracted entries panel', () => {
   )
 
   assert.match(markup, /class="left-workspace" aria-label="Workspace tools"/)
+  assert.match(markup, /class="persistent-review-controls" aria-label="Review controls"/)
+  assert.match(markup, /Persistent review controls/)
   assert.match(markup, /class="right-workspace" aria-label="Extracted entries"/)
   assert.match(markup, /Entry 1/)
   assert.match(markup, /role="tab"[^>]*aria-label="Analysis"[^>]*aria-selected="true"/)
@@ -49,6 +53,7 @@ test('signals hidden highlights on the marks tool without relying on color', () 
   const markup = renderToStaticMarkup(
     <RightWorkspace
       mode="review"
+      reviewControls={<p>Persistent review controls</p>}
       entries={<p>Entries</p>}
       contexts={contexts}
       highlightsVisible={false}
@@ -66,6 +71,7 @@ test('exposes exactly one Marks control in the strip', () => {
   const markup = renderToStaticMarkup(
     <RightWorkspace
       mode="review"
+      reviewControls={<p>Persistent review controls</p>}
       entries={<p>Entries</p>}
       contexts={contexts}
       onModeChange={() => {}}
@@ -80,6 +86,7 @@ test('opens the marks context panel when that tool is selected', () => {
   const markup = renderToStaticMarkup(
     <RightWorkspace
       mode="marks"
+      reviewControls={<p>Persistent review controls</p>}
       entries={<p>Entries</p>}
       contexts={contexts}
       onModeChange={() => {}}

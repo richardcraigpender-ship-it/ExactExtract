@@ -9,7 +9,7 @@ import {
   FileText,
   Fingerprint,
   Images,
-  ListChecks,
+  Link,
   Save,
   Trash2,
   Upload,
@@ -27,19 +27,20 @@ export type ContextMode =
   | 'warnings'
   | 'remove-pages'
   | 'marks'
+  | 'references'
 export type EntryActionCommand =
   'zoom-in' | 'zoom-out' | 'import' | 'save' | 'jump' | 'currency' | 'detect-style'
 
 const contextModes = [
   { id: 'source-pdf', label: 'Source PDF', shortLabel: 'Source', icon: FileText },
-  { id: 'review', label: 'Review and bulk actions', shortLabel: 'Review', icon: ListChecks },
   { id: 'analysis', label: 'Analysis', shortLabel: 'Stats', icon: BarChart3 },
   { id: 'export', label: 'Export', shortLabel: 'Export', icon: Download },
   { id: 'style', label: 'Document style profile', shortLabel: 'Style', icon: Fingerprint },
   { id: 'pages', label: 'Page previewer', shortLabel: 'Pages', icon: Images },
   { id: 'warnings', label: 'Warnings and duplicates', shortLabel: 'Issues', icon: AlertTriangle },
   { id: 'remove-pages', label: 'Remove pages', shortLabel: 'Remove', icon: Trash2 },
-  { id: 'marks', label: 'Highlight tools', shortLabel: 'Marks', icon: Eye }
+  { id: 'marks', label: 'Highlight tools', shortLabel: 'Marks', icon: Eye },
+  { id: 'references', label: 'Reference tools', shortLabel: 'Refs', icon: Link }
 ] as const
 
 const commands = [
@@ -69,6 +70,36 @@ export const EntryActionsStrip = React.memo(function EntryActionsStrip({
 }: EntryActionsStripProps): React.JSX.Element {
   return (
     <nav className="workspace-tool-strip" aria-label="Workspace tools">
+      <div className="right-workspace-commands" aria-label="Quick commands">
+        {commands.map(({ id, label, shortLabel, icon: Icon }) => (
+          <button
+            key={id}
+            type="button"
+            aria-label={label}
+            title={label}
+            onClick={(event) => {
+              event.stopPropagation()
+              onCommand(id)
+            }}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.stopPropagation()
+              }
+            }}
+          >
+            {Icon ? (
+              <Icon size={17} aria-hidden="true" />
+            ) : (
+              <span className="currency-tool-symbol" aria-hidden="true">
+                $/£
+              </span>
+            )}
+            <span className="right-workspace-tool-label" aria-hidden="true">
+              {shortLabel}
+            </span>
+          </button>
+        ))}
+      </div>
       <div role="tablist" aria-label="Context panel">
         {contextModes.map(({ id, label, shortLabel, icon: Icon }) => {
           const isMarks = id === 'marks'
@@ -108,36 +139,6 @@ export const EntryActionsStrip = React.memo(function EntryActionsStrip({
             </button>
           )
         })}
-      </div>
-      <div className="right-workspace-commands" aria-label="Quick commands">
-        {commands.map(({ id, label, shortLabel, icon: Icon }) => (
-          <button
-            key={id}
-            type="button"
-            aria-label={label}
-            title={label}
-            onClick={(event) => {
-              event.stopPropagation()
-              onCommand(id)
-            }}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.stopPropagation()
-              }
-            }}
-          >
-            {Icon ? (
-              <Icon size={17} aria-hidden="true" />
-            ) : (
-              <span className="currency-tool-symbol" aria-hidden="true">
-                $/£
-              </span>
-            )}
-            <span className="right-workspace-tool-label" aria-hidden="true">
-              {shortLabel}
-            </span>
-          </button>
-        ))}
       </div>
     </nav>
   )

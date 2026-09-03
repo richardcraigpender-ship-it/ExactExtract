@@ -17,7 +17,7 @@ await cp(
 
 const coreRoot = join(nodeModules, 'tesseract.js-core')
 for (const fileName of await readdir(coreRoot)) {
-  if (/^tesseract-core(?:-[a-z]+)*\.(?:js|wasm)$/.test(fileName)) {
+  if (/^tesseract-core(?:-[a-z]+)*\.(?:wasm\.js|js|wasm)$/.test(fileName)) {
     await cp(join(coreRoot, fileName), join(outputRoot, 'core', fileName))
   }
 }

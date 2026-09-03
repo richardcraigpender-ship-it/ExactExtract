@@ -4,8 +4,11 @@ import { Check, FileOutput, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import type { KeptEntriesFontRef } from '../../../shared/keptEntriesLayout'
 import type {
   KeptExportDivider,
+  KeptExportPageNumberAnchor,
   KeptExportRunningBalance
 } from '../../../shared/keptExportTemplate'
+import type { DetectedPageNumberMatch } from '../../../style'
+import { pageNumberMatchToKeptExportPageNumbers } from '../../../style'
 import { getCanvasPageDimensions } from '../lib/canvasScale'
 import { CanvasBackgroundControls } from './CanvasBackgroundControls'
 import { FontPicker } from './FontPicker'
@@ -44,6 +47,7 @@ interface KeptExportTemplateEditorProps {
   onAutoCloseAfterActionChange?: (value: boolean) => void
   actionStatus?: string | null
   currencySymbol?: string
+  onDetectPageNumbers?: () => Promise<DetectedPageNumberMatch | undefined>
 }
 
 const STANDARD_FONTS: Array<Extract<KeptEntriesFontRef, { kind: 'standard-14' }>['family']> = [
@@ -83,6 +87,15 @@ const BALANCE_FIELD_MODES: Array<{
   { value: 'keep-original', label: 'Keep original balance' },
   { value: 'replace-original', label: 'Replace Balance columns' },
   { value: 'add-calculated', label: 'Add calculated balance field' }
+]
+
+const PAGE_NUMBER_ANCHORS: Array<{ value: KeptExportPageNumberAnchor; label: string }> = [
+  { value: 'top-left', label: 'Top left' },
+  { value: 'top-center', label: 'Top center' },
+  { value: 'top-right', label: 'Top right' },
+  { value: 'bottom-left', label: 'Bottom left' },
+  { value: 'bottom-center', label: 'Bottom center' },
+  { value: 'bottom-right', label: 'Bottom right' }
 ]
 
 function numberValue(value: string, fallback: number): number {
@@ -128,7 +141,8 @@ export function KeptExportTemplateEditor({
   autoCloseAfterAction = false,
   onAutoCloseAfterActionChange,
   actionStatus,
-  currencySymbol = '£'
+  currencySymbol = '£',
+  onDetectPageNumbers
 }: KeptExportTemplateEditorProps): React.JSX.Element {
   const [draft, setDraft] = useState<KeptExportTemplateDraft>(() =>
     cloneKeptExportTemplateDraft(initialDraft ?? createDefaultKeptExportTemplateDraft())
@@ -138,6 +152,8 @@ export function KeptExportTemplateEditor({
     draft.pageOneTemplate.columns[0]?.id ?? ''
   )
   const [applyToAll, setApplyToAll] = useState(true)
+  const [isDetectingPageNumbers, setIsDetectingPageNumbers] = useState(false)
+  const [pageNumberDetectionStatus, setPageNumberDetectionStatus] = useState<string | null>(null)
   const activeTarget = draft.useSeparateLaterPages ? target : 'page-one'
   const template = getDraftTemplate(draft, activeTarget)
   const selectedColumn = template.columns.find((column) => column.id === selectedColumnId)
@@ -145,6 +161,7 @@ export function KeptExportTemplateEditor({
   const dimensions = getCanvasPageDimensions(template.pageSize, template.orientation)
   const divider = template.divider ?? defaultDivider(dimensions.width)
   const runningBalance = draft.runningBalance
+  const pageNumbers = draft.pageNumbers
   const issues = validateKeptExportTemplateDraft(draft)
 
   useEffect(() => {
@@ -177,6 +194,40 @@ export function KeptExportTemplateEditor({
     update: (current: KeptExportRunningBalance) => KeptExportRunningBalance
   ): void => {
     setDraft((current) => ({ ...current, runningBalance: update(current.runningBalance) }))
+  }
+
+  const setPageNumbers = (
+    update: (current: typeof pageNumbers) => typeof pageNumbers,
+    matchesSource = false
+  ): void => {
+    setDraft((current) => ({
+      ...current,
+      pageNumbers: { ...update(current.pageNumbers), matchSourceStyle: matchesSource }
+    }))
+  }
+
+  const detectPageNumbers = async (): Promise<void> => {
+    if (!onDetectPageNumbers) return
+    setIsDetectingPageNumbers(true)
+    setPageNumberDetectionStatus('Scanning the source PDF for existing page numbers...')
+    try {
+      const match = await onDetectPageNumbers()
+      if (!match) {
+        setPageNumberDetectionStatus(
+          'No consistent page numbers were found in the source document. Turn page numbers on and set the position manually if you still want them.'
+        )
+        return
+      }
+      setDraft((current) => ({
+        ...current,
+        pageNumbers: pageNumberMatchToKeptExportPageNumbers(match)
+      }))
+      setPageNumberDetectionStatus(
+        `Matched the source page numbers from ${match.matchedPageCount} of ${match.totalPageCount} pages.`
+      )
+    } finally {
+      setIsDetectingPageNumbers(false)
+    }
   }
 
   const resetActiveTemplate = (): void => {
@@ -553,6 +604,204 @@ export function KeptExportTemplateEditor({
             Leave the opening balance blank to infer it from the first detected balance, otherwise
             the run starts from zero. Replacing sends calculated values to existing Balance columns.
           </p>
+        </section>
+
+        <section
+          className="kept-template-section"
+          aria-labelledby="kept-template-page-numbers-title"
+        >
+          <div className="kept-template-section-heading">
+            <div>
+              <h3 id="kept-template-page-numbers-title">Page numbers</h3>
+              <p>
+                Matches the source document&rsquo;s existing page numbers by default. Position,
+                format, and style can be changed at any time.
+              </p>
+            </div>
+            <label className="kept-template-change-all">
+              <input
+                type="checkbox"
+                checked={pageNumbers.enabled}
+                onChange={(event) =>
+                  setPageNumbers(
+                    (current) => ({ ...current, enabled: event.target.checked }),
+                    pageNumbers.matchSourceStyle && event.target.checked
+                  )
+                }
+              />
+              Add page numbers
+            </label>
+          </div>
+          {onDetectPageNumbers && (
+            <div className="kept-template-page-numbers-detect">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={isDetectingPageNumbers}
+                onClick={() => void detectPageNumbers()}
+              >
+                {isDetectingPageNumbers ? 'Scanning source...' : 'Match source page numbers'}
+              </button>
+              {pageNumberDetectionStatus && (
+                <span role="status" aria-live="polite">
+                  {pageNumberDetectionStatus}
+                </span>
+              )}
+              {pageNumbers.enabled &&
+                pageNumbers.matchSourceStyle &&
+                !pageNumberDetectionStatus && (
+                  <span role="status">Matched from the source document.</span>
+                )}
+            </div>
+          )}
+          <div className="kept-template-grid kept-template-page-numbers-grid">
+            <label>
+              <span>Position</span>
+              <select
+                value={pageNumbers.anchor}
+                disabled={!pageNumbers.enabled}
+                onChange={(event) =>
+                  setPageNumbers((current) => ({
+                    ...current,
+                    anchor: event.target.value as KeptExportPageNumberAnchor
+                  }))
+                }
+              >
+                {PAGE_NUMBER_ANCHORS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <LengthField
+              label="Horizontal offset"
+              value={pageNumbers.offsetX}
+              disabled={!pageNumbers.enabled}
+              onChange={(offsetX) => setPageNumbers((current) => ({ ...current, offsetX }))}
+            />
+            <LengthField
+              label="Vertical offset"
+              min={0}
+              value={pageNumbers.offsetY}
+              disabled={!pageNumbers.enabled}
+              onChange={(offsetY) => setPageNumbers((current) => ({ ...current, offsetY }))}
+            />
+            <label>
+              <span>Format</span>
+              <input
+                type="text"
+                value={pageNumbers.format.template}
+                disabled={!pageNumbers.enabled}
+                placeholder="{n}"
+                onChange={(event) =>
+                  setPageNumbers((current) => ({
+                    ...current,
+                    format: { ...current.format, template: event.target.value }
+                  }))
+                }
+              />
+            </label>
+            <label>
+              <span>Start at</span>
+              <input
+                type="number"
+                step="1"
+                value={pageNumbers.format.startAt}
+                disabled={!pageNumbers.enabled}
+                onChange={(event) =>
+                  setPageNumbers((current) => ({
+                    ...current,
+                    format: {
+                      ...current.format,
+                      startAt: Math.trunc(numberValue(event.target.value, current.format.startAt))
+                    }
+                  }))
+                }
+              />
+            </label>
+            <label>
+              <span>Scale</span>
+              <input
+                type="number"
+                min="0.1"
+                max="5"
+                step="0.1"
+                value={pageNumbers.scale}
+                disabled={!pageNumbers.enabled}
+                onChange={(event) =>
+                  setPageNumbers((current) => ({
+                    ...current,
+                    scale: Math.max(0.1, numberValue(event.target.value, current.scale))
+                  }))
+                }
+              />
+            </label>
+            <label>
+              <span>Size</span>
+              <input
+                type="number"
+                min="6"
+                max="72"
+                value={pageNumbers.textStyle.fontSize}
+                disabled={!pageNumbers.enabled}
+                onChange={(event) =>
+                  setPageNumbers((current) => ({
+                    ...current,
+                    textStyle: {
+                      ...current.textStyle,
+                      fontSize: Math.max(6, Math.min(72, numberValue(event.target.value, 9)))
+                    }
+                  }))
+                }
+              />
+            </label>
+            <label>
+              <span>Color</span>
+              <input
+                type="color"
+                value={pageNumbers.textStyle.color}
+                disabled={!pageNumbers.enabled}
+                onChange={(event) =>
+                  setPageNumbers((current) => ({
+                    ...current,
+                    textStyle: { ...current.textStyle, color: event.target.value }
+                  }))
+                }
+              />
+            </label>
+            <label>
+              <span>PDF font</span>
+              <select
+                value={
+                  pageNumbers.textStyle.fontRef.kind === 'standard-14'
+                    ? pageNumbers.textStyle.fontRef.family
+                    : ''
+                }
+                disabled={!pageNumbers.enabled}
+                onChange={(event) => {
+                  const family = event.target.value as Extract<
+                    KeptEntriesFontRef,
+                    { kind: 'standard-14' }
+                  >['family']
+                  if (!family) return
+                  setPageNumbers((current) => ({
+                    ...current,
+                    textStyle: { ...current.textStyle, fontRef: { kind: 'standard-14', family } }
+                  }))
+                }}
+              >
+                {pageNumbers.textStyle.fontRef.kind === 'system' && (
+                  <option value="">System font</option>
+                )}
+                {STANDARD_FONTS.map((font) => (
+                  <option key={font} value={font}>
+                    {font}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
         </section>
 
         <section className="kept-template-section" aria-labelledby="kept-template-columns-title">

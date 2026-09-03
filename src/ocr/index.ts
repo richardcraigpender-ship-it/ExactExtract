@@ -1,6 +1,7 @@
 export { runOcrOrchestration } from './ocrOrchestrator'
 export { rasterizePdfPages } from './pdfjsRasterizer'
 export { preprocessCanvas, preprocessImageData } from './preprocessing'
+export { extractOcrReferenceCandidates, runOcrReferenceScan } from './referenceScan'
 export {
   OcrProviderError,
   recognizeTesseractPages,
@@ -14,6 +15,15 @@ export type {
 } from './tesseractProvider'
 export type { PdfJsRasterDocumentLike, RasterizeOptions } from './pdfjsRasterizer'
 export type { OcrPreprocessingOptions } from './preprocessing'
+export type {
+  OcrReferenceCandidate,
+  OcrReferenceRescanDependencies,
+  OcrReferenceRescanProgress,
+  OcrReferenceScanOptions,
+  OcrReferenceScanResult,
+  OcrReferenceScanSummary,
+  RunOcrReferenceScanOptions
+} from './referenceScan'
 export type {
   OcrOrchestrationDependencies,
   OcrOrchestrationProgress,

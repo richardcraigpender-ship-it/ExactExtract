@@ -9,6 +9,34 @@ export interface ProductUpdate {
 
 export const PRODUCT_UPDATES: readonly ProductUpdate[] = [
   {
+    date: '2026-09-01',
+    kind: 'Feature',
+    title: 'OCR reference re-scan',
+    summary:
+      'A second, slower scan reads the active source PDF for tiny reference text under payee rows and copies matches into the nearest kept entry\u2019s notes.'
+  },
+  {
+    date: '2026-09-01',
+    kind: 'Feature',
+    title: 'Document style detection',
+    summary:
+      'Digital PDFs are now scanned for colour palette, divider rules, and font usage to inform export styling.'
+  },
+  {
+    date: '2026-09-01',
+    kind: 'Changed',
+    title: 'Review reference tools',
+    summary:
+      'Copying references to notes and re-scanning source references now live in one accessible review toolbar panel.'
+  },
+  {
+    date: '2026-09-01',
+    kind: 'Fixed',
+    title: 'Reference matching precision',
+    summary:
+      'Source references on the same page no longer attach to unrelated kept rows; matches require being close to a kept entry.'
+  },
+  {
     date: '2026-08-30',
     kind: 'Feature',
     title: 'Kept image layouts',
@@ -19,8 +47,7 @@ export const PRODUCT_UPDATES: readonly ProductUpdate[] = [
     date: '2026-08-30',
     kind: 'Changed',
     title: 'Clearer kept exports',
-    summary:
-      'Kept text templates and kept PNG layouts now open in separate configuration windows.'
+    summary: 'Kept text templates and kept PNG layouts now open in separate configuration windows.'
   },
   {
     date: '2026-08-30',

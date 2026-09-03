@@ -10,7 +10,8 @@ const contextLabels: Record<ContextMode, string> = {
   pages: 'Page previewer',
   warnings: 'Warnings and duplicates',
   'remove-pages': 'Remove pages',
-  marks: 'Highlight tools'
+  marks: 'Highlight tools',
+  references: 'Reference tools'
 }
 
 interface ContextPanelProps {

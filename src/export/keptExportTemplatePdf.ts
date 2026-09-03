@@ -13,6 +13,7 @@ import {
 import { calculateStatementStats } from '../analysis'
 import { buildKeptExportRenderPlan } from './keptExportLayout'
 import { buildRunningBalanceValues, type RunningBalanceInputRow } from './runningBalance'
+import { buildPageNumberDraw } from './pageNumbers'
 
 type SummaryField =
   | 'money-in-total'
@@ -174,6 +175,10 @@ export async function exportProjectKeptEntriesTemplatePdf(
   }
   const pdf = await PDFDocument.create()
   pdf.registerFontkit(fontkit)
+  const pageNumbers = template.pageNumbers
+  const pageNumberFont = pageNumbers?.enabled
+    ? await pdf.embedFont(fontName(pageNumbers.textStyle))
+    : undefined
   for (const renderedPage of plan.pages) {
     const pageSize = dimensions(renderedPage.template)
     const page = pdf.addPage([pageSize.width, pageSize.height])
@@ -212,6 +217,25 @@ export async function exportProjectKeptEntriesTemplatePdf(
         color: pdfColor(divider.color),
         opacity: divider.opacity
       })
+    }
+    if (pageNumbers?.enabled && pageNumberFont) {
+      const draw = buildPageNumberDraw(
+        pageNumbers,
+        renderedPage.pageNumber,
+        plan.pages.length,
+        pageSize.width,
+        pageSize.height,
+        (text, fontSize) => pageNumberFont.widthOfTextAtSize(text, fontSize)
+      )
+      if (draw) {
+        page.drawText(safeText(draw.text, pageNumberFont), {
+          x: draw.x,
+          y: draw.y,
+          size: draw.fontSize,
+          font: pageNumberFont,
+          color: pdfColor(pageNumbers.textStyle.color)
+        })
+      }
     }
     const summaryFields = (template as KeptExportTemplate & { summaryFields?: SummaryField[] })
       .summaryFields

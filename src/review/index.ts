@@ -11,5 +11,10 @@ export {
   reconcileReviewSelection,
   splitReviewEntry
 } from './operations'
-export { copyKeptEntryReferencesToNotes, extractEntryReferences } from './references'
-export type { CopyKeptReferencesResult } from './references'
+export {
+  copyKeptEntryReferencesToNotes,
+  copySourceReferencesToKeptEntryNotes,
+  extractEntryReferences,
+  extractReferencesFromText
+} from './references'
+export type { CopyKeptReferencesResult, SourceReferenceCandidate } from './references'

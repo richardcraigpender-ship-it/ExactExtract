@@ -258,6 +258,42 @@ test('text-only rows still render when the running balance is enabled', async ()
   assert.match(text, /£250\.00/)
 })
 
+test('draws a page number on every page using the configured format', async () => {
+  const withPageNumbers = template()
+  withPageNumbers.pageNumbers = {
+    enabled: true,
+    matchSourceStyle: false,
+    anchor: 'bottom-center',
+    offsetX: 0,
+    offsetY: 24,
+    format: { template: 'Page {n} of {total}', startAt: 1 },
+    textStyle: {
+      fontRef: { kind: 'standard-14', family: 'Helvetica' },
+      fontSize: 9,
+      color: '#657067',
+      fontWeight: 'normal',
+      fontStyle: 'normal'
+    },
+    scale: 1
+  }
+
+  const bytes = await exportProjectKeptEntriesTemplatePdf(
+    project([entry('entry-1', 'Consulting summary note')]),
+    withPageNumbers
+  )
+
+  assert.match(decodePdfText(bytes), /Page 1 of 1/)
+})
+
+test('does not draw a page number when the feature is disabled', async () => {
+  const bytes = await exportProjectKeptEntriesTemplatePdf(
+    project([entry('entry-1', 'Consulting summary note')]),
+    template()
+  )
+
+  assert.doesNotMatch(decodePdfText(bytes), /Page \d+ of \d+/)
+})
+
 test('renders a kept entry reference under the main text when configured', async () => {
   const withReference = template()
   withReference.pageOneTemplate.showReferenceUnderMainText = true

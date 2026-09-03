@@ -4,17 +4,25 @@ import type { ProjectEntry } from '../../../shared/contracts'
 import type { TableTemplate } from '../../../extraction'
 import {
   extractPdfJsDocument,
+  groupPageLines,
+  parseTextLayerPage,
   projectParserEntries,
+  readPdfJsTextLayer,
   type ParserExtractionResult
 } from '../../../extraction'
+import type { SourceReferenceCandidate } from '../../../review'
+import { extractReferencesFromText } from '../../../review'
 import { classifySemanticLines } from '../../../extraction/semantics'
 import {
+  runOcrReferenceScan,
   runOcrOrchestration,
+  type OcrReferenceRescanProgress,
   type OcrOrchestrationProgress,
   type OcrOrchestrationResult,
   type PdfJsRasterDocumentLike
 } from '../../../ocr'
-import type { ExtractionSettings } from '../../../shared/contracts'
+import { detectPageNumberStyle, type DetectedPageNumberMatch } from '../../../style'
+import type { DocumentStyleProfile, ExtractionSettings } from '../../../shared/contracts'
 import { withPdfDocument } from './pdfResourceLifecycle'
 
 pdfjs.GlobalWorkerOptions.workerSrc = typeof pdfWorker === 'string' ? pdfWorker : ''
@@ -109,6 +117,120 @@ export interface LocalExtractionOptions {
   tableTemplate?: TableTemplate
   signal?: AbortSignal
   onOcrProgress?: (progress: OcrOrchestrationProgress) => void
+}
+
+export interface ReferenceScanOptions {
+  entries?: readonly ProjectEntry[]
+  languages?: readonly string[]
+  pageNumbers?: readonly number[]
+  signal?: AbortSignal
+  onProgress?: (progress: OcrReferenceRescanProgress) => void
+}
+
+function keptEntryPages(
+  documentId: string,
+  entries: readonly ProjectEntry[] | undefined
+): number[] {
+  return [
+    ...new Set(
+      (entries ?? [])
+        .filter((entry) => entry.status === 'keep')
+        .flatMap((entry) =>
+          entry.regions.flatMap((region) =>
+            region.documentId === documentId ? [region.pageNumber] : []
+          )
+        )
+    )
+  ].sort((left, right) => left - right)
+}
+
+export async function scanPdfReferenceCandidates(
+  documentId: string,
+  data: Uint8Array,
+  options: ReferenceScanOptions = {}
+): Promise<SourceReferenceCandidate[]> {
+  return withPdfDocument(
+    () => pdfjs.getDocument({ data: data.slice() }).promise,
+    async (pdf) => {
+      const selectedPages =
+        options.pageNumbers && options.pageNumbers.length > 0
+          ? [...new Set(options.pageNumbers)].sort((left, right) => left - right)
+          : keptEntryPages(documentId, options.entries)
+      const pageNumbers =
+        selectedPages.length > 0
+          ? selectedPages
+          : Array.from({ length: pdf.numPages }, (_, index) => index + 1)
+      const result = await runOcrReferenceScan(
+        documentId,
+        pdf as unknown as PdfJsRasterDocumentLike,
+        {
+          languages: options.languages ?? ['eng'],
+          pageNumbers,
+          signal: options.signal,
+          onProgress: options.onProgress
+        }
+      )
+      return result.candidates.map((candidate) => ({
+        documentId: candidate.documentId,
+        pageNumber: candidate.pageNumber,
+        text: candidate.text,
+        bbox: candidate.bbox
+      }))
+    }
+  )
+}
+
+export async function detectSourcePageNumberStyle(
+  documentId: string,
+  data: Uint8Array,
+  styleProfile?: DocumentStyleProfile
+): Promise<DetectedPageNumberMatch | undefined> {
+  return withPdfDocument(
+    () => pdfjs.getDocument({ data: data.slice() }).promise,
+    async (pdf) => {
+      const textLayer = await readPdfJsTextLayer(documentId, pdf)
+      const pages = textLayer.map((pageInput) => {
+        const parsed = parseTextLayerPage(pageInput)
+        const lines = groupPageLines(parsed)
+        return {
+          pageNumber: parsed.pageNumber,
+          width: parsed.width,
+          height: parsed.height,
+          lines: lines.map((line) => ({ text: line.text, bbox: line.bbox }))
+        }
+      })
+      return detectPageNumberStyle(pages, styleProfile)
+    }
+  )
+}
+
+export async function scanPdfTextReferenceCandidates(
+  documentId: string,
+  data: Uint8Array,
+  pageNumbers?: ReadonlySet<number>
+): Promise<SourceReferenceCandidate[]> {
+  return withPdfDocument(
+    () => pdfjs.getDocument({ data: data.slice() }).promise,
+    async (pdf) => {
+      const extraction = await extractPdfJsDocument(documentId, pdf)
+      return extraction.blocks.flatMap((block) => {
+        if (pageNumbers && !pageNumbers.has(block.pageNumber)) return []
+        const references = extractReferencesFromText(block.text)
+        return references.length === 0
+          ? []
+          : [
+              {
+                documentId: block.documentId,
+                pageNumber: block.pageNumber,
+                text: block.text,
+                bbox: block.bbox,
+                source: 'pdf-text-reference-scan' as const,
+                references
+              }
+            ]
+      })
+    }
+  )
 }
 
 export async function extractPdfLocally(

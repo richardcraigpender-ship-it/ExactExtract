@@ -22,6 +22,7 @@ import {
   type KeptExportTemplateDraft
 } from './keptExportTemplateDraft'
 import type { KeptExportTemplate } from '../../../shared/keptExportTemplate'
+import type { DetectedPageNumberMatch } from '../../../style'
 
 const PdfViewer = lazy(async () => {
   const module = await import('./PdfViewer')
@@ -68,6 +69,7 @@ interface ExportPanelProps {
     options: KeptImagePlacementOptions,
     uploadedSources: readonly KeptImageSourceDescriptor[]
   ) => void
+  onDetectPageNumbers?: () => Promise<DetectedPageNumberMatch | undefined>
 }
 
 export const ExportPanel = React.memo(function ExportPanel({
@@ -92,7 +94,8 @@ export const ExportPanel = React.memo(function ExportPanel({
   onPreviewPlacedImages,
   imagePlacementOptions,
   uploadedImageSources,
-  onImagePlacementConfigurationChange
+  onImagePlacementConfigurationChange,
+  onDetectPageNumbers
 }: ExportPanelProps): React.JSX.Element {
   const [previewFormat, setPreviewFormat] = useState<PdfExportFormat>('pdf')
   const [previewData, setPreviewData] = useState<Uint8Array | null>(null)
@@ -336,6 +339,7 @@ export const ExportPanel = React.memo(function ExportPanel({
             onDraftChange={(draft) => {
               latestTemplateDraftRef.current = draft
             }}
+            onDetectPageNumbers={onDetectPageNumbers}
             onCancel={() => setShowTemplateEditor(false)}
             onApply={(draft) => {
               applyTemplateDraft(draft)

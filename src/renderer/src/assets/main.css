@@ -388,7 +388,8 @@ button:disabled {
   position: relative;
   display: grid;
   grid-template-columns: minmax(290px, 380px) minmax(350px, 470px) minmax(270px, 1fr);
-  align-items: start;
+  grid-template-rows: minmax(0, 1fr);
+  align-items: stretch;
   gap: clamp(20px, 2vw, 28px);
   width: calc(100% - clamp(64px, 5vw, 88px));
   min-height: 0;
@@ -420,6 +421,7 @@ button:disabled {
   align-content: start;
   gap: 24px;
   min-width: 0;
+  min-height: 0;
 }
 .onboarding-copy {
   max-width: 380px;
@@ -465,6 +467,7 @@ button:disabled {
 }
 .onboarding-flow {
   min-width: 0;
+  min-height: 0;
   padding-top: 7px;
 }
 .onboarding-section-heading {
@@ -1181,7 +1184,9 @@ button:disabled {
 .left-workspace {
   grid-column: 1;
   grid-row: 1;
-  min-width: 220px;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  min-width: 0;
   min-height: 0;
   overflow: hidden;
   border-right: 1px solid var(--studio-border);
@@ -1209,12 +1214,11 @@ button:disabled {
   background: var(--studio-surface);
 }
 .workspace-tool-strip {
-  display: flex;
+  display: grid;
   grid-column: 2;
   grid-row: 1;
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: 6px;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  width: 48px;
   min-height: 0;
   overflow-y: auto;
   border-right: 1px solid var(--studio-border);
@@ -1222,10 +1226,16 @@ button:disabled {
 }
 .workspace-tool-strip > div {
   display: grid;
+  align-content: start;
 }
 .right-workspace-commands {
-  padding-top: 6px;
-  border-top: 1px solid var(--studio-border);
+  align-self: stretch;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--studio-border);
+}
+.workspace-tool-strip > [role='tablist'] {
+  align-self: stretch;
+  padding-top: 16px;
 }
 .workspace-tool-strip button {
   position: relative;
@@ -1233,8 +1243,8 @@ button:disabled {
   grid-template-rows: 18px auto;
   place-items: center;
   gap: 2px;
-  width: 67px;
-  height: 46px;
+  width: 48px;
+  height: 42px;
   padding: 4px 2px;
   border: 0;
   border-bottom: 1px solid var(--studio-border);
@@ -1243,7 +1253,7 @@ button:disabled {
   cursor: pointer;
 }
 .right-workspace-tool-label {
-  max-width: 60px;
+  max-width: 44px;
   overflow: hidden;
   font-size: 10px;
   font-weight: 700;
@@ -1301,6 +1311,13 @@ button:disabled {
   height: 100%;
   overflow-y: auto;
   overflow-x: hidden;
+  background: var(--studio-surface);
+}
+.persistent-review-controls {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  border-bottom: 1px solid var(--studio-border);
   background: var(--studio-surface);
 }
 .source-pdf-panel {
@@ -1577,6 +1594,38 @@ button:disabled {
   border: 0;
   background: transparent;
 }
+.persistent-review-controls .selection-toolbar,
+.persistent-review-controls .bulk-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  overflow: visible;
+}
+.persistent-review-controls .review-structure-actions,
+.persistent-review-controls .review-tag-actions {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  min-width: 0;
+  gap: 7px;
+}
+.persistent-review-controls .review-tag-actions {
+  align-items: center;
+}
+.persistent-review-controls .bulk-tag-field {
+  flex: 1 1 120px;
+  min-width: 0;
+}
+.persistent-review-controls .bulk-tag-field input {
+  width: 100%;
+  min-width: 0;
+}
+.persistent-review-controls .review-structure-actions button,
+.persistent-review-controls .review-tag-actions button {
+  flex: 1 1 88px;
+}
 .workspace-context .selection-toolbar button,
 .workspace-context .bulk-toolbar button {
   min-height: 32px;
@@ -1610,6 +1659,116 @@ button:disabled {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+}
+.reference-tools-panel {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  max-width: 320px;
+  padding: 9px;
+  box-sizing: border-box;
+}
+.reference-tools-panel > header {
+  display: grid;
+  gap: 3px;
+}
+.reference-tools-panel h2,
+.reference-tools-panel h3,
+.reference-tools-panel p {
+  margin: 0;
+}
+.reference-tools-panel h2 {
+  font-size: 13px;
+}
+.reference-tools-panel h3 {
+  font-size: 11px;
+}
+.reference-tools-panel > header p,
+.reference-tools-results > p {
+  color: var(--studio-text-muted);
+  font-size: 10px;
+}
+.reference-tools-actions,
+.review-reference-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.reference-tools-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 0 7px;
+  font-size: 10px;
+}
+.reference-tools-languages {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding: 7px 8px;
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+}
+.reference-tools-languages legend {
+  padding: 0 4px;
+  color: var(--studio-text-muted);
+  font-size: 10px;
+  font-weight: 700;
+}
+.reference-tools-languages > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px 8px;
+}
+.reference-tools-languages label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+}
+.reference-tools-languages p {
+  color: var(--studio-error);
+  font-size: 10px;
+}
+.reference-tools-results {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+}
+.reference-tools-table-wrap {
+  overflow-x: auto;
+}
+.reference-tools-results table {
+  width: 100%;
+  min-width: 0;
+  border-collapse: collapse;
+  font-size: 9px;
+}
+.reference-tools-results th,
+.reference-tools-results td {
+  padding: 4px;
+  text-align: left;
+  white-space: nowrap;
+}
+.reference-tools-results thead th {
+  color: var(--studio-text-muted);
+  font-size: 8px;
+  font-weight: 600;
+}
+.reference-tools-results tbody tr + tr {
+  border-top: 1px solid var(--studio-border);
+}
+.reference-tools-results tbody th {
+  font-weight: 600;
+}
+.reference-tools-status,
+.review-reference-status {
+  max-width: 100%;
+  color: var(--studio-text-muted);
+  font-size: 10px;
 }
 .review-history-actions {
   padding-right: 7px;
@@ -1876,7 +2035,7 @@ button:disabled {
 }
 .split-shell {
   display: grid;
-  grid-template-columns: minmax(220px, 320px) 68px minmax(0, 1fr) 10px minmax(280px, 380px);
+  grid-template-columns: minmax(0, 320px) 48px minmax(0, 1fr) 10px minmax(280px, 380px);
   grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
@@ -3391,6 +3550,7 @@ button:disabled {
     grid-column: 1 / -1;
     justify-self: stretch;
     width: auto;
+    height: auto;
     max-height: min(520px, calc(100vh - 120px));
     padding: 20px 0 0;
     border-top: 1px solid var(--studio-border);
@@ -3562,6 +3722,8 @@ button:disabled {
   }
   .onboarding > .product-updates {
     grid-column: auto;
+    height: auto;
+    max-height: min(420px, calc(100vh - 160px));
   }
   .product-updates-list {
     grid-template-columns: 1fr;

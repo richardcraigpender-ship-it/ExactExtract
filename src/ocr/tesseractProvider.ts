@@ -57,6 +57,8 @@ export function getOfflineTesseractWorkerOptions(
     corePath: OCR_CORE_URL,
     langPath: OCR_LANGUAGE_DATA_URL,
     gzip: true,
+    // Bundled language data is authoritative; avoid stale or incomplete browser-cache entries.
+    cacheMethod: 'none',
     ...(onProgress ? { logger: onProgress } : {})
   }
 }
