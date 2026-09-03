@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { filterInChunks, preserveIdentityIfUnchanged } from './useIncrementalReviewFilter'
+import {
+  filterInChunks,
+  getInitialFilteredItems,
+  preserveIdentityIfUnchanged
+} from './useIncrementalReviewFilter'
 
 test('filters every item in chunks without changing order', async () => {
   const yielded: number[] = []
@@ -46,4 +50,21 @@ test('publishes the new array when the filtered result changed', () => {
   const next = [current[0]!]
 
   assert.equal(preserveIdentityIfUnchanged(current, next), next)
+})
+
+test('skips the eager initial filter pass when filtering is disabled', () => {
+  let evaluations = 0
+  const items = [{ id: 'a' }, { id: 'b' }]
+
+  const result = getInitialFilteredItems(
+    items,
+    () => {
+      evaluations += 1
+      return true
+    },
+    false
+  )
+
+  assert.equal(result, items)
+  assert.equal(evaluations, 0)
 })

@@ -10,8 +10,32 @@ export interface ReviewFilterOptions {
   issuesByEntry: Map<string, Array<{ code: string }>>
 }
 
+export interface ReviewFilterableEntry {
+  id: string
+  status: 'keep' | 'exclude' | 'maybe'
+  source: 'parser' | 'ocr' | 'merged'
+  normalizedText: string
+  tags: readonly string[]
+  category?: string
+}
+
 export function normalizeReviewQuery(query: string): string {
   return query.trim().replace(/\s+/g, ' ').toLocaleLowerCase()
+}
+
+export function hasActiveReviewFilters(
+  options: Pick<
+    ReviewFilterOptions,
+    'query' | 'reviewStatus' | 'reviewSource' | 'reviewCategory' | 'reviewIssueFilter'
+  >
+): boolean {
+  return (
+    normalizeReviewQuery(options.query).length > 0 ||
+    options.reviewStatus !== 'all' ||
+    options.reviewSource !== 'all' ||
+    options.reviewCategory !== 'all' ||
+    options.reviewIssueFilter !== 'all'
+  )
 }
 
 function entryMatchesReviewQuery(
@@ -25,39 +49,29 @@ function entryMatchesReviewQuery(
   return searchable.includes(query)
 }
 
-export function filterReviewEntries<
-  T extends {
-    id: string
-    status: 'keep' | 'exclude' | 'maybe'
-    source: 'parser' | 'ocr' | 'merged'
-    normalizedText: string
-    tags: readonly string[]
-    category?: string
-  }
->(entries: readonly T[], options: ReviewFilterOptions): T[] {
+export function entryMatchesReviewFilters<T extends ReviewFilterableEntry>(
+  entry: T,
+  options: ReviewFilterOptions,
+  query = normalizeReviewQuery(options.query)
+): boolean {
+  const matchesStatus = options.reviewStatus === 'all' || entry.status === options.reviewStatus
+  const matchesSource = options.reviewSource === 'all' || entry.source === options.reviewSource
+  const matchesCategory =
+    options.reviewCategory === 'all' || entry.category === options.reviewCategory
+  const matchesIssue =
+    options.reviewIssueFilter === 'all' ||
+    options.issuesByEntry.get(entry.id)?.some((issue) => issue.code === options.reviewIssueFilter)
+  const matchesQuery = entryMatchesReviewQuery(entry, query)
+
+  return Boolean(matchesStatus && matchesSource && matchesCategory && matchesIssue && matchesQuery)
+}
+
+export function filterReviewEntries<T extends ReviewFilterableEntry>(
+  entries: readonly T[],
+  options: ReviewFilterOptions
+): T[] {
+  if (!hasActiveReviewFilters(options)) return entries as T[]
   const query = normalizeReviewQuery(options.query)
-  const chunkSize = 250
-  const results: T[] = []
 
-  for (let index = 0; index < entries.length; index += chunkSize) {
-    const chunk = entries.slice(index, index + chunkSize)
-    for (const entry of chunk) {
-      const matchesStatus = options.reviewStatus === 'all' || entry.status === options.reviewStatus
-      const matchesSource = options.reviewSource === 'all' || entry.source === options.reviewSource
-      const matchesCategory =
-        options.reviewCategory === 'all' || entry.category === options.reviewCategory
-      const matchesIssue =
-        options.reviewIssueFilter === 'all' ||
-        options.issuesByEntry
-          .get(entry.id)
-          ?.some((issue) => issue.code === options.reviewIssueFilter)
-      const matchesQuery = entryMatchesReviewQuery(entry, query)
-
-      if (matchesStatus && matchesSource && matchesCategory && matchesIssue && matchesQuery) {
-        results.push(entry)
-      }
-    }
-  }
-
-  return results
+  return entries.filter((entry) => entryMatchesReviewFilters(entry, options, query))
 }
