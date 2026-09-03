@@ -11,7 +11,7 @@ export interface EntryPngFile {
 export async function generateEntryPngFiles(
   project: ProjectState,
   readPdf: (path: string) => Promise<Uint8Array>,
-  scale = 2
+  scale = 4
 ): Promise<EntryPngFile[]> {
   if (!Number.isFinite(scale) || scale <= 0) throw new Error('Image export scale must be positive.')
   const crops = buildEntryImageCrops(project.entries)
