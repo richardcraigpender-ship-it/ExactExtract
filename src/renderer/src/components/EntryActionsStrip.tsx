@@ -11,6 +11,7 @@ import {
   Images,
   Link,
   Save,
+  Store,
   Trash2,
   Upload,
   ZoomIn,
@@ -28,6 +29,7 @@ export type ContextMode =
   | 'remove-pages'
   | 'marks'
   | 'references'
+  | 'merchants'
 export type EntryActionCommand =
   'zoom-in' | 'zoom-out' | 'import' | 'save' | 'jump' | 'currency' | 'detect-style'
 
@@ -40,7 +42,8 @@ const contextModes = [
   { id: 'warnings', label: 'Warnings and duplicates', shortLabel: 'Issues', icon: AlertTriangle },
   { id: 'remove-pages', label: 'Remove pages', shortLabel: 'Remove', icon: Trash2 },
   { id: 'marks', label: 'Highlight tools', shortLabel: 'Marks', icon: Eye },
-  { id: 'references', label: 'Reference tools', shortLabel: 'Refs', icon: Link }
+  { id: 'references', label: 'Reference tools', shortLabel: 'Refs', icon: Link },
+  { id: 'merchants', label: 'Merchant library', shortLabel: 'Shops', icon: Store }
 ] as const
 
 const commands = [

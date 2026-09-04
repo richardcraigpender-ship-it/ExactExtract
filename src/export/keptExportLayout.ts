@@ -143,6 +143,7 @@ export function buildKeptExportRenderPlan(
     }
     if (currentTemplate.divider?.enabled) {
       const divider = currentTemplate.divider
+      const dividerSpacing = Math.max(0, divider.spacing ?? 0)
       for (const row of pageRows) {
         const rowPlacements = placements.filter((placement) => placement.entryId === row.entryId)
         if (rowPlacements.length === 0) continue
@@ -151,7 +152,9 @@ export function buildKeptExportRenderPlan(
           pageNumber,
           startX: divider.startX,
           endX: divider.endX,
-          y: Math.max(...rowPlacements.map((placement) => placement.y + placement.height)),
+          y:
+            Math.max(...rowPlacements.map((placement) => placement.y + placement.height)) -
+            dividerSpacing,
           thickness: divider.thickness,
           color: divider.color,
           opacity: divider.opacity

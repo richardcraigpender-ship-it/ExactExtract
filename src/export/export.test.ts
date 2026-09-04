@@ -230,3 +230,22 @@ test('exports deterministic JSON with optional excluded separation and traceabil
   assert.equal(parsed.sections.kept[0]?.regions[0]?.pageNumber, 1)
   assert.equal(parsed.exportSchemaVersion, 1)
 })
+
+test('keeps scenario rows out of exports unless explicitly included', () => {
+  const source = project()
+  source.entries.push({
+    ...entry('scenario-1', 'maybe', 'Forecast merchant', 1),
+    origin: 'scenario',
+    merchantId: 'merchant-1',
+    scenarioSeed: 7
+  })
+
+  assert.deepEqual(
+    buildExportSnapshot(source).sections.maybe.map((item) => item.id),
+    ['maybe-1']
+  )
+  assert.deepEqual(
+    buildExportSnapshot(source, { includeScenario: true }).sections.maybe.map((item) => item.id),
+    ['scenario-1', 'maybe-1']
+  )
+})

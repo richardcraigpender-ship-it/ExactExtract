@@ -11,7 +11,8 @@ const contextLabels: Record<ContextMode, string> = {
   warnings: 'Warnings and duplicates',
   'remove-pages': 'Remove pages',
   marks: 'Highlight tools',
-  references: 'Reference tools'
+  references: 'Reference tools',
+  merchants: 'Merchant library'
 }
 
 interface ContextPanelProps {

@@ -184,7 +184,8 @@ export function createDefaultKeptExportPageTemplate(): KeptExportPageTemplateDra
       width: 516,
       thickness: 1,
       color: '#17231c',
-      opacity: 0.35
+      opacity: 0.35,
+      spacing: 0
     },
     columns: DEFAULT_COLUMN_SPECS.map((column) => ({
       ...column,

@@ -9,6 +9,10 @@ void React
 import type { ExportSnapshot } from '../../../export'
 import type { ProjectEntry } from '../../../shared/contracts'
 import { ExportPanel } from './ExportPanel'
+import {
+  createDefaultKeptExportTemplateDraft,
+  toKeptExportTemplate
+} from './keptExportTemplateDraft'
 import { ReviewMergeSplitControls } from './ReviewMergeSplitControls'
 
 function entry(id: string, status: ProjectEntry['status']): ProjectEntry {
@@ -105,6 +109,33 @@ test('shows currency symbols for numeric kept entries in the export preview', ()
   )
 
   assert.match(markup, /\$125\.00/)
+})
+
+test('offers the kept text template preview only once a template is configured', () => {
+  const withoutTemplate = renderToStaticMarkup(
+    <ExportPanel
+      snapshot={snapshot}
+      status="Ready to export"
+      isSaving={false}
+      onSave={() => {}}
+      onPreview={async () => new Uint8Array()}
+    />
+  )
+
+  assert.match(withoutTemplate, /<option value="pdf-kept-template" disabled="">/)
+
+  const withTemplate = renderToStaticMarkup(
+    <ExportPanel
+      snapshot={snapshot}
+      status="Ready to export"
+      isSaving={false}
+      onSave={() => {}}
+      onPreview={async () => new Uint8Array()}
+      keptExportTemplate={toKeptExportTemplate(createDefaultKeptExportTemplateDraft())}
+    />
+  )
+
+  assert.match(withTemplate, /<option value="pdf-kept-template">Kept text template<\/option>/)
 })
 
 test('separates kept text and PNG layout configuration commands', () => {

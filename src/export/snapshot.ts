@@ -37,10 +37,14 @@ function cloneEntry(
 function entriesByStatus(
   project: ProjectState,
   status: ProjectEntry['status'],
-  currencyCode: ReturnType<typeof resolveCurrencyCode>
+  currencyCode: ReturnType<typeof resolveCurrencyCode>,
+  includeScenario: boolean
 ): ExportEntry[] {
   return project.entries
-    .filter((entry) => entry.status === status)
+    .filter(
+      (entry) =>
+        entry.status === status && (includeScenario || (entry.origin ?? 'imported') !== 'scenario')
+    )
     .sort(compareEntries)
     .map((entry) => cloneEntry(entry, currencyCode))
 }
@@ -90,9 +94,10 @@ export function buildExportSnapshot(
   options: ExportOptions = {}
 ): ExportSnapshot {
   const currencyCode = resolveCurrencyCode(project.settings.currencyCode)
-  const kept = entriesByStatus(project, 'keep', currencyCode)
-  const maybe = entriesByStatus(project, 'maybe', currencyCode)
-  const excluded = entriesByStatus(project, 'exclude', currencyCode)
+  const includeScenario = options.includeScenario === true
+  const kept = entriesByStatus(project, 'keep', currencyCode, includeScenario)
+  const maybe = entriesByStatus(project, 'maybe', currencyCode, includeScenario)
+  const excluded = entriesByStatus(project, 'exclude', currencyCode, includeScenario)
   return {
     exportSchemaVersion: 1,
     project: {

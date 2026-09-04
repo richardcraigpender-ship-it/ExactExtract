@@ -125,9 +125,12 @@ function defaultDivider(pageWidth: number): KeptExportDivider {
     width: pageWidth - startX - 48,
     thickness: 1,
     color: '#17231c',
-    opacity: 0.35
+    opacity: 0.35,
+    spacing: 0
   }
 }
+
+const DIVIDER_SPACING_OPTIONS = [0, 1, 2, 3, 4, 6, 8, 10, 12]
 
 export function KeptExportTemplateEditor({
   initialDraft,
@@ -509,6 +512,22 @@ export function KeptExportTemplateEditor({
                 setDivider((current) => ({ ...current, endX, width: endX - current.startX }))
               }
             />
+            <label>
+              <span>Space around</span>
+              <select
+                value={divider.spacing ?? 0}
+                disabled={!divider.enabled}
+                onChange={(event) =>
+                  setDivider((current) => ({ ...current, spacing: Number(event.target.value) }))
+                }
+              >
+                {DIVIDER_SPACING_OPTIONS.map((points) => (
+                  <option key={points} value={points}>
+                    {points === 0 ? 'None' : `${points}pt`}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </section>
 

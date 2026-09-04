@@ -8,6 +8,8 @@ export const PROJECT_SCHEMA_VERSION = 1 as const
 export type ProjectSchemaVersion = typeof PROJECT_SCHEMA_VERSION
 export type ReviewStatus = 'keep' | 'exclude' | 'maybe'
 export type ExtractionSource = 'parser' | 'ocr' | 'merged'
+export type ProjectEntryOrigin = 'imported' | 'manual' | 'scenario'
+export type EntryDirection = 'in' | 'out'
 export type ExtractionMode = 'fast' | 'balanced' | 'maximum' | 'custom'
 export type DocumentKind =
   'report' | 'invoice' | 'statistical' | 'financial' | 'tabular' | 'mixed' | 'unknown'
@@ -22,6 +24,7 @@ export interface BoundingBox {
 }
 
 export interface SourceRegion {
+  id?: string
   documentId: string
   pageNumber: number
   bbox?: BoundingBox
@@ -151,6 +154,12 @@ export interface ProjectEntry {
   tags: string[]
   createdAt: string
   updatedAt: string
+  /** Imported entries omit this for backwards compatibility; new rows should set it explicitly. */
+  origin?: ProjectEntryOrigin
+  merchantId?: string
+  direction?: EntryDirection
+  sourceReference?: SourceRegion
+  scenarioSeed?: number
 }
 
 export interface PagePreflightResult {

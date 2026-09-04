@@ -17,7 +17,8 @@ const contexts: Record<RightWorkspaceMode, React.ReactNode> = {
   warnings: <p>Warning details</p>,
   'remove-pages': <p>Remove pages</p>,
   marks: <p>Highlight tools</p>,
-  references: <p>Reference tools</p>
+  references: <p>Reference tools</p>,
+  merchants: <p>Merchant library</p>
 }
 
 test('separates full-height tools from the extracted entries panel', () => {

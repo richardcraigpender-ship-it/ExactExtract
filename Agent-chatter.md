@@ -1,4 +1,4 @@
-ddddddddddddddddddddddddddddddddddddd# Agent Chatter
+# Agent Chatter
 
 Shared coordination log for all agents working on PDF Extract Review Studio.
 
@@ -518,6 +518,166 @@ interface KeptExportRunningBalance {
   balanceFieldMode: 'keep-original' | 'replace-original' | 'add-calculated'
   decimalPlaces: number
 }
+
+## 2026-09-04 3-Agent Sprint Plan: Offline Merchant Intelligence & Forecasting
+
+**Goal:** Build an offline, privacy-first merchant library that learns from extracted statements, invoices, and receipts, filters likely personal transfers, and supports user-reviewed merchant data for manual and scenario rows in a project.
+
+**Total estimate:** 39 SP · **Suggested duration:** two focused two-week sprints · **Risk:** Medium
+
+**Non-negotiable privacy boundary:** All extraction, classification, storage, and forecasting occur locally. No telemetry, hosted model, sync, runtime download, source PDF bytes, source file paths, or original transaction descriptions may leave the device. Personal-transfer candidates are excluded from the global merchant library and forecasts by default.
+
+### Agent A — Merchant Contracts, Storage, Extraction, and Privacy Classifier
+
+Owner: shared contracts, Electron user-data persistence, import/rescan candidate extraction, personal-transfer classification, provenance, IPC, and focused tests. **Estimate: 15 SP**
+
+Likely files:
+
+- `src/shared/payees.ts` or a new `src/shared/merchants.ts`
+- `src/main/payeeLibraryStore.ts` or a new `src/main/merchantLibraryStore.ts`
+- `src/main/index.ts`
+- `src/preload/index.ts`
+- `src/preload/index.d.ts`
+- `src/extraction/entryProjection.ts`
+- `src/shared/contracts.ts`
+- focused tests in `src/main`, `src/extraction`, and `src/shared`
+
+Tasks:
+
+1. Define a versioned local merchant record: stable ID, normalized key, display name, aliases, category, recurring/default forecast settings, inclusion state, notes, created/updated timestamps, and explicit user classification/override.
+2. Define minimal provenance observations: project ID, entry ID, document ID, page number, source-region ID when available, normalized key, amount, direction, transaction date, and extraction timestamp. Original extracted payee text remains project-local; do not retain it globally unless a user explicitly approves it as merchant display/alias data.
+3. Implement an atomic, corruption-tolerant user-data store consistent with the existing payee-library approach. Support query, create, update, approve, exclude, forget permanently, and project/document rescan operations through typed preload IPC.
+4. On completed import/extraction, derive payee/merchant candidates from financial entries and reconcile them idempotently into the library. Do not overwrite manual metadata, exclusions, or user overrides during subsequent scans.
+5. Implement a deterministic, explainable personal-transfer classifier. Normalize input and flag recognised leading phrases including `transfer to`, `transfer from`, `sent to`, `sent by`, `paid to`, `paid by`, `transferred to`, and `transferred from`. Treat them as high-confidence flags, not proof; combine them with email, phone, account-like digit, or reference-pattern evidence.
+6. Return `merchant-candidate`, `likely-personal`, `unknown`, or `excluded`, with machine-readable reason flags. `likely-personal` and `excluded` must not become global forecast candidates until the user explicitly approves them.
+7. Add migration/validation coverage, normalization tests, classifier tests, atomic-store tests, idempotent rescans, user override preservation, and permanent deletion including provenance.
+
+Acceptance criteria:
+
+- Extraction/import and explicit rescan create only local candidate observations.
+- Transfer wording is a flag with explainable reasons, never a destructive automatic deletion rule.
+- A user decision always wins over a later scan.
+- Permanent delete removes global merchant metadata and global provenance, without deleting source project entries.
+- Existing payee-library data and projects reopen safely after migration.
+
+### Agent B — Merchant Library Tool Panel and Review Workflows
+
+Owner: renderer tool panel, merchant review/edit controls, manual merchant entry, rescan UX, and accessibility. **Estimate: 13 SP**
+
+Likely files:
+
+- `src/renderer/src/components/MerchantLibraryPanel.tsx`
+- `src/renderer/src/components/MerchantLibraryPanel.css`
+- `src/renderer/src/App.tsx`
+- `src/renderer/src/components/*Workspace*.tsx`
+- focused component tests
+
+Tasks:
+
+1. Add a searchable Merchant Library tool panel with filters for approved, review needed, likely personal, excluded, recurring, category, current-project observations, and unlinked records.
+2. Display compact merchant facts: display name, aliases, category, observation count, last seen, typical amount, direction, cadence/default values, classification reasons, and navigable project/source references where current viewer capabilities permit.
+3. Implement record actions: approve as merchant, keep private, exclude from forecasts, edit, merge aliases, forget permanently, and restore from excluded status. All destructive actions require clear confirmation.
+4. Add a manual `Add merchant` workflow: name, aliases, category, recurring toggle, default amount, cadence, direction, notes, and forecast inclusion. Detect normalized duplicates but allow an explicit user choice to merge or keep separate.
+5. Add a rescan control for current project and selected documents. Preserve manual edits and overrides; show new candidates, matched observations, transfer flags, and unchanged counts.
+6. Provide loading, empty, error, and keyboard/screen-reader states. Never expose raw personal candidate data outside the local app.
+
+Acceptance criteria:
+
+- A user can review, correct, delete, or explicitly approve every candidate.
+- The panel clearly distinguishes merchant candidates from private transfer flags.
+- Rescan is explicit and idempotent, and cannot erase user decisions.
+- A merchant can be added and edited without importing a document.
+
+### Agent C — Project Rows, Scenario Generation, Forecasting, and Export Boundaries
+
+Owner: project-local manual/scenario row contract, merchant-template row creation, deterministic scenario generation, forecasting UI, and export safeguards. **Estimate: 11 SP**
+
+Likely files:
+
+- `src/shared/contracts.ts`
+- `src/analysis/*` or new forecast helpers
+- `src/renderer/src/App.tsx`
+- `src/renderer/src/components/*Analysis*.tsx`
+- `src/export/*`
+- focused model/component/export tests
+
+Tasks:
+
+1. Define project rows with `origin: 'imported' | 'manual' | 'scenario'`, editable date, amount, direction, category, merchant reference, notes, optional source reference, and stable ordering. Scenario rows must never mutate or replace extracted evidence.
+2. Let users create manual current-project rows from a blank form or a merchant template, and add project columns through existing template/column conventions with validation and stable ordering.
+3. Build an offline forecast generator from approved merchants and explicit user assumptions: selected merchants, start/end dates, cadence, direction, amounts, and optional variability.
+4. When random variation is requested, use a seeded local pseudo-random generator; persist its seed and assumptions so a scenario is reproducible. Label all generated rows as scenario data.
+5. Provide baseline versus scenario totals, monthly breakdown, forecast assumptions, projected savings, individual row edit/delete, and explicit inclusion controls.
+6. Default exports to excluding scenario data or visibly labelling it. Imported evidence, manual rows, and scenario rows must remain distinct at every export boundary.
+
+Acceptance criteria:
+
+- Users can manually add merchant-linked rows and project columns without altering imported entries.
+- Generated scenarios are reproducible from their saved seed and assumptions.
+- Likely-personal and excluded merchants do not enter forecasts unless explicitly included by the user.
+- Export output clearly distinguishes imported, manual, and scenario data.
+
+### Shared Work Order
+
+1. Agent A lands the shared merchant contracts, classifier, local store, and typed IPC before UI work begins.
+2. Agent B builds the panel only through Agent A's preload APIs; renderer code must not read user-data files directly.
+3. Agent C consumes Agent A's approved merchant contract and keeps manual/scenario rows project-local.
+4. Joint hardening covers migration from the current payee library, private-record permanent deletion, rescan idempotency, offline/network-blocked behavior, and labelled export behavior.
+
+### Shared Acceptance and Validation
+
+- No network dependency exists in extraction, classification, storage, or forecasting.
+- A flagged private transfer cannot silently be promoted into the global merchant library.
+- Removing a merchant does not silently delete the original project evidence.
+- A Settings/data-management path exists to remove all merchant-library and forecast data.
+- Unit tests cover classifier phrases, false-positive override, data migration, deletion, rescan preservation, seeded scenario determinism, and export labelling.
+
+Suggested final gates:
+
+```powershell
+npm test
+npm run lint
+npm run typecheck
+npm run build
+```
+
+### Active Ownership Note — 2026-09-04
+
+- Agent A claims the data/storage/classifier/IPC slice above. Agent B and Agent C should not alter the merchant shared contract or main-process store without a handoff note here.
+
+### Agent B completion — Merchant Library Tool Panel (2026-09-04)
+
+- Added `MerchantLibraryPanel.tsx` + `.css` as a new `merchants` workspace context: searchable library with filters for All, Approved, Review needed, Likely personal, Excluded, Recurring, This project, and Unlinked, plus an approved/review/flagged count summary.
+- Compact per-record facts: display name, aliases, category, occurrence count, last seen, typical amount (explicit `defaultAmount`, else median of provenance amounts), dominant direction, and cadence. Provenance entries in the open project render as navigable buttons wired to `focusEntryInReview`.
+- Record actions: approve, exclude, restore, edit (name/aliases/category/default amount/recurring/notes), merge-as-alias, forget permanently, and a forecast-inclusion toggle. Forget is a two-step inline confirmation stating that project entries are kept; the forecast toggle is disabled for flagged or excluded records so a private transfer cannot be silently promoted.
+- Manual `Add merchant` form with name, aliases, category, default amount, cadence, recurring, forecast inclusion, and notes. Duplicate detection runs through Agent A's `normalizeMerchantKey` against both display names and aliases, then offers an explicit Merge-as-alias or Keep-separate choice.
+- Rescan control calls `merchants.rescanProject` and reports added/flagged counts with an explicit note that user decisions were preserved. It is disabled without an open project or while extraction is running.
+- Pure filter/state helpers live in `merchantLibraryFilters.ts` (`filterMerchantRecords`, `isApproved`, `needsReview`, `isLikelyPersonal`, `MERCHANT_FILTERS`) so the component file only exports a component and Fast Refresh stays clean.
+- All IPC goes through `useMerchantLibrary.ts`, which wraps `window.studio.merchants` only. No renderer code reads user-data files directly. Approve/exclude/restore map onto `update()`, which sets `userOverride` in Agent A's store, so a user decision always wins over a later scan.
+- **Contract gap for Agent A:** the sprint brief lists `direction` on the manual add workflow, but `MerchantCreate` has no `direction` field. I did not alter the shared contract per the ownership note; the panel omits direction on create and derives it from provenance for display. Add `direction?: 'in' | 'out'` to `MerchantCreate`/`MerchantUpdate` and I will wire the control.
+- Also fixed a stray corrupted prefix on this file's top-level heading.
+- Validation: `npm test` 558/558 pass; `npm run typecheck` (node + web) clean; `npm run lint` 0 errors 0 warnings; `npm run build` succeeds with only the pre-existing `PdfViewer.tsx` chunk warning; Prettier clean on all Agent B files.
+- Files touched: `MerchantLibraryPanel.tsx`, `MerchantLibraryPanel.css`, `MerchantLibraryPanel.test.tsx`, `merchantLibraryFilters.ts`, `lib/useMerchantLibrary.ts`, plus the `merchants` context registration in `EntryActionsStrip.tsx`, `ContextPanel.tsx`, `App.tsx`, and the contexts record in `RightWorkspace.test.tsx`. No changes to `src/shared/merchants.ts`, `src/main/merchantLibraryStore.ts`, or the preload surface.
+
+### Agent A completion — Offline Merchant Intelligence & Forecasting (2026-09-04)
+
+- Added `src/shared/merchants.ts`: versioned merchant contracts, normalized keys, minimal source provenance, manual merchant create/update types, and deterministic private-counterparty classification.
+- The classifier treats `transfer to/from`, `transferred to/from`, `sent to/by`, and `paid to/by` as an explainable `transfer-prefix` flag. Email addresses, phone-number patterns, and account-like numbers add further flags. Any flag yields `likely-personal`; ordinary descriptions yield `merchant-candidate`.
+- Added `src/main/merchantLibraryStore.ts`: a separate atomic local `merchants.json` store with serialized writes, malformed-file quarantine, list/search, manual create/update, permanent deletion, and idempotent project-entry ingestion. Automatic ingestion stores merchant candidates only; likely-personal candidates are counted but never persisted globally.
+- Merchant provenance includes project/entry/document/page/region references plus amount/date when present. Original descriptions are not stored inside global provenance.
+- Wired automatic ingestion to `studio:projects:save`, which covers the normal post-extraction/import project-save path. Added `studio:merchants:*` preload IPC for list, search, classify, create, update, delete, and explicit project rescan. Agent B should consume only these APIs, not the underlying user-data file.
+- Added focused `src/main/merchantLibraryStore.test.ts` coverage for transfer/private flags, automatic filtering, provenance, idempotency, manual exclusion, and permanent deletion.
+- Validation: `npm run typecheck:node` passed; focused merchant-store tests passed 3/3; diagnostics clean; Prettier check passed for all Agent A files. Full `npm run typecheck` is currently blocked by Agent C in-progress errors in `src/analysis/forecast.ts` (unused `monthKey`; optional `merchantId` assigned where required). These are outside Agent A's files.
+
+### Agent C handoff — Project Rows, Scenario Generation, Forecast Export Boundary (2026-09-04)
+
+- Added backward-compatible project-entry metadata for `origin` (`imported`, `manual`, `scenario`), merchant linkage, direction, source reference, and scenario seed.
+- Added deterministic offline forecast helpers in `src/analysis/forecast.ts`: merchant-template manual rows, weekly/fortnightly/monthly generation, seeded variability, validation, monthly totals, and explicit exclusion overrides.
+- Forecast generation only includes selected merchants that are forecast-enabled and classified as merchant candidates by default. Excluded/private records require an explicit `includeExcluded` assumption.
+- Export snapshots now omit scenario rows by default; callers must pass `includeScenario: true` to export them, preserving the distinction between source evidence and projections.
+- Focused forecast and export tests pass, and Agent C files lint cleanly. Renderer UI wiring remains available for Agent B/coordinator integration through the exported analysis helpers. Full `npm run typecheck` is currently blocked by two pre-existing/in-flight Agent B `merchants` context-map omissions in `App.tsx` and `RightWorkspace.test.tsx`.
+- 2026-09-04 follow-up: `generateForecast` now supports `randomRowCount` for an exact number of seeded random rows, `minSpend`/`maxSpend` bounds, and the existing `startDate`/`endDate` timeframe. Random rows default to outgoing, remain scenario-labelled, and reject invalid bounds/counts. Focused forecast tests and full typecheck pass.
+- 2026-09-04 UI follow-up: Agent C wired the forecast form into the Shops/Merchant Library panel. It accepts From/To dates, random row count, min/max spend, and seed, then appends scenario rows to the current project. Approved and excluded merchant records are tucked into the panel's Databases tab; review-needed/private candidates remain on the default Review tab.
 ```
 
 Default: `enabled: false`, `fallback: 'first-existing-balance'`, `balanceFieldMode: 'add-calculated'`, `decimalPlaces: 2`.

@@ -44,6 +44,8 @@ export interface KeptExportDivider {
   opacity: number
   startX: number
   endX: number
+  /** Points of clear space kept around the line; lifts it off the entry below. Defaults to 0. */
+  spacing?: number
 }
 
 export type KeptExportRunningBalanceFallback = 'first-existing-balance' | 'zero'

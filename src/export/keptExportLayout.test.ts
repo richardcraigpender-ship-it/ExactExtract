@@ -147,6 +147,33 @@ test('adds a configured divider after every rendered entry', () => {
   )
 })
 
+test('lifts dividers off the following entry by the configured spacing', () => {
+  const current = template()
+  current.useSeparateLaterPages = false
+  const divider = {
+    enabled: true,
+    startX: 40,
+    endX: 300,
+    width: 260,
+    thickness: 1.5,
+    color: '#336699',
+    opacity: 0.4
+  }
+  current.pageOneTemplate.divider = { ...divider }
+
+  const flush = buildKeptExportRenderPlan(rows.slice(0, 2), current)
+  const flushY = flush.pages[0]?.dividers.map((placement) => placement.y) ?? []
+
+  current.pageOneTemplate.divider = { ...divider, spacing: 6 }
+  const spaced = buildKeptExportRenderPlan(rows.slice(0, 2), current)
+
+  assert.equal(flushY.length, 2)
+  assert.deepEqual(
+    spaced.pages[0]?.dividers.map((placement) => placement.y),
+    flushY.map((y) => y - 6)
+  )
+})
+
 test('renders references under the main text column when configured', () => {
   const current = template()
   current.useSeparateLaterPages = false

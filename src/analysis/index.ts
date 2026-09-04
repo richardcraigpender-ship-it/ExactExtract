@@ -6,6 +6,7 @@ export { inferColumnRole, inferColumnRoles } from './roles'
 export { mapFinancialEntry, reconcileFinancialEntries } from './reconcile'
 export { calculateStatementStats } from './statementStats'
 export { createAnalysisSnapshot } from './snapshot'
+export { createMerchantTemplateRow, generateForecast } from './forecast'
 export { validateAnalysisEntries } from './validate'
 export type * from './types'
 export type {
@@ -19,3 +20,10 @@ export type {
   ReconciliationResult
 } from './reconcile'
 export type { MonthlyStatementStats, StatementDataset, StatementStats } from './statementStats'
+export type {
+  ForecastAssumptions,
+  ForecastCadence,
+  ForecastMonth,
+  ForecastResult,
+  ForecastRow
+} from './forecast'

@@ -31,6 +31,8 @@ import { RemovePagesPanel } from './components/RemovePagesPanel'
 import { HighlightToolPanel } from './components/HighlightToolPanel'
 import { StyleProfilePanel } from './components/StyleProfilePanel'
 import { ReferenceToolsPanel, type ReferenceToolResult } from './components/ReferenceToolsPanel'
+import { MerchantLibraryPanel } from './components/MerchantLibraryPanel'
+import { useMerchantLibrary } from './lib/useMerchantLibrary'
 import {
   applyHighlightGeometry,
   measureHighlight,
@@ -362,6 +364,19 @@ function App(): React.JSX.Element {
     Partial<Record<ReferenceToolResult['action'], ReferenceToolResult>>
   >({})
   const [isScanningSourceReferences, setIsScanningSourceReferences] = useState(false)
+  const merchantLibrary = useMerchantLibrary()
+  const addScenarioRows = useCallback((rows: readonly ProjectEntry[]): void => {
+    if (rows.length === 0) return
+    setProject((current) =>
+      current
+        ? {
+            ...current,
+            entries: [...current.entries, ...rows],
+            updatedAt: new Date().toISOString()
+          }
+        : current
+    )
+  }, [])
   const [workspaceMode, setWorkspaceMode] = useState<RightWorkspaceMode>('source-pdf')
   const [analysisConfiguration, setAnalysisConfiguration] = useState<AnalysisConfiguration>(
     DEFAULT_ANALYSIS_CONFIGURATION
@@ -2263,6 +2278,13 @@ function App(): React.JSX.Element {
           }))
         })
       }
+      if (format === 'pdf-kept-template') {
+        const appliedTemplate = template ?? keptExportTemplate
+        if (!appliedTemplate) {
+          throw new Error('Configure the kept text export template before previewing it.')
+        }
+        return exportProjectKeptEntriesTemplatePdf(projectSnapshot, appliedTemplate)
+      }
       if (format === 'pdf-kept-canvas') {
         if (template) return exportProjectKeptEntriesTemplatePdf(projectSnapshot, template)
         const imageDataUrls = await resolveKeptImageDataUrls(
@@ -2293,7 +2315,7 @@ function App(): React.JSX.Element {
       if (format === 'pdf-kept') return exportProjectKeptEntriesPdf(projectSnapshot, sourceFiles)
       return exportProjectKeptLayoutPdf(projectSnapshot, sourceFiles)
     },
-    [analysisSnapshot, projectSnapshot]
+    [analysisSnapshot, keptExportTemplate, projectSnapshot]
   )
 
   const saveExport = useCallback(
@@ -4134,6 +4156,30 @@ function App(): React.JSX.Element {
                       onScanOcr={() => void scanSourceReferencesToNotes()}
                       onCancelScan={cancelSourceReferenceScan}
                       onToggleOcrLanguage={toggleOcrLanguage}
+                    />
+                  ),
+                  merchants: (
+                    <MerchantLibraryPanel
+                      records={merchantLibrary.records}
+                      isLoading={merchantLibrary.isLoading}
+                      isRescanning={merchantLibrary.isRescanning}
+                      error={merchantLibrary.error}
+                      status={merchantLibrary.status}
+                      projectId={project?.id}
+                      canRescan={Boolean(project) && extractionProgress === null}
+                      onApprove={merchantLibrary.approve}
+                      onExclude={merchantLibrary.exclude}
+                      onRestore={merchantLibrary.restore}
+                      onToggleForecast={merchantLibrary.toggleForecast}
+                      onUpdate={merchantLibrary.update}
+                      onForget={merchantLibrary.forget}
+                      onCreate={merchantLibrary.create}
+                      onMergeAlias={merchantLibrary.mergeAlias}
+                      onAddScenarioRows={addScenarioRows}
+                      onRescanProject={() => {
+                        if (project) merchantLibrary.rescanProject(project.id)
+                      }}
+                      onNavigateToEntry={focusEntryInReview}
                     />
                   ),
                   analysis: (

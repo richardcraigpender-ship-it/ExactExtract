@@ -1,5 +1,11 @@
 import type { ProjectState, RecentProject } from '../shared/contracts'
 import type { PayeeObservation, PayeeRecord } from '../shared/payees'
+import type {
+  MerchantCandidate,
+  MerchantCreate,
+  MerchantRecord,
+  MerchantUpdate
+} from '../shared/merchants'
 import type { ProjectImageDescriptor } from '../shared/projectImages'
 import type { CloseGuardState, RecentProjectRecoveryItem } from '../recovery'
 import type { RemovedPdfPages } from '../renderer/src/lib/removePdfPages'
@@ -38,6 +44,15 @@ export interface StudioBridge {
     list: () => Promise<PayeeRecord[]>
     search: (query: string) => Promise<PayeeRecord[]>
     upsert: (observation: PayeeObservation) => Promise<PayeeRecord>
+  }
+  merchants: {
+    list: () => Promise<MerchantRecord[]>
+    search: (query: string) => Promise<MerchantRecord[]>
+    classify: (description: string) => Promise<MerchantCandidate>
+    create: (input: MerchantCreate) => Promise<MerchantRecord>
+    update: (id: string, input: MerchantUpdate) => Promise<MerchantRecord>
+    remove: (id: string) => Promise<void>
+    rescanProject: (projectId: string) => Promise<{ added: number; flaggedPersonal: number }>
   }
   exports: {
     save: (request: {

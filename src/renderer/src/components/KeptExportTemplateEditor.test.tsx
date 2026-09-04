@@ -24,6 +24,8 @@ test('renders the complete default page-template editor without applying changes
   assert.match(markup, /Show references under main text/)
   assert.match(markup, /Entry divider/)
   assert.match(markup, /Show dividers/)
+  assert.match(markup, /Space around/)
+  assert.match(markup, /<option value="2">2pt<\/option>/)
   assert.match(markup, /Calculated balance/)
   assert.match(markup, /Add calculated running balance/)
   assert.match(markup, /Opening balance/)

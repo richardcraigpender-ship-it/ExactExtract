@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { CloseGuardState } from '../recovery'
+import type { MerchantCreate, MerchantUpdate } from '../shared/merchants'
 
 const studio = {
   app: {
@@ -47,6 +48,17 @@ const studio = {
       entryId: string
       seenAt: string
     }) => ipcRenderer.invoke('studio:payees:upsert', observation)
+  },
+  merchants: {
+    list: () => ipcRenderer.invoke('studio:merchants:list'),
+    search: (query: string) => ipcRenderer.invoke('studio:merchants:search', query),
+    classify: (description: string) => ipcRenderer.invoke('studio:merchants:classify', description),
+    create: (input: MerchantCreate) => ipcRenderer.invoke('studio:merchants:create', input),
+    update: (id: string, input: MerchantUpdate) =>
+      ipcRenderer.invoke('studio:merchants:update', id, input),
+    remove: (id: string) => ipcRenderer.invoke('studio:merchants:remove', id),
+    rescanProject: (projectId: string) =>
+      ipcRenderer.invoke('studio:merchants:rescan-project', projectId)
   },
   exports: {
     save: (request: {

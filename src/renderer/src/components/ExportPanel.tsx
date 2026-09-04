@@ -30,7 +30,13 @@ const PdfViewer = lazy(async () => {
 })
 
 export type PdfExportFormat =
-  'pdf' | 'pdf-layout' | 'pdf-compact' | 'pdf-kept' | 'pdf-kept-layout' | 'pdf-kept-canvas'
+  | 'pdf'
+  | 'pdf-layout'
+  | 'pdf-compact'
+  | 'pdf-kept'
+  | 'pdf-kept-layout'
+  | 'pdf-kept-canvas'
+  | 'pdf-kept-template'
 
 interface ExportPanelProps {
   snapshot: ExportSnapshot
@@ -150,6 +156,9 @@ export const ExportPanel = React.memo(function ExportPanel({
                   <option value="pdf-kept">Kept entries</option>
                   <option value="pdf-kept-layout">Kept original layout</option>
                   <option value="pdf-kept-canvas">Kept canvas layout</option>
+                  <option value="pdf-kept-template" disabled={!keptExportTemplate}>
+                    Kept text template
+                  </option>
                 </select>
                 <button
                   className="secondary-button"
@@ -157,8 +166,13 @@ export const ExportPanel = React.memo(function ExportPanel({
                   disabled={isSaving || isPreviewing}
                   onClick={async () => {
                     setIsPreviewing(true)
+                    setPreviewError(null)
                     try {
                       setPreviewData(await onPreview(previewFormat))
+                    } catch (error: unknown) {
+                      setPreviewError(
+                        error instanceof Error ? error.message : 'Unable to generate the preview.'
+                      )
                     } finally {
                       setIsPreviewing(false)
                     }
@@ -167,6 +181,11 @@ export const ExportPanel = React.memo(function ExportPanel({
                   <Eye size={13} /> {isPreviewing ? 'Generating…' : 'Preview PDF'}
                 </button>
               </div>
+            )}
+            {previewError && !showTemplateEditor && (
+              <p className="kept-template-errors" role="alert">
+                {previewError}
+              </p>
             )}
             <button
               className="primary-button"

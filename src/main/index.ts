@@ -6,6 +6,7 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { saveExportRequest } from './exportSave'
 import { saveEntryImageRequest } from './entryImageSave'
+import { MerchantStore } from './merchantLibraryStore'
 import { PayeeStore } from './payeeLibraryStore'
 import { ProjectStore } from './projectStore'
 import { resolveOcrAssetPath } from './ocrAssets'
@@ -15,6 +16,11 @@ import type { ProjectState } from '../shared/contracts'
 import { OCR_ASSET_SCHEME } from '../shared/ocrAssets'
 import { PROJECT_IMAGE_SCHEME } from '../shared/projectImages'
 import type { PayeeObservation } from '../shared/payees'
+import {
+  classifyMerchantCandidate,
+  type MerchantCreate,
+  type MerchantUpdate
+} from '../shared/merchants'
 import { removePdfPages } from '../renderer/src/lib/removePdfPages'
 import {
   closeGuardMessage,
@@ -114,7 +120,11 @@ async function listRecoveryProjects(
   )
 }
 
-function registerDocumentHandlers(projectStore: ProjectStore, payeeStore: PayeeStore): void {
+function registerDocumentHandlers(
+  projectStore: ProjectStore,
+  payeeStore: PayeeStore,
+  merchantStore: MerchantStore
+): void {
   ipcMain.handle('studio:app:set-close-guard', (event, value: unknown) => {
     const state = value as Partial<CloseGuardState> | null
     if (
@@ -202,6 +212,7 @@ function registerDocumentHandlers(projectStore: ProjectStore, payeeStore: PayeeS
     await projectStore.save(project as ProjectState)
     const savedProject = project as ProjectState
     await payeeStore.upsertEntries(savedProject.id, savedProject.entries)
+    await merchantStore.upsertEntries(savedProject.id, savedProject.entries)
   })
 
   ipcMain.handle('studio:payees:list', () => payeeStore.list())
@@ -216,6 +227,42 @@ function registerDocumentHandlers(projectStore: ProjectStore, payeeStore: PayeeS
       throw new Error('A payee observation is required.')
     }
     return payeeStore.upsert(observation as PayeeObservation)
+  })
+
+  ipcMain.handle('studio:merchants:list', () => merchantStore.list())
+
+  ipcMain.handle('studio:merchants:search', (_event, query: unknown) => {
+    if (typeof query !== 'string') throw new Error('A merchant search query is required.')
+    return merchantStore.search(query)
+  })
+
+  ipcMain.handle('studio:merchants:classify', (_event, description: unknown) => {
+    if (typeof description !== 'string') throw new Error('A merchant description is required.')
+    return classifyMerchantCandidate(description)
+  })
+
+  ipcMain.handle('studio:merchants:create', (_event, input: unknown) => {
+    if (typeof input !== 'object' || input === null)
+      throw new Error('Merchant details are required.')
+    return merchantStore.create(input as MerchantCreate)
+  })
+
+  ipcMain.handle('studio:merchants:update', (_event, id: unknown, input: unknown) => {
+    if (typeof id !== 'string' || typeof input !== 'object' || input === null) {
+      throw new Error('Merchant ID and update details are required.')
+    }
+    return merchantStore.update(id, input as MerchantUpdate)
+  })
+
+  ipcMain.handle('studio:merchants:remove', (_event, id: unknown) => {
+    if (typeof id !== 'string') throw new Error('A merchant ID is required.')
+    return merchantStore.remove(id)
+  })
+
+  ipcMain.handle('studio:merchants:rescan-project', async (_event, projectId: unknown) => {
+    if (typeof projectId !== 'string') throw new Error('A project ID is required.')
+    const project = await projectStore.load(projectId)
+    return merchantStore.upsertEntries(project.id, project.entries)
   })
 
   ipcMain.handle('studio:projects:load', async (_event, projectId: unknown) => {
@@ -411,10 +458,13 @@ app.whenReady().then(() => {
 
   const projectStore = new ProjectStore(join(app.getPath('userData'), 'pdf-extract-review-studio'))
   const payeeStore = new PayeeStore(join(app.getPath('userData'), 'pdf-extract-review-studio'))
+  const merchantStore = new MerchantStore(
+    join(app.getPath('userData'), 'pdf-extract-review-studio')
+  )
   const projectImageStore = new ProjectImageStore(
     join(app.getPath('userData'), 'pdf-extract-review-studio', 'project-images')
   )
-  registerDocumentHandlers(projectStore, payeeStore)
+  registerDocumentHandlers(projectStore, payeeStore, merchantStore)
 
   void pruneProjectImages(
     join(app.getPath('userData'), 'pdf-extract-review-studio', 'project-images'),

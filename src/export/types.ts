@@ -3,6 +3,8 @@ import type { CurrencyCode } from '../shared/currencies'
 
 export interface ExportOptions {
   includeExcluded?: boolean
+  /** Scenario rows are opt-in so forecasts cannot be mistaken for source evidence. */
+  includeScenario?: boolean
 }
 
 export interface PdfMetricSummary {

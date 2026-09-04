@@ -1,0 +1,283 @@
+.merchant-library-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+  max-width: 340px;
+  padding: 10px;
+  overflow-y: auto;
+  color: #fff;
+}
+
+.merchant-library-panel header h2 {
+  margin: 2px 0 0;
+  font-size: 13px;
+}
+
+.merchant-library-panel header p {
+  margin: 4px 0 0;
+  color: #fff;
+  font-size: 11px;
+}
+
+.merchant-library-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.merchant-library-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--studio-border);
+}
+
+.merchant-library-tabs button {
+  padding: 4px 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: #fff;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.merchant-library-tabs button.is-active {
+  border-bottom-color: var(--studio-accent, #2f6f4f);
+  color: #fff;
+}
+
+.merchant-library-forecast {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.merchant-library-forecast > strong,
+.merchant-library-forecast > button,
+.merchant-library-forecast > .merchant-library-status {
+  grid-column: 1 / -1;
+}
+
+.merchant-library-search {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+
+.merchant-library-search input {
+  width: 100%;
+}
+
+.merchant-library-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.merchant-library-filters button {
+  padding: 3px 7px;
+  border: 1px solid var(--studio-border);
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.merchant-library-filters button.is-active {
+  border-color: var(--studio-accent, #2f6f4f);
+  color: #fff;
+}
+
+.merchant-library-summary {
+  margin: 0;
+  color: #fff;
+  font-size: 11px;
+}
+
+.merchant-library-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.merchant-library-list > li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+}
+
+.merchant-library-list > li.is-flagged {
+  border-color: #b8862f;
+}
+
+.merchant-library-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.merchant-library-identity {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.merchant-library-identity strong {
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.merchant-library-aliases {
+  color: #fff;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.merchant-library-badge {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.merchant-library-badge--approved {
+  background: #24422f;
+  color: #d8efdf;
+}
+
+.merchant-library-badge--review {
+  background: #2c3340;
+  color: #d5dce8;
+}
+
+.merchant-library-badge--personal {
+  background: #4a3a17;
+  color: #f2e2bd;
+}
+
+.merchant-library-badge--excluded {
+  background: #3d2626;
+  color: #f0d5d5;
+}
+
+.merchant-library-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
+  gap: 4px 8px;
+  margin: 0;
+}
+
+.merchant-library-facts dt {
+  color: #fff;
+  font-size: 10px;
+}
+
+.merchant-library-facts dd {
+  margin: 0;
+  font-size: 11px;
+}
+
+.merchant-library-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  color: #e6c880;
+  font-size: 10px;
+}
+
+.merchant-library-provenance {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  color: #fff;
+  font-size: 10px;
+}
+
+.merchant-library-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+}
+
+.merchant-library-actions button {
+  font-size: 11px;
+}
+
+.merchant-library-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.merchant-library-confirm {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
+  color: #f0b8b8;
+  font-size: 10px;
+}
+
+.merchant-library-form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 6px;
+  padding: 8px;
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+}
+
+.merchant-library-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.merchant-library-form .merchant-library-notes,
+.merchant-library-form .merchant-library-duplicate,
+.merchant-library-form-actions {
+  grid-column: 1 / -1;
+}
+
+.merchant-library-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.merchant-library-duplicate {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  color: #e6c880;
+  font-size: 10px;
+}
+
+.merchant-library-empty,
+.merchant-library-status {
+  margin: 0;
+  color: #fff;
+  font-size: 11px;
+}
+
+.merchant-library-error {
+  margin: 0;
+  color: #f0b8b8;
+  font-size: 11px;
+}
