@@ -95,6 +95,9 @@ const DEFAULT_TEXT_STYLE: KeptExportTextStyle = {
   fontStyle: 'normal'
 }
 
+const DEFAULT_HORIZONTAL_MARGIN = 48
+const DEFAULT_VERTICAL_MARGIN = 72
+
 const DEFAULT_COLUMN_SPECS: Array<
   Pick<KeptExportColumnDraft, 'id' | 'name' | 'sourceField' | 'x' | 'width'>
 > = [
@@ -103,6 +106,21 @@ const DEFAULT_COLUMN_SPECS: Array<
   { id: 'money-in', name: 'Money in', sourceField: 'money-in', x: 406, width: 72 },
   { id: 'balance', name: 'Balance', sourceField: 'balance', x: 486, width: 78 }
 ]
+
+function createDefaultDivider(pageWidth: number): KeptExportDivider {
+  const startX = DEFAULT_HORIZONTAL_MARGIN
+  const endX = Math.max(startX + 1, pageWidth - DEFAULT_HORIZONTAL_MARGIN)
+  return {
+    enabled: false,
+    startX,
+    endX,
+    width: endX - startX,
+    thickness: 1,
+    color: '#17231c',
+    opacity: 0.35,
+    spacing: 0
+  }
+}
 
 export function cloneKeptExportTextStyle(style: KeptExportTextStyle): KeptExportTextStyle {
   return { ...style, fontRef: { ...style.fontRef } }
@@ -167,30 +185,28 @@ export function createDefaultRunningBalance(): KeptExportRunningBalance {
 }
 
 export function createDefaultKeptExportPageTemplate(): KeptExportPageTemplateDraft {
+  const pageSize: KeptEntriesPageSize = 'letter'
+  const orientation: KeptEntriesOrientation = 'portrait'
+  const { height, width } = getCanvasPageDimensions(pageSize, orientation)
+  const startY = DEFAULT_VERTICAL_MARGIN
+  const endY = Math.max(startY + 1, height - DEFAULT_VERTICAL_MARGIN)
+  const columnHeight = endY - startY
+
   return {
-    pageSize: 'letter',
-    orientation: 'portrait',
+    pageSize,
+    orientation,
     layoutMode: 'table-row',
     entriesPerPage: 20,
     fillBetweenY: false,
-    startY: 72,
-    endY: 720,
+    startY,
+    endY,
     showReferenceUnderMainText: true,
     defaultTextStyle: cloneKeptExportTextStyle(DEFAULT_TEXT_STYLE),
-    divider: {
-      enabled: false,
-      startX: 48,
-      endX: 564,
-      width: 516,
-      thickness: 1,
-      color: '#17231c',
-      opacity: 0.35,
-      spacing: 0
-    },
+    divider: createDefaultDivider(width),
     columns: DEFAULT_COLUMN_SPECS.map((column) => ({
       ...column,
-      y: 72,
-      height: 648,
+      y: startY,
+      height: columnHeight,
       spacing: 28,
       overflow: 'next-page'
     }))

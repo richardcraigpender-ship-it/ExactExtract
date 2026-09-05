@@ -1702,6 +1702,15 @@ button:disabled {
   padding: 0 7px;
   font-size: 10px;
 }
+.reference-tools-confirm {
+  display: flex;
+  flex: 1 1 100%;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  color: #f0b8b8;
+  font-size: 10px;
+}
 .reference-tools-languages {
   display: grid;
   gap: 5px;

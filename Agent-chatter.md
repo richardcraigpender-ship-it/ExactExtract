@@ -678,6 +678,8 @@ npm run build
 - Focused forecast and export tests pass, and Agent C files lint cleanly. Renderer UI wiring remains available for Agent B/coordinator integration through the exported analysis helpers. Full `npm run typecheck` is currently blocked by two pre-existing/in-flight Agent B `merchants` context-map omissions in `App.tsx` and `RightWorkspace.test.tsx`.
 - 2026-09-04 follow-up: `generateForecast` now supports `randomRowCount` for an exact number of seeded random rows, `minSpend`/`maxSpend` bounds, and the existing `startDate`/`endDate` timeframe. Random rows default to outgoing, remain scenario-labelled, and reject invalid bounds/counts. Focused forecast tests and full typecheck pass.
 - 2026-09-04 UI follow-up: Agent C wired the forecast form into the Shops/Merchant Library panel. It accepts From/To dates, random row count, min/max spend, and seed, then appends scenario rows to the current project. Approved and excluded merchant records are tucked into the panel's Databases tab; review-needed/private candidates remain on the default Review tab.
+- 2026-09-05 — Agent C wired the expanded `normalizePdfFontName` resolver into the active renderer document-style scanner. UI scans now recognize the wider office, Adobe, open-source, and international font aliases already covered by `src/style/fonts.test.ts`. Font/style scanner tests, formatting, and full typecheck pass.
+- 2026-09-05 follow-up — Implemented option 2: the active PDF.js scanner now reads available `commonObjs` font metadata and preserves embedded font name, PostScript name, style, embedding flag, weight, and italic metadata in `TextStyleCluster`. Added a renderer regression fixture; focused tests and full typecheck pass.
 ```
 
 Default: `enabled: false`, `fallback: 'first-existing-balance'`, `balanceFieldMode: 'add-calculated'`, `decimalPlaces: 2`.
@@ -5736,3 +5738,11 @@ No edits to `src/export/compact.ts` or `src/export/pdf.ts` — staying inside th
 - **Still open for the caller:** `App.tsx` does not yet pass `aspectRatio`, though `preflight[path].pages[n]` already carries `width`/`height` and is indexed by page number at roughly line 648. Wiring it would remove the remaining first-page reflow entirely. Left for Agent B - it is their file and it had concurrent edits in flight during this session.
 - **Validation:** thumbnail suites 21/21; full `npm test` 343/343; `npm run typecheck` clean; `npm run lint` exit 0 (now only 1 warning, down from 12 - another lane cleaned those up); `npm run build` passed.
 - **Manual visual acceptance:** still not closed and still owned by the user. What automated evidence now covers: pages genuinely rasterize, dimensions are sane at thumbnail width, orientation handling is correct, and malformed input reaches the error state. What it cannot cover: actual pixels on screen, click-to-navigate in the live app, and narrow-panel overflow.
+
+### 2026-09-05 - Agent C PNG snapshot refresh and crop hardening
+
+- Session-entry PNG crops now use each kept highlight's exact PDF bounding box instead of the largest kept box across the project, preventing neighboring page-divider pixels from leaking into smaller snapshots.
+- Added a `Refresh PNG snapshots` action to the kept-entry canvas. It regenerates source crops without changing image placements.
+- Focused crop tests pass. Full typecheck is currently blocked by unrelated unused test helpers in `KeptImagePlacementSection.test.tsx`.
+- Removed those unused test helpers; image-placement tests (12/12), full typecheck, and production build now pass. Build retains only the existing `PdfViewer` dynamic-import chunk warning.
+- 2026-09-05 follow-up — Hardened document-style detection when PDF.js `commonObjs` cannot resolve a font. The scanner now keeps the raw text-item font name and normalizes it as a fallback instead of discarding the whole page with a “style metadata could not be read” warning. Added regression coverage; focused style tests and full typecheck pass.

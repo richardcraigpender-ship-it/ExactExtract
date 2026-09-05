@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { RotateCcw, Trash2, ZoomIn, ZoomOut } from 'lucide-react'
+import { RefreshCw, RotateCcw, Trash2, ZoomIn, ZoomOut } from 'lucide-react'
 
 import type { ProjectEntry } from '../../../shared/contracts'
 import {
@@ -28,6 +28,8 @@ interface KeptEntriesCanvasWorkspaceProps {
   isExporting?: boolean
   resolveImageSource?: (source: KeptImageSourceRef) => string | undefined
   imageResolutionError?: string
+  onRefreshImages?: () => void
+  isRefreshingImages?: boolean
 }
 
 export function KeptEntriesCanvasWorkspace({
@@ -39,7 +41,9 @@ export function KeptEntriesCanvasWorkspace({
   onReset,
   isExporting = false,
   resolveImageSource,
-  imageResolutionError
+  imageResolutionError,
+  onRefreshImages,
+  isRefreshingImages = false
 }: KeptEntriesCanvasWorkspaceProps): React.JSX.Element {
   const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null)
   const [selectedImagePlacementId, setSelectedImagePlacementId] = useState<string | null>(null)
@@ -241,6 +245,15 @@ export function KeptEntriesCanvasWorkspace({
               <RotateCcw size={15} aria-hidden="true" />
             </button>
           </div>
+          <button
+            className="secondary-button"
+            type="button"
+            disabled={!onRefreshImages || isRefreshingImages}
+            onClick={onRefreshImages}
+          >
+            <RefreshCw size={14} aria-hidden="true" />{' '}
+            {isRefreshingImages ? 'Refreshing images…' : 'Refresh PNG snapshots'}
+          </button>
           <button
             className="secondary-button"
             type="button"

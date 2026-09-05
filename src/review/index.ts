@@ -12,9 +12,14 @@ export {
   splitReviewEntry
 } from './operations'
 export {
+  clearScannedReferenceNotes,
   copyKeptEntryReferencesToNotes,
   copySourceReferencesToKeptEntryNotes,
   extractEntryReferences,
   extractReferencesFromText
 } from './references'
-export type { CopyKeptReferencesResult, SourceReferenceCandidate } from './references'
+export type {
+  ClearReferenceNotesResult,
+  CopyKeptReferencesResult,
+  SourceReferenceCandidate
+} from './references'

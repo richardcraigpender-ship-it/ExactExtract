@@ -6,12 +6,16 @@ import {
   type KeptImagePlan,
   type KeptImageSourceDescriptor
 } from '../../../export'
-import type {
-  KeptEntriesDivider,
-  KeptEntriesOrientation,
-  KeptEntriesPageSize,
-  KeptImagePlacementOptions
+import type { ProjectEntry } from '../../../shared/contracts'
+import {
+  keptEntriesPageDimensions,
+  type KeptEntriesDivider,
+  type KeptEntriesOrientation,
+  type KeptEntriesPageSize,
+  type KeptImagePlacementOptions,
+  type KeptImageRunningBalanceOptions
 } from '../../../shared/keptEntriesLayout'
+import type { KeptExportRunningBalance } from '../../../shared/keptExportTemplate'
 import { LengthField } from './LengthField'
 
 export type KeptImageSourceMode = 'session-entry' | 'uploaded-png'
@@ -20,6 +24,8 @@ interface KeptImagePlacementSectionProps {
   pageSize: KeptEntriesPageSize
   orientation: KeptEntriesOrientation
   sessionSources?: readonly KeptImageSourceDescriptor[]
+  keptEntries?: readonly ProjectEntry[]
+  runningBalance?: KeptExportRunningBalance
   onPlaceImages: (plan: KeptImagePlan) => void
   /** Copies picked PNGs into project-owned storage and returns managed descriptors. */
   onUploadPngs?: (files: File[]) => Promise<KeptImageSourceDescriptor[]>
@@ -47,30 +53,58 @@ interface PlacementOptions {
   preserveAspectRatio: boolean
   uniformSlots: boolean
   divider: KeptEntriesDivider
+  runningBalance: KeptImageRunningBalanceOptions
 }
 
-const DEFAULT_DIVIDER: KeptEntriesDivider = {
-  enabled: false,
-  startX: 48,
-  endX: 564,
-  width: 516,
-  thickness: 1,
-  color: '#17231c',
-  opacity: 0.35
+const DEFAULT_HORIZONTAL_MARGIN = 48
+const DEFAULT_VERTICAL_MARGIN = 72
+
+function createDefaultDivider(pageWidth: number): KeptEntriesDivider {
+  const startX = DEFAULT_HORIZONTAL_MARGIN
+  const endX = Math.max(startX + 1, pageWidth - DEFAULT_HORIZONTAL_MARGIN)
+  return {
+    enabled: false,
+    startX,
+    endX,
+    width: endX - startX,
+    thickness: 1,
+    color: '#17231c',
+    opacity: 0.35
+  }
 }
 
-const DEFAULT_OPTIONS: PlacementOptions = {
-  startX: 48,
-  startY: 48,
-  endY: 744,
-  fillBetweenY: false,
-  entriesPerPage: 6,
-  gap: 12,
-  width: null,
-  height: null,
-  preserveAspectRatio: true,
-  uniformSlots: false,
-  divider: DEFAULT_DIVIDER
+function createDefaultRunningBalance(): KeptImageRunningBalanceOptions {
+  return {
+    enabled: false,
+    offsetX: 8,
+    offsetY: 4,
+    fontSize: 10,
+    color: '#17231c'
+  }
+}
+
+function createDefaultOptions(
+  pageSize: KeptEntriesPageSize,
+  orientation: KeptEntriesOrientation
+): PlacementOptions {
+  const page = keptEntriesPageDimensions(pageSize, orientation)
+  const startY = DEFAULT_VERTICAL_MARGIN
+  const endY = Math.max(startY + 1, page.height - DEFAULT_VERTICAL_MARGIN)
+
+  return {
+    startX: DEFAULT_HORIZONTAL_MARGIN,
+    startY,
+    endY,
+    fillBetweenY: false,
+    entriesPerPage: 6,
+    gap: 12,
+    width: null,
+    height: null,
+    preserveAspectRatio: true,
+    uniformSlots: false,
+    divider: createDefaultDivider(page.width),
+    runningBalance: createDefaultRunningBalance()
+  }
 }
 
 function numberValue(value: string, fallback: number): number {
@@ -86,6 +120,8 @@ export function KeptImagePlacementSection({
   pageSize,
   orientation,
   sessionSources = [],
+  keptEntries = [],
+  runningBalance,
   onPlaceImages,
   onUploadPngs,
   placedImageCount = 0,
@@ -102,13 +138,17 @@ export function KeptImagePlacementSection({
   ])
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
-  const [options, setOptions] = useState<PlacementOptions>(() => ({
-    ...DEFAULT_OPTIONS,
-    ...initialOptions,
-    width: initialOptions?.width ?? null,
-    height: initialOptions?.height ?? null,
-    divider: { ...DEFAULT_DIVIDER, ...initialOptions?.divider }
-  }))
+  const [options, setOptions] = useState<PlacementOptions>(() => {
+    const defaults = createDefaultOptions(pageSize, orientation)
+    return {
+      ...defaults,
+      ...initialOptions,
+      width: initialOptions?.width ?? null,
+      height: initialOptions?.height ?? null,
+      divider: { ...defaults.divider, ...initialOptions?.divider },
+      runningBalance: { ...defaults.runningBalance, ...initialOptions?.runningBalance }
+    }
+  })
   const inputRef = useRef<HTMLInputElement>(null)
 
   const placementOptions = useMemo<KeptImagePlacementOptions>(
@@ -124,7 +164,8 @@ export function KeptImagePlacementSection({
       height: optionalDimension(options.height),
       preserveAspectRatio: options.preserveAspectRatio,
       uniformSlots: options.uniformSlots,
-      divider: { ...options.divider }
+      divider: { ...options.divider },
+      runningBalance: { ...options.runningBalance }
     }),
     [mode, options]
   )
@@ -141,11 +182,13 @@ export function KeptImagePlacementSection({
       ...planKeptEntryImagePlacements(sources, {
         pageSize,
         orientation,
-        ...placementOptions
+        ...placementOptions,
+        entries: keptEntries.filter((entry) => entry.status === 'keep'),
+        runningBalanceConfig: runningBalance
       }),
       options: placementOptions
     }),
-    [orientation, pageSize, placementOptions, sources]
+    [orientation, pageSize, placementOptions, sources, keptEntries, runningBalance]
   )
 
   const setOption = <Key extends keyof PlacementOptions>(
@@ -157,6 +200,13 @@ export function KeptImagePlacementSection({
 
   const setDivider = (patch: Partial<KeptEntriesDivider>): void => {
     setOptions((current) => ({ ...current, divider: { ...current.divider, ...patch } }))
+  }
+
+  const setRunningBalance = (patch: Partial<KeptImageRunningBalanceOptions>): void => {
+    setOptions((current) => ({
+      ...current,
+      runningBalance: { ...current.runningBalance, ...patch }
+    }))
   }
 
   const canPlace = plan.placements.length > 0
@@ -337,6 +387,62 @@ export function KeptImagePlacementSection({
           Uniform crop dimensions
         </label>
       </div>
+
+      <fieldset className="kept-image-balance" aria-labelledby="kept-image-balance-legend">
+        <legend id="kept-image-balance-legend">Balance column</legend>
+        <label className="kept-image-divider-toggle">
+          <input
+            type="checkbox"
+            checked={options.runningBalance.enabled}
+            onChange={(event) => setRunningBalance({ enabled: event.target.checked })}
+          />
+          Show running balance beside each session image
+        </label>
+        {options.runningBalance.enabled && !(runningBalance?.enabled ?? false) && (
+          <p className="context-help">
+            Turn on Calculated balance in the kept text template to populate this column.
+          </p>
+        )}
+        <div className="kept-image-grid">
+          <LengthField
+            label="Horizontal offset"
+            min={0}
+            value={options.runningBalance.offsetX}
+            disabled={!options.runningBalance.enabled}
+            onChange={(offsetX) => setRunningBalance({ offsetX })}
+          />
+          <LengthField
+            label="Vertical offset"
+            min={0}
+            value={options.runningBalance.offsetY}
+            disabled={!options.runningBalance.enabled}
+            onChange={(offsetY) => setRunningBalance({ offsetY })}
+          />
+          <label>
+            <span>Font size</span>
+            <input
+              type="number"
+              min="6"
+              max="24"
+              step="0.5"
+              value={options.runningBalance.fontSize}
+              disabled={!options.runningBalance.enabled}
+              onChange={(event) =>
+                setRunningBalance({ fontSize: numberValue(event.target.value, 10) })
+              }
+            />
+          </label>
+          <label>
+            <span>Color</span>
+            <input
+              type="color"
+              value={options.runningBalance.color}
+              disabled={!options.runningBalance.enabled}
+              onChange={(event) => setRunningBalance({ color: event.target.value })}
+            />
+          </label>
+        </div>
+      </fieldset>
 
       <fieldset className="kept-image-divider" aria-labelledby="kept-image-divider-legend">
         <legend id="kept-image-divider-legend">Entry divider</legend>

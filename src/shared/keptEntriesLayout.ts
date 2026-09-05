@@ -46,6 +46,16 @@ export interface KeptEntriesDivider {
   endX: number
 }
 
+export interface KeptImageRunningBalanceOptions {
+  enabled: boolean
+  /** Gap between an image's right edge and the running balance text. */
+  offsetX: number
+  /** Distance above the slot top where the balance baseline row starts. */
+  offsetY: number
+  fontSize: number
+  color: string
+}
+
 export interface KeptImagePlacementOptions {
   sourceMode: KeptImageSourceKind
   startX: number
@@ -60,6 +70,8 @@ export interface KeptImagePlacementOptions {
   uniformSlots: boolean
   /** Drawn after every placed image when enabled. */
   divider?: KeptEntriesDivider
+  /** Optional running-balance text placed beside session-entry images. */
+  runningBalance?: KeptImageRunningBalanceOptions
 }
 
 /**
@@ -84,6 +96,8 @@ export interface KeptImagePlacement {
   width: number
   height: number
   fit: KeptImageFit
+  /** Precomputed running balance rendered next to this image when enabled. */
+  runningBalanceText?: string
 }
 
 export interface KeptEntriesBackground {

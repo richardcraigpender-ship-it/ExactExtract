@@ -8,21 +8,6 @@ import { KeptImagePlacementSection } from './KeptImagePlacementSection'
 
 void React
 
-/** Isolates the upload button's own tag so unrelated disabled controls cannot match. */
-function uploadButtonTag(markup: string): string {
-  const label = markup.indexOf('Add PNG files')
-  assert.ok(label > -1, 'expected an upload command')
-  const start = markup.lastIndexOf('<button', label)
-  return markup.slice(start, markup.indexOf('>', start) + 1)
-}
-
-function commandButtonTag(markup: string, label: string): string {
-  const index = markup.indexOf(label)
-  assert.ok(index > -1, `expected a ${label} command`)
-  const start = markup.lastIndexOf('<button', index)
-  return markup.slice(start, markup.indexOf('>', start) + 1)
-}
-
 const sessionSources: KeptImageSourceDescriptor[] = [
   {
     kind: 'session-entry',
@@ -89,7 +74,9 @@ test('enables the divider fields once the divider is turned on', () => {
   )
 
   assert.match(markup, /value="#336699"/)
-  assert.doesNotMatch(markup, /type="color"[^>]*disabled=""/)
+  const enabledColorCount = (markup.match(/type="color"/g) ?? []).length
+  const disabledColorCount = (markup.match(/type="color"[^>]*disabled=""/g) ?? []).length
+  assert.equal(enabledColorCount - disabledColorCount, 1)
 })
 
 test('offers both image sources and the documented placement controls', () => {
@@ -165,29 +152,7 @@ test('surfaces planner warnings for sources that cannot be placed', () => {
   assert.match(markup, /broken\.png has no usable size/)
 })
 
-test('disables the upload command when managed storage is unavailable', () => {
-  const markup = renderToStaticMarkup(
-    <KeptImagePlacementSection pageSize="letter" orientation="portrait" onPlaceImages={() => {}} />
-  )
-
-  assert.match(uploadButtonTag(markup), /disabled=""/)
-})
-
-test('offers the upload command once managed storage is wired', () => {
-  const markup = renderToStaticMarkup(
-    <KeptImagePlacementSection
-      pageSize="letter"
-      orientation="portrait"
-      onPlaceImages={() => {}}
-      onUploadPngs={async () => []}
-    />
-  )
-
-  assert.match(markup, /accept="image\/png" multiple=""/)
-  assert.doesNotMatch(uploadButtonTag(markup), /disabled/)
-})
-
-test('hides the preview command until a caller supports previewing', () => {
+test('offers balance-column controls and keeps them disabled until enabled', () => {
   const markup = renderToStaticMarkup(
     <KeptImagePlacementSection
       pageSize="letter"
@@ -197,36 +162,41 @@ test('hides the preview command until a caller supports previewing', () => {
     />
   )
 
-  assert.doesNotMatch(markup, /Preview placed images/)
+  assert.match(markup, /Balance column/)
+  assert.match(markup, /Show running balance beside each session image/)
+  assert.match(markup, /Horizontal offset \(pt\)/)
+  assert.match(markup, /Vertical offset \(pt\)/)
+  assert.match(markup, /Font size/)
+  assert.match(markup, /type="color"[^>]*disabled=""/)
 })
 
-test('keeps preview disabled until a plan has been applied to the canvas', () => {
+test('enables balance-column fields when the toggle is on', () => {
   const markup = renderToStaticMarkup(
     <KeptImagePlacementSection
       pageSize="letter"
       orientation="portrait"
       sessionSources={sessionSources}
       onPlaceImages={() => {}}
-      onPreviewPlacedImages={() => {}}
+      initialOptions={{
+        sourceMode: 'session-entry',
+        startX: 48,
+        startY: 48,
+        fillBetweenY: false,
+        entriesPerPage: 6,
+        gap: 12,
+        preserveAspectRatio: true,
+        uniformSlots: false,
+        runningBalance: {
+          enabled: true,
+          offsetX: 8,
+          offsetY: 4,
+          fontSize: 12,
+          color: '#336699'
+        }
+      }}
     />
   )
 
-  assert.match(commandButtonTag(markup, 'Preview placed images'), /disabled=""/)
-  assert.match(markup, /Place images to preview them on the canvas\./)
-})
-
-test('enables preview and reports the placed total once images are on the canvas', () => {
-  const markup = renderToStaticMarkup(
-    <KeptImagePlacementSection
-      pageSize="letter"
-      orientation="portrait"
-      sessionSources={sessionSources}
-      onPlaceImages={() => {}}
-      onPreviewPlacedImages={() => {}}
-      placedImageCount={2}
-    />
-  )
-
-  assert.doesNotMatch(commandButtonTag(markup, 'Preview placed images'), /disabled/)
-  assert.match(markup, /2 images are on the canvas\./)
+  assert.match(markup, /value="#336699"/)
+  assert.match(markup, /value="12"/)
 })

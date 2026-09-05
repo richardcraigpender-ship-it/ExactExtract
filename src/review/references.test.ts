@@ -3,6 +3,7 @@ import test from 'node:test'
 
 import type { ProjectEntry } from '../shared/contracts'
 import {
+  clearScannedReferenceNotes,
   copyKeptEntryReferencesToNotes,
   copySourceReferencesToKeptEntryNotes,
   extractEntryReferences
@@ -143,13 +144,13 @@ test('rejects source references on the wrong page or too far from a kept parent 
       {
         documentId: 'document-1',
         pageNumber: 2,
-        text: 'Ref WRONG-PAGE',
+        text: 'Ref WRONG-2',
         bbox: { x: 54, y: 503, width: 80, height: 8, coordinateSpace: 'pdf-points' }
       },
       {
         documentId: 'document-1',
         pageNumber: 1,
-        text: 'Ref TOO-FAR',
+        text: 'Ref TOOFAR-3',
         bbox: { x: 54, y: 200, width: 80, height: 8, coordinateSpace: 'pdf-points' }
       }
     ],
@@ -167,7 +168,37 @@ test('rejects source references on the wrong page or too far from a kept parent 
   assert.equal(result.entries[0], kept)
 })
 
-test('accepts references within the broader default parent matching distance', () => {
+test('accepts a reference sitting within a row height of its kept parent', () => {
+  const kept = {
+    ...entry('keep', 'Main transaction row', 'keep'),
+    regions: [
+      {
+        documentId: 'document-1',
+        pageNumber: 1,
+        bbox: { x: 50, y: 500, width: 300, height: 20, coordinateSpace: 'pdf-points' as const }
+      }
+    ]
+  }
+
+  const result = copySourceReferencesToKeptEntryNotes(
+    [kept],
+    [
+      {
+        documentId: 'document-1',
+        pageNumber: 1,
+        text: 'Ref CARD-160',
+        bbox: { x: 54, y: 482, width: 80, height: 8, coordinateSpace: 'pdf-points' }
+      }
+    ],
+    '2026-09-01T12:00:00.000Z'
+  )
+
+  assert.equal(result.updatedEntryCount, 1)
+  assert.equal(result.tooFarCandidateCount, 0)
+  assert.equal(result.entries[0]?.notes, 'CARD-160')
+})
+
+test('rejects a reference several rows away from the nearest kept parent', () => {
   const kept = {
     ...entry('keep', 'Main transaction row', 'keep'),
     regions: [
@@ -192,9 +223,82 @@ test('accepts references within the broader default parent matching distance', (
     '2026-09-01T12:00:00.000Z'
   )
 
-  assert.equal(result.updatedEntryCount, 1)
-  assert.equal(result.tooFarCandidateCount, 0)
-  assert.equal(result.entries[0]?.notes, 'CARD-160')
+  assert.equal(result.updatedEntryCount, 0)
+  assert.equal(result.tooFarCandidateCount, 1)
+  assert.equal(result.entries[0], kept)
+})
+
+test('rejects a reference in a different column from the kept parent row', () => {
+  const kept = {
+    ...entry('keep', 'Main transaction row', 'keep'),
+    regions: [
+      {
+        documentId: 'document-1',
+        pageNumber: 1,
+        bbox: { x: 50, y: 500, width: 80, height: 20, coordinateSpace: 'pdf-points' as const }
+      }
+    ]
+  }
+
+  const result = copySourceReferencesToKeptEntryNotes(
+    [kept],
+    [
+      {
+        documentId: 'document-1',
+        pageNumber: 1,
+        text: 'Ref CARD-777',
+        bbox: { x: 420, y: 505, width: 80, height: 8, coordinateSpace: 'pdf-points' }
+      }
+    ],
+    '2026-09-01T12:00:00.000Z'
+  )
+
+  assert.equal(result.updatedEntryCount, 0)
+  assert.equal(result.tooFarCandidateCount, 1)
+})
+
+test('does not invent references from ordinary words that start with a marker', () => {
+  for (const text of [
+    'Revolut Rev Points 250',
+    'REV POINTS',
+    'Cardholder Jason',
+    'Identifier abc',
+    'Ordering Smith',
+    'Porter Grill'
+  ]) {
+    assert.deepEqual(extractEntryReferences(entry('a', text)), [], text)
+  }
+})
+
+test('ignores marker-adjacent words that carry no digits', () => {
+  assert.deepEqual(extractEntryReferences(entry('a', 'Order Smith and ref Jason')), [])
+  assert.deepEqual(extractEntryReferences(entry('a', 'Order SMITH-12')), ['SMITH-12'])
+})
+
+test('clears scanned reference lines while preserving typed notes', () => {
+  const result = clearScannedReferenceNotes(
+    [
+      entry('a', 'Row one', 'keep', 'Checked with the bank\nCARD-100, RCPT-22'),
+      entry('b', 'Row two', 'keep', 'PO-123'),
+      entry('c', 'Row three', 'keep', 'Call the supplier back')
+    ],
+    '2026-09-02T12:00:00.000Z'
+  )
+
+  assert.equal(result.updatedEntryCount, 2)
+  assert.equal(result.removedReferenceCount, 3)
+  assert.equal(result.entries[0]?.notes, 'Checked with the bank')
+  assert.equal(result.entries[1]?.notes, undefined)
+  assert.equal(result.entries[2]?.notes, 'Call the supplier back')
+})
+
+test('leaves entries untouched when no scanned reference lines exist', () => {
+  const source = [entry('a', 'Row one', 'keep', 'Manual note only')]
+  const result = clearScannedReferenceNotes(source, '2026-09-02T12:00:00.000Z')
+
+  assert.equal(result.updatedEntryCount, 0)
+  assert.equal(result.removedReferenceCount, 0)
+  assert.equal(result.entries[0], source[0])
 })
 
 test('uses pre-extracted OCR references and skips duplicate note values', () => {

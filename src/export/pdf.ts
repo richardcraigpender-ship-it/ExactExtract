@@ -7,6 +7,11 @@ import {
 } from './compact'
 import { buildExportSnapshot } from './snapshot'
 import type { ExportEntry, PdfExportOptions } from './types'
+import {
+  applySourceMetadata,
+  collectSourceMetadata,
+  type CollectedSourceMetadata
+} from './sourceMetadata'
 
 const PAGE_WIDTH = 612
 const PAGE_HEIGHT = 792
@@ -269,11 +274,13 @@ export async function exportProjectSourceLayoutPdf(
   const output = await PDFDocument.create()
   const pageBySource = new Map<string, PDFPage>()
   const pageHeights = new Map<string, number>()
+  let sourceMetadata: CollectedSourceMetadata = {}
 
   for (const document of project.documents) {
     const sourceData = sourceFiles.get(document.path)
     if (!sourceData) throw new Error(`Source PDF is not loaded: ${document.name}`)
     const source = await PDFDocument.load(sourceData)
+    sourceMetadata = collectSourceMetadata(sourceMetadata, source)
     const sourcePages = source.getPages()
     const pages = await output.copyPages(source, source.getPageIndices())
     pages.forEach((page, index) => {
@@ -310,6 +317,7 @@ export async function exportProjectSourceLayoutPdf(
   output.setSubject('Source-layout PDF with maybe/excluded rows outlined')
   output.setProducer('EXACT EXTRACT')
   output.setCreator('EXACT EXTRACT')
+  applySourceMetadata(output, sourceMetadata)
   return output.save({ useObjectStreams: false })
 }
 
@@ -321,11 +329,13 @@ export async function exportProjectCompactedSourceLayoutPdf(
   const regular = await output.embedFont(StandardFonts.Helvetica)
   const pageBySource = new Map<string, PDFPage>()
   const pageHeights = new Map<string, number>()
+  let sourceMetadata: CollectedSourceMetadata = {}
 
   for (const document of project.documents) {
     const sourceData = sourceFiles.get(document.path)
     if (!sourceData) throw new Error(`Source PDF is not loaded: ${document.name}`)
     const source = await PDFDocument.load(sourceData)
+    sourceMetadata = collectSourceMetadata(sourceMetadata, source)
     const copiedPages = await output.copyPages(source, source.getPageIndices())
     copiedPages.forEach((outputPage, index) => {
       output.addPage(outputPage)
@@ -382,6 +392,7 @@ export async function exportProjectCompactedSourceLayoutPdf(
   output.setSubject('Compacted source-layout PDF with excluded entries hidden')
   output.setProducer('EXACT EXTRACT')
   output.setCreator('EXACT EXTRACT')
+  applySourceMetadata(output, sourceMetadata)
   return output.save({ useObjectStreams: false })
 }
 
@@ -395,11 +406,13 @@ export async function exportProjectKeptLayoutPdf(
   const pageBySource = new Map<string, PDFPage>()
   const sourcePageByKey = new Map<string, PDFPage>()
   const pageHeights = new Map<string, number>()
+  let sourceMetadata: CollectedSourceMetadata = {}
 
   for (const document of project.documents) {
     const sourceData = sourceFiles.get(document.path)
     if (!sourceData) throw new Error(`Source PDF is not loaded: ${document.name}`)
     const source = await PDFDocument.load(sourceData)
+    sourceMetadata = collectSourceMetadata(sourceMetadata, source)
     source.getPages().forEach((sourcePage, index) => {
       sourcePageByKey.set(`${document.id}:${index + 1}`, sourcePage)
     })
@@ -562,6 +575,7 @@ export async function exportProjectKeptLayoutPdf(
   output.setSubject('Kept-only compacted layout PDF with a trailing styling summary')
   output.setProducer('EXACT EXTRACT')
   output.setCreator('EXACT EXTRACT')
+  applySourceMetadata(output, sourceMetadata)
   return output.save({ useObjectStreams: false })
 }
 
@@ -626,6 +640,7 @@ export async function exportProjectKeptEntriesPdf(
   const bold = await output.embedFont(StandardFonts.HelveticaBold)
   const sourcePages = new Map<string, PDFPage>()
   const loadedDocumentIds = new Set<string>()
+  let sourceMetadata: CollectedSourceMetadata = {}
 
   const loadSourcePages = async (documentId: string): Promise<void> => {
     if (loadedDocumentIds.has(documentId)) return
@@ -634,6 +649,7 @@ export async function exportProjectKeptEntriesPdf(
     const sourceData = document && sourceFiles.get(document.path)
     if (!sourceData) return
     const source = await PDFDocument.load(sourceData)
+    sourceMetadata = collectSourceMetadata(sourceMetadata, source)
     source.getPages().forEach((page, index) => {
       sourcePages.set(`${documentId}:${index + 1}`, page)
     })
@@ -805,5 +821,6 @@ export async function exportProjectKeptEntriesPdf(
   output.setSubject('Kept entries in date order, reproduced from the original source pages')
   output.setProducer('EXACT EXTRACT')
   output.setCreator('EXACT EXTRACT')
+  applySourceMetadata(output, sourceMetadata)
   return output.save({ useObjectStreams: false })
 }

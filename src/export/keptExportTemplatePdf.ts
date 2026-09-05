@@ -14,6 +14,7 @@ import { calculateStatementStats } from '../analysis'
 import { buildKeptExportRenderPlan } from './keptExportLayout'
 import { buildRunningBalanceValues, type RunningBalanceInputRow } from './runningBalance'
 import { buildPageNumberDraw } from './pageNumbers'
+import { applySourceMetadata, loadSourceMetadata } from './sourceMetadata'
 
 type SummaryField =
   | 'money-in-total'
@@ -167,7 +168,8 @@ function sourceRows(project: ProjectState, template?: KeptExportTemplate): KeptE
 
 export async function exportProjectKeptEntriesTemplatePdf(
   project: ProjectState,
-  template: KeptExportTemplate
+  template: KeptExportTemplate,
+  sourceFiles?: ReadonlyMap<string, Uint8Array>
 ): Promise<Uint8Array> {
   const plan = buildKeptExportRenderPlan(sourceRows(project, template), template)
   if (plan.warnings.some((warning) => warning.code === 'no-columns')) {
@@ -270,5 +272,7 @@ export async function exportProjectKeptEntriesTemplatePdf(
   pdf.setTitle(`${project.name} - Kept Entries Template`)
   pdf.setProducer('EXACT EXTRACT')
   pdf.setCreator('EXACT EXTRACT')
+  if (sourceFiles)
+    applySourceMetadata(pdf, await loadSourceMetadata(project.documents, sourceFiles))
   return pdf.save({ useObjectStreams: false })
 }

@@ -2,17 +2,21 @@ import React from 'react'
 import { Images } from 'lucide-react'
 
 import type { KeptImagePlan, KeptImageSourceDescriptor } from '../../../export'
+import type { ProjectEntry } from '../../../shared/contracts'
 import type {
   KeptEntriesOrientation,
   KeptEntriesPageSize,
   KeptImagePlacementOptions
 } from '../../../shared/keptEntriesLayout'
+import type { KeptExportRunningBalance } from '../../../shared/keptExportTemplate'
 import { KeptImagePlacementSection } from './KeptImagePlacementSection'
 
 interface KeptImageLayoutEditorProps {
   pageSize: KeptEntriesPageSize
   orientation: KeptEntriesOrientation
   sessionImageSources: readonly KeptImageSourceDescriptor[]
+  keptEntries?: readonly ProjectEntry[]
+  runningBalance?: KeptExportRunningBalance
   placedImageCount: number
   onPlaceImages: (plan: KeptImagePlan) => void
   onUploadPngs: (files: File[]) => Promise<KeptImageSourceDescriptor[]>
@@ -30,6 +34,8 @@ export function KeptImageLayoutEditor({
   pageSize,
   orientation,
   sessionImageSources,
+  keptEntries = [],
+  runningBalance,
   placedImageCount,
   onPlaceImages,
   onUploadPngs,
@@ -53,6 +59,8 @@ export function KeptImageLayoutEditor({
           pageSize={pageSize}
           orientation={orientation}
           sessionSources={sessionImageSources}
+          keptEntries={keptEntries}
+          runningBalance={runningBalance}
           onPlaceImages={onPlaceImages}
           onUploadPngs={onUploadPngs}
           placedImageCount={placedImageCount}

@@ -123,6 +123,7 @@ import {
   type SaveRecoveryState
 } from '../../recovery'
 import {
+  clearScannedReferenceNotes,
   copyKeptEntryReferencesToNotes,
   copySourceReferencesToKeptEntryNotes,
   detectReviewIssues,
@@ -400,6 +401,8 @@ function App(): React.JSX.Element {
   // Session crops are regenerated for display only and dropped when the canvas closes.
   const [sessionImageUrls, setSessionImageUrls] = useState<ReadonlyMap<string, string>>(new Map())
   const [sessionImageError, setSessionImageError] = useState<string | null>(null)
+  const [sessionImageRefreshToken, setSessionImageRefreshToken] = useState(0)
+  const [isRefreshingSessionImages, setIsRefreshingSessionImages] = useState(false)
 
   const activeDocument = useMemo(
     () => documents.find((document) => document.path === activePath) ?? documents[0],
@@ -1657,6 +1660,44 @@ function App(): React.JSX.Element {
     setBulkTag('')
   }, [bulkTag])
 
+  const clearScannedReferences = useCallback((): void => {
+    const occurredAt = new Date().toISOString()
+    setProject((current) => {
+      if (!current) return current
+      const result = clearScannedReferenceNotes(current.entries, occurredAt)
+      setReferenceToolResults({})
+      if (result.updatedEntryCount === 0) {
+        setReferenceCopyStatus('No scanned reference lines found in entry notes.')
+        return current
+      }
+      undoStackRef.current = [...undoStackRef.current, current.entries]
+      redoStackRef.current = []
+      setHistoryState({ undoCount: undoStackRef.current.length, redoCount: 0 })
+      setReferenceCopyStatus(
+        `Removed ${result.removedReferenceCount} scanned reference${result.removedReferenceCount === 1 ? '' : 's'} from ${result.updatedEntryCount} entr${result.updatedEntryCount === 1 ? 'y' : 'ies'}. Re-run a scan to rebuild them.`
+      )
+      return {
+        ...current,
+        entries: result.entries,
+        auditTrail: [
+          ...current.auditTrail,
+          {
+            id: crypto.randomUUID(),
+            occurredAt,
+            action: 'scanned-reference-notes-cleared',
+            entityType: 'project',
+            entityId: current.id,
+            details: {
+              entries: result.updatedEntryCount,
+              references: result.removedReferenceCount
+            }
+          }
+        ],
+        updatedAt: occurredAt
+      }
+    })
+  }, [])
+
   const copyKeptReferencesToNotes = useCallback((): void => {
     const occurredAt = new Date().toISOString()
     setProject((current) => {
@@ -2268,6 +2309,16 @@ function App(): React.JSX.Element {
   const generatePdfExport = useCallback(
     async (format: PdfExportFormat, template?: KeptExportTemplate): Promise<Uint8Array> => {
       if (!projectSnapshot) throw new Error('Open a project before previewing an export.')
+      const loadSourceFiles = async (): Promise<Map<string, Uint8Array>> => {
+        const sourceFiles = new Map<string, Uint8Array>()
+        for (const document of projectSnapshot.documents) {
+          const editedData = editedPdfDataRef.current.get(document.path)
+          const data =
+            editedData ?? new Uint8Array(await window.studio.documents.readPdf(document.path))
+          sourceFiles.set(document.path, data)
+        }
+        return sourceFiles
+      }
       if (format === 'pdf') {
         return exportProjectPdf(projectSnapshot, {
           metrics: analysisSnapshot.metrics.map((metric) => ({
@@ -2283,31 +2334,38 @@ function App(): React.JSX.Element {
         if (!appliedTemplate) {
           throw new Error('Configure the kept text export template before previewing it.')
         }
-        return exportProjectKeptEntriesTemplatePdf(projectSnapshot, appliedTemplate)
+        return exportProjectKeptEntriesTemplatePdf(
+          projectSnapshot,
+          appliedTemplate,
+          await loadSourceFiles()
+        )
       }
       if (format === 'pdf-kept-canvas') {
-        if (template) return exportProjectKeptEntriesTemplatePdf(projectSnapshot, template)
-        const imageDataUrls = await resolveKeptImageDataUrls(
-          projectSnapshot,
-          projectSnapshot.keptEntriesLayout,
-          async (path) => {
-            const editedData = editedPdfDataRef.current.get(path)
-            return editedData ?? new Uint8Array(await window.studio.documents.readPdf(path))
-          }
-        )
+        if (template) {
+          return exportProjectKeptEntriesTemplatePdf(
+            projectSnapshot,
+            template,
+            await loadSourceFiles()
+          )
+        }
+        const [imageDataUrls, sourceFiles] = await Promise.all([
+          resolveKeptImageDataUrls(
+            projectSnapshot,
+            projectSnapshot.keptEntriesLayout,
+            async (path) => {
+              const editedData = editedPdfDataRef.current.get(path)
+              return editedData ?? new Uint8Array(await window.studio.documents.readPdf(path))
+            }
+          ),
+          loadSourceFiles()
+        ])
         return exportProjectKeptEntriesCanvasPdf(
           projectSnapshot,
           projectSnapshot.keptEntriesLayout,
-          { imageDataUrls }
+          { imageDataUrls, sourceFiles }
         )
       }
-      const sourceFiles = new Map<string, Uint8Array>()
-      for (const document of projectSnapshot.documents) {
-        const editedData = editedPdfDataRef.current.get(document.path)
-        const data =
-          editedData ?? new Uint8Array(await window.studio.documents.readPdf(document.path))
-        sourceFiles.set(document.path, data)
-      }
+      const sourceFiles = await loadSourceFiles()
       if (format === 'pdf-layout') return exportProjectSourceLayoutPdf(projectSnapshot, sourceFiles)
       if (format === 'pdf-compact') {
         return exportProjectCompactedSourceLayoutPdf(projectSnapshot, sourceFiles)
@@ -2811,6 +2869,7 @@ function App(): React.JSX.Element {
     if (!showKeptCanvas || !projectSnapshotRef.current) return
     const refs = JSON.parse(sessionImageRefKey) as string[]
     let cancelled = false
+    setIsRefreshingSessionImages(true)
     void loadKeptSessionImageUrls(projectSnapshotRef.current, refs, async (path) => {
       const editedData = editedPdfDataRef.current.get(path)
       return editedData ?? new Uint8Array(await window.studio.documents.readPdf(path))
@@ -2818,11 +2877,12 @@ function App(): React.JSX.Element {
       if (cancelled) return
       setSessionImageUrls(resolved.urls)
       setSessionImageError(resolved.error ?? null)
+      setIsRefreshingSessionImages(false)
     })
     return () => {
       cancelled = true
     }
-  }, [sessionImageRefKey, showKeptCanvas])
+  }, [sessionImageRefKey, showKeptCanvas, sessionImageRefreshToken])
 
   const handleSaveEditingEntry = useCallback(
     (patch: EntryEditPatch) => {
@@ -3134,11 +3194,16 @@ function App(): React.JSX.Element {
           isExporting={exportState.isSaving}
           resolveImageSource={resolveCanvasImageSource}
           imageResolutionError={sessionImageError ?? undefined}
+          isRefreshingImages={isRefreshingSessionImages}
+          onRefreshImages={() => {
+            setSessionImageRefreshToken((current) => current + 1)
+          }}
           onLayoutChange={setKeptEntriesLayout}
           onClose={() => {
             setShowKeptCanvas(false)
             setSessionImageUrls(new Map())
             setSessionImageError(null)
+            setIsRefreshingSessionImages(false)
           }}
           onExport={() => void saveExport('pdf-kept-canvas')}
           onReset={() =>
@@ -4155,6 +4220,7 @@ function App(): React.JSX.Element {
                       onScanPdfText={() => void scanPdfTextReferencesToNotes()}
                       onScanOcr={() => void scanSourceReferencesToNotes()}
                       onCancelScan={cancelSourceReferenceScan}
+                      onClearScannedReferences={clearScannedReferences}
                       onToggleOcrLanguage={toggleOcrLanguage}
                     />
                   ),

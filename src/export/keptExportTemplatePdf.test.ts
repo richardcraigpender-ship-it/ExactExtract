@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import zlib from 'node:zlib'
 import test from 'node:test'
+import { PDFDocument } from 'pdf-lib'
 
 import { PROJECT_SCHEMA_VERSION, type ProjectEntry, type ProjectState } from '../shared/contracts'
 import type { KeptExportTemplate, KeptExportPageTemplate } from '../shared/keptExportTemplate'
@@ -377,4 +378,33 @@ test('does not fail when the running balance is enabled with zero kept entries',
   const bytes = await exportProjectKeptEntriesTemplatePdf(project([]), withBalance)
 
   assert.ok(bytes.length > 0)
+})
+
+test('inherits author and creation date from the source PDF when provided', async () => {
+  const source = await PDFDocument.create()
+  source.addPage([400, 500])
+  source.setAuthor('Acme Bank plc')
+  const creationDate = new Date('2026-01-05T00:00:00.000Z')
+  source.setCreationDate(creationDate)
+  const sourceBytes = await source.save()
+
+  const bytes = await exportProjectKeptEntriesTemplatePdf(
+    project([entry('entry-1', 'Consulting summary note')]),
+    template(),
+    new Map([['source.pdf', sourceBytes]])
+  )
+  const output = await PDFDocument.load(bytes, { updateMetadata: false })
+
+  assert.equal(output.getAuthor(), 'Acme Bank plc')
+  assert.equal(output.getCreationDate()?.toISOString(), creationDate.toISOString())
+})
+
+test('leaves metadata untouched when no source files are supplied', async () => {
+  const bytes = await exportProjectKeptEntriesTemplatePdf(
+    project([entry('entry-1', 'Consulting summary note')]),
+    template()
+  )
+  const output = await PDFDocument.load(bytes, { updateMetadata: false })
+
+  assert.equal(output.getAuthor(), undefined)
 })

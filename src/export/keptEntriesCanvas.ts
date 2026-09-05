@@ -1,6 +1,7 @@
 import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
 import type { ProjectState } from '../shared/contracts'
+import { applySourceMetadata, loadSourceMetadata } from './sourceMetadata'
 import {
   keptEntriesLayoutPageCount,
   keptEntriesPageDimensions,
@@ -13,6 +14,8 @@ export interface KeptEntriesCanvasExportOptions {
   systemFontBytes?: ReadonlyMap<string, Uint8Array>
   /** PNG/JPEG data URLs keyed by image placement source ref. Bytes are never persisted. */
   imageDataUrls?: ReadonlyMap<string, string>
+  /** Read only for Author/Keywords/CreationDate; page content is never taken from these. */
+  sourceFiles?: ReadonlyMap<string, Uint8Array>
 }
 
 export type KeptEntriesCanvasWarningCode =
@@ -211,6 +214,7 @@ export async function exportProjectKeptEntriesCanvasPdf(
   }
 
   const embeddedImages = new Map<string, Awaited<ReturnType<typeof pdf.embedPng>>>()
+  const runningBalanceFont = await pdf.embedFont(StandardFonts.Helvetica)
   for (const placement of layout.images ?? []) {
     const page = pages[Math.min(pages.length, Math.max(1, placement.pageNumber)) - 1]
     let embedded = embeddedImages.get(placement.source.ref)
@@ -228,6 +232,18 @@ export async function exportProjectKeptEntriesCanvasPdf(
       width: box.width,
       height: box.height
     })
+
+    const runningBalance = layout.imagePlacementOptions?.runningBalance
+    if (placement.runningBalanceText && runningBalance?.enabled) {
+      const fontSize = Math.max(6, runningBalance.fontSize)
+      page.drawText(placement.runningBalanceText, {
+        x: box.x + box.width + runningBalance.offsetX,
+        y: pageSize.height - box.y - runningBalance.offsetY - fontSize,
+        size: fontSize,
+        font: runningBalanceFont,
+        color: color(runningBalance.color)
+      })
+    }
 
     const divider = layout.imagePlacementOptions?.divider
     if (divider?.enabled) {
@@ -259,5 +275,8 @@ export async function exportProjectKeptEntriesCanvasPdf(
   pdf.setSubject('Custom kept-entries canvas export')
   pdf.setProducer('EXACT EXTRACT')
   pdf.setCreator('EXACT EXTRACT')
+  if (options.sourceFiles) {
+    applySourceMetadata(pdf, await loadSourceMetadata(project.documents, options.sourceFiles))
+  }
   return pdf.save({ useObjectStreams: false })
 }

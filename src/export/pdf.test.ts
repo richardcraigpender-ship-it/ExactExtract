@@ -159,6 +159,74 @@ test('preserves source pages without overlaying review regions at source coordin
   assert.doesNotMatch(pdfText, /0\.15\s+0\.55\s+0\.32|0\.8\s+0\.2\s+0\.16|0\.85\s+0\.58\s+0\.08/)
 })
 
+test('copies author, keywords, and creation date from the source PDF', async () => {
+  const source = await PDFDocument.create()
+  source.addPage([400, 500])
+  source.setAuthor('Acme Bank plc')
+  source.setKeywords(['statement, 2026, checking'])
+  const creationDate = new Date('2026-01-05T00:00:00.000Z')
+  source.setCreationDate(creationDate)
+  const sourceBytes = await source.save()
+  const sourceProject = project([entry('kept', 'keep', 'Positioned row')])
+  sourceProject.documents[0]!.pageCount = 1
+  sourceProject.entries[0]!.regions[0]!.pageNumber = 1
+
+  const outputBytes = await exportProjectSourceLayoutPdf(
+    sourceProject,
+    new Map([[sourceProject.documents[0]!.path, sourceBytes]])
+  )
+  const output = await PDFDocument.load(outputBytes, { updateMetadata: false })
+
+  assert.equal(output.getAuthor(), 'Acme Bank plc')
+  assert.equal(output.getKeywords(), 'statement, 2026, checking')
+  assert.equal(output.getCreationDate()?.toISOString(), creationDate.toISOString())
+  // Title/Producer/Creator stay this app's own values so exports remain identifiable.
+  assert.match(output.getTitle() ?? '', /München Review/)
+  assert.equal(output.getProducer(), 'EXACT EXTRACT')
+})
+
+test('leaves metadata untouched when the source PDF has none', async () => {
+  const source = await PDFDocument.create()
+  source.addPage([400, 500])
+  const sourceBytes = await source.save()
+  const sourceProject = project([entry('kept', 'keep', 'Positioned row')])
+  sourceProject.documents[0]!.pageCount = 1
+  sourceProject.entries[0]!.regions[0]!.pageNumber = 1
+
+  const outputBytes = await exportProjectSourceLayoutPdf(
+    sourceProject,
+    new Map([[sourceProject.documents[0]!.path, sourceBytes]])
+  )
+  const output = await PDFDocument.load(outputBytes)
+
+  assert.equal(output.getAuthor(), undefined)
+  assert.equal(output.getKeywords(), undefined)
+})
+
+test('copies source metadata through the lazily loaded kept-entries export', async () => {
+  const source = await PDFDocument.create()
+  const sourceFont = await source.embedFont(StandardFonts.Helvetica)
+  const sourcePage = source.addPage([400, 500])
+  sourcePage.drawText('Positioned row', { x: 40, y: 595, size: 10, font: sourceFont })
+  source.setAuthor('Northgate Retail')
+  const sourceBytes = await source.save()
+  const sourceProject = project([entry('kept', 'keep', 'Positioned row')])
+  sourceProject.documents[0]!.pageCount = 1
+  sourceProject.entries[0]!.regions[0] = {
+    documentId: 'document-1',
+    pageNumber: 1,
+    bbox: { x: 40, y: 590, width: 200, height: 14, coordinateSpace: 'pdf-points' }
+  }
+
+  const outputBytes = await exportProjectKeptEntriesPdf(
+    sourceProject,
+    new Map([[sourceProject.documents[0]!.path, sourceBytes]])
+  )
+  const output = await PDFDocument.load(outputBytes, { updateMetadata: false })
+
+  assert.equal(output.getAuthor(), 'Northgate Retail')
+})
+
 test('outlines maybe and excluded rows without masking text or touching kept rows', async () => {
   const source = await PDFDocument.create()
   source.addPage([400, 500])

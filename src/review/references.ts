@@ -1,8 +1,14 @@
 import type { BoundingBox, ProjectEntry } from '../shared/contracts'
 
-const REFERENCE_PATTERN =
-  /\b(?:ref(?:erence)?|card|invoice|inv|order|po|receipt|transaction|txn|id)\s*[:#-]?\s*([A-Z0-9][A-Z0-9/-]{2,})\b/gi
-export const DEFAULT_REFERENCE_PARENT_MAX_SCORE = 160
+const REFERENCE_MARKER = '(?:ref(?:erence)?|card|invoice|inv|order|po|receipt|transaction|txn|id)'
+// The marker must be a whole word followed by a real separator, otherwise ordinary
+// words match by prefix ("POINTS" -> po + INTS, "Cardholder" -> card + holder).
+const REFERENCE_PATTERN = new RegExp(
+  `\\b${REFERENCE_MARKER}(?:\\s*[:#-]\\s*|\\s+)([A-Za-z0-9][A-Za-z0-9/-]{2,})\\b`,
+  'gi'
+)
+const CONTAINS_DIGIT = /\d/
+export const DEFAULT_REFERENCE_PARENT_MAX_SCORE = 48
 
 function uniqueReferences(values: readonly string[]): string[] {
   const seen = new Set<string>()
@@ -27,7 +33,12 @@ function missingReferences(references: readonly string[], existingNotes: string)
 }
 
 export function extractReferencesFromText(text: string): string[] {
-  return uniqueReferences([...text.matchAll(REFERENCE_PATTERN)].map((match) => match[1] ?? ''))
+  return uniqueReferences(
+    [...text.matchAll(REFERENCE_PATTERN)]
+      .map((match) => match[1] ?? '')
+      // Real references carry a digit; this drops names like "Order Smith".
+      .filter((value) => CONTAINS_DIGIT.test(value))
+  )
 }
 
 export function extractEntryReferences(
@@ -35,6 +46,56 @@ export function extractEntryReferences(
 ): string[] {
   const sourceText = [entry.normalizedText, entry.rawText].filter(Boolean).join('\n')
   return extractReferencesFromText(sourceText)
+}
+
+const REFERENCE_TOKEN = /^[A-Za-z0-9][A-Za-z0-9/-]{2,}$/
+
+/** The scans append references as their own comma-separated line, so prose notes survive. */
+function referenceOnlyLine(line: string): boolean {
+  const parts = line
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean)
+  if (parts.length === 0) return false
+  return parts.every((part) => REFERENCE_TOKEN.test(part) && CONTAINS_DIGIT.test(part))
+}
+
+export interface ClearReferenceNotesResult {
+  entries: ProjectEntry[]
+  updatedEntryCount: number
+  removedReferenceCount: number
+}
+
+export function clearScannedReferenceNotes(
+  entries: readonly ProjectEntry[],
+  updatedAt: string
+): ClearReferenceNotesResult {
+  let updatedEntryCount = 0
+  let removedReferenceCount = 0
+  const nextEntries = entries.map((entry) => {
+    const notes = entry.notes
+    if (!notes) return entry
+    const lines = notes.split('\n')
+    const kept: string[] = []
+    let removed = 0
+    for (const line of lines) {
+      if (referenceOnlyLine(line)) {
+        removed += line.split(',').filter((part) => part.trim()).length
+        continue
+      }
+      kept.push(line)
+    }
+    if (removed === 0) return entry
+    updatedEntryCount += 1
+    removedReferenceCount += removed
+    const nextNotes = kept.join('\n').trim()
+    const next: ProjectEntry = { ...entry, updatedAt }
+    if (nextNotes) next.notes = nextNotes
+    else delete next.notes
+    return next
+  })
+
+  return { entries: nextEntries, updatedEntryCount, removedReferenceCount }
 }
 
 export interface CopyKeptReferencesResult {
@@ -133,7 +194,7 @@ function bestParentEntry(
       const verticalDistance = Math.abs(centerY(bbox) - centerY(reference.bbox))
       const horizontalPenalty =
         xOverlap(bbox, reference.bbox) > 0 ? 0 : Math.abs(bbox.x - reference.bbox.x)
-      return { entry, score: verticalDistance + horizontalPenalty * 0.25 }
+      return { entry, score: verticalDistance + horizontalPenalty }
     })
     .sort((left, right) => left.score - right.score)[0]
   return { entry: best?.entry, score: best?.score, hasSamePageParent: true }

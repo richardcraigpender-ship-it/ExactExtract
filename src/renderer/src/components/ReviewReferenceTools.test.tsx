@@ -18,6 +18,7 @@ function render(overrides: Partial<React.ComponentProps<typeof ReferenceToolsPan
       onScanPdfText={() => undefined}
       onScanOcr={() => undefined}
       onCancelScan={() => undefined}
+      onClearScannedReferences={() => undefined}
       onToggleOcrLanguage={() => undefined}
       {...overrides}
     />

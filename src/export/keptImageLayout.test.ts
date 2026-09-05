@@ -195,7 +195,7 @@ test('reports empty batches and non-positive page capacity without throwing', ()
   )
 })
 
-test('session sources come from the kept-entry crop pipeline with uniform crop sizes', () => {
+test('session sources come from the kept-entry crop pipeline with source region sizes', () => {
   const sources = buildSessionKeptImageSources([entry('first', 220, 18), entry('second', 300, 40)])
 
   assert.deepEqual(
@@ -207,7 +207,7 @@ test('session sources come from the kept-entry crop pipeline with uniform crop s
       item.naturalHeight
     ]),
     [
-      ['session-entry', 'first', 'first', 300, 40],
+      ['session-entry', 'first', 'first', 220, 18],
       ['session-entry', 'second', 'second', 300, 40]
     ]
   )
@@ -275,6 +275,13 @@ test('applying a plan preserves image placement options atomically', () => {
       opacity: 0.5,
       startX: 40,
       endX: 280
+    },
+    runningBalance: {
+      enabled: true,
+      offsetX: 8,
+      offsetY: 4,
+      fontSize: 10,
+      color: '#17231c'
     }
   }
 
@@ -282,4 +289,6 @@ test('applying a plan preserves image placement options atomically', () => {
 
   assert.equal(updated.imagePlacementOptions?.divider?.enabled, true)
   assert.equal(updated.imagePlacementOptions?.divider?.endX, 280)
+  assert.equal(updated.imagePlacementOptions?.runningBalance?.enabled, true)
+  assert.equal(updated.imagePlacementOptions?.runningBalance?.offsetX, 8)
 })

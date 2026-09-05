@@ -192,6 +192,70 @@ test('draws a configured divider after every placed image', async () => {
   assert.doesNotMatch(decodeContent(withoutDivider), /40 632(\.\d+)? m/)
 })
 
+test('draws running balance text next to each session image when enabled', async () => {
+  const images = [
+    imagePlacement({ runningBalanceText: '£10.00' }),
+    imagePlacement({ id: 'kept-image-2', y: 220, runningBalanceText: '£30.00' })
+  ]
+  const options: KeptImagePlacementOptions = {
+    sourceMode: 'session-entry',
+    startX: 48,
+    startY: 60,
+    fillBetweenY: false,
+    entriesPerPage: 6,
+    gap: 12,
+    preserveAspectRatio: true,
+    uniformSlots: false,
+    runningBalance: {
+      enabled: true,
+      offsetX: 8,
+      offsetY: 4,
+      fontSize: 10,
+      color: '#17231c'
+    }
+  }
+
+  const bytes = await exportProjectKeptEntriesCanvasPdf(
+    project([entry('first')]),
+    { ...layout(images), imagePlacementOptions: options },
+    { imageDataUrls: new Map([['first', pngDataUrl(20, 10)]]) }
+  )
+  const content = decodeContent(bytes)
+
+  assert.match(content, /<A331302E3030> Tj/)
+  assert.match(content, /<A333302E3030> Tj/)
+})
+
+test('does not draw running balance text when the option is disabled', async () => {
+  const images = [imagePlacement({ runningBalanceText: '£10.00' })]
+  const options: KeptImagePlacementOptions = {
+    sourceMode: 'session-entry',
+    startX: 48,
+    startY: 60,
+    fillBetweenY: false,
+    entriesPerPage: 6,
+    gap: 12,
+    preserveAspectRatio: true,
+    uniformSlots: false,
+    runningBalance: {
+      enabled: false,
+      offsetX: 8,
+      offsetY: 4,
+      fontSize: 10,
+      color: '#17231c'
+    }
+  }
+
+  const bytes = await exportProjectKeptEntriesCanvasPdf(
+    project([entry('first')]),
+    { ...layout(images), imagePlacementOptions: options },
+    { imageDataUrls: new Map([['first', pngDataUrl(20, 10)]]) }
+  )
+  const content = decodeContent(bytes)
+
+  assert.doesNotMatch(content, /<A331302E3030> Tj/)
+})
+
 test('embeds image placements on every planned page of a reopenable PDF', async () => {
   const images = [
     imagePlacement(),
@@ -206,6 +270,25 @@ test('embeds image placements on every planned page of a reopenable PDF', async 
   assert.equal(reopened.getPageCount(), 3)
   assert.deepEqual(reopened.getPage(2).getSize(), { width: 612, height: 792 })
   assert.match(reopened.getTitle() ?? '', /Kept Entries Layout/)
+})
+
+test('inherits author from the source PDF when sourceFiles is provided', async () => {
+  const source = await PDFDocument.create()
+  source.addPage([400, 500])
+  source.setAuthor('Acme Bank plc')
+  const sourceBytes = await source.save()
+
+  const bytes = await exportProjectKeptEntriesCanvasPdf(
+    project([entry('first')]),
+    layout([imagePlacement()]),
+    {
+      imageDataUrls: new Map([['first', pngDataUrl(20, 10)]]),
+      sourceFiles: new Map([['source.pdf', sourceBytes]])
+    }
+  )
+  const reopened = await PDFDocument.load(bytes, { updateMetadata: false })
+
+  assert.equal(reopened.getAuthor(), 'Acme Bank plc')
 })
 
 test('places text and images on their own pages and keeps version-1 layouts single page', async () => {

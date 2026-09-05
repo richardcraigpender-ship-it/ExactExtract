@@ -1,6 +1,7 @@
 import { pdfjs } from 'react-pdf'
 import type { DocumentStyleProfile, TextStyleCluster } from '../../../shared/documentStyle'
 import { withPdfDocument, type DestroyablePdfDocument } from './pdfResourceLifecycle'
+import { normalizePdfFontName } from '../../../style/fonts'
 
 interface PdfDocumentLoadOverride {
   __PDFJS_GET_DOCUMENT__?: (source: { data: Uint8Array }) => { promise: Promise<StylePdfDocument> }
@@ -11,6 +12,7 @@ interface StylePdfDocument extends DestroyablePdfDocument {
   getPage(pageNumber: number): Promise<{
     getViewport(options: { scale: number; rotation?: number }): { width: number; height: number }
     getTextContent(): Promise<{ items: readonly unknown[] }>
+    commonObjs?: { get(name: string): unknown }
   }>
 }
 
@@ -18,6 +20,18 @@ interface PdfTextItemLike {
   str: string
   transform: readonly number[]
   fontName?: string
+}
+
+interface PdfFontMetadata {
+  name?: string
+  loadedName?: string
+  postscriptName?: string
+  fontFamily?: string
+  fontStyle?: string
+  italic?: boolean
+  bold?: boolean
+  fontWeight?: number | string
+  isEmbedded?: boolean
 }
 
 function isTextItem(value: unknown): value is PdfTextItemLike {
@@ -31,22 +45,35 @@ function isTextItem(value: unknown): value is PdfTextItemLike {
   )
 }
 
-function normalizeFamily(fontName: string | undefined): string {
-  const withoutSubset = (fontName ?? 'Helvetica').replace(/^[A-Z]{6}\+/, '')
-  if (/courier/i.test(withoutSubset)) return 'Courier'
-  if (/times|serif/i.test(withoutSubset)) return 'Times'
-  return 'Helvetica'
-}
-
-function weight(fontName: string | undefined): TextStyleCluster['fontWeight'] {
-  if (/bold|black/i.test(fontName ?? '')) return 'bold'
-  if (/semibold|demi/i.test(fontName ?? '')) return 'semibold'
-  if (/medium/i.test(fontName ?? '')) return 'medium'
-  return 'regular'
-}
-
-function italic(fontName: string | undefined): boolean {
-  return /italic|oblique/i.test(fontName ?? '')
+function readFontMetadata(
+  page: { commonObjs?: { get(name: string): unknown } },
+  fontName?: string
+): PdfFontMetadata {
+  if (!fontName) return {}
+  let value: unknown
+  try {
+    value = page.commonObjs?.get(fontName)
+  } catch {
+    // PDF.js may not have resolved the font object; the raw text-item name remains usable.
+    return {}
+  }
+  if (typeof value !== 'object' || value === null) return {}
+  const metadata = value as Record<string, unknown>
+  return {
+    ...(typeof metadata.name === 'string' ? { name: metadata.name } : {}),
+    ...(typeof metadata.loadedName === 'string' ? { loadedName: metadata.loadedName } : {}),
+    ...(typeof metadata.postscriptName === 'string'
+      ? { postscriptName: metadata.postscriptName }
+      : {}),
+    ...(typeof metadata.fontFamily === 'string' ? { fontFamily: metadata.fontFamily } : {}),
+    ...(typeof metadata.fontStyle === 'string' ? { fontStyle: metadata.fontStyle } : {}),
+    ...(typeof metadata.italic === 'boolean' ? { italic: metadata.italic } : {}),
+    ...(typeof metadata.bold === 'boolean' ? { bold: metadata.bold } : {}),
+    ...(typeof metadata.fontWeight === 'number' || typeof metadata.fontWeight === 'string'
+      ? { fontWeight: metadata.fontWeight }
+      : {}),
+    ...(typeof metadata.isEmbedded === 'boolean' ? { isEmbedded: metadata.isEmbedded } : {})
+  }
 }
 
 function fontSize(transform: readonly number[]): number {
@@ -90,6 +117,10 @@ export async function detectDocumentStyleProfile(
     async (pdf) => {
       const observations: Array<{
         fontFamily: string
+        embeddedFontName?: string
+        postscriptName?: string
+        fontStyle?: string
+        embedded?: boolean
         size: number
         fontWeight: TextStyleCluster['fontWeight']
         italic: boolean
@@ -113,11 +144,34 @@ export async function detectDocumentStyleProfile(
             if (!text) continue
             characterCount += text.length
             const size = fontSize(item.transform)
+            const metadata = readFontMetadata(page, item.fontName)
+            const normalizedFont = normalizePdfFontName(
+              metadata.fontFamily ?? metadata.name ?? item.fontName
+            )
             observations.push({
-              fontFamily: normalizeFamily(item.fontName),
+              fontFamily: normalizedFont.fontFamily,
+              ...(metadata.name || metadata.loadedName
+                ? { embeddedFontName: metadata.name ?? metadata.loadedName }
+                : {}),
+              ...(metadata.postscriptName ? { postscriptName: metadata.postscriptName } : {}),
+              ...(metadata.fontStyle ? { fontStyle: metadata.fontStyle } : {}),
+              ...(metadata.isEmbedded === undefined ? {} : { embedded: metadata.isEmbedded }),
               size,
-              fontWeight: weight(item.fontName),
-              italic: italic(item.fontName),
+              fontWeight:
+                typeof metadata.fontWeight === 'number'
+                  ? metadata.fontWeight >= 700
+                    ? 'bold'
+                    : metadata.fontWeight >= 600
+                      ? 'semibold'
+                      : metadata.fontWeight >= 500
+                        ? 'medium'
+                        : 'regular'
+                  : metadata.bold
+                    ? 'bold'
+                    : metadata.italic
+                      ? normalizedFont.fontWeight
+                      : normalizedFont.fontWeight,
+              italic: metadata.italic ?? normalizedFont.italic,
               likelyRole: roleFor(size, item.transform[5] ?? 0, viewport.height, largestSize),
               pageNumber,
               text
@@ -142,6 +196,9 @@ export async function detectDocumentStyleProfile(
       for (const observation of observations) {
         const key = [
           observation.fontFamily,
+          observation.embeddedFontName ?? '',
+          observation.postscriptName ?? '',
+          observation.fontStyle ?? '',
           observation.size,
           observation.fontWeight,
           observation.italic,
@@ -157,6 +214,12 @@ export async function detectDocumentStyleProfile(
           clusters.set(key, {
             id: `text-${clusters.size + 1}`,
             fontFamily: observation.fontFamily,
+            ...(observation.embeddedFontName
+              ? { embeddedFontName: observation.embeddedFontName }
+              : {}),
+            ...(observation.postscriptName ? { postscriptName: observation.postscriptName } : {}),
+            ...(observation.fontStyle ? { fontStyle: observation.fontStyle } : {}),
+            ...(observation.embedded === undefined ? {} : { embedded: observation.embedded }),
             fontSize: observation.size,
             fontWeight: observation.fontWeight,
             italic: observation.italic,

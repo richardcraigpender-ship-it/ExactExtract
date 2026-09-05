@@ -1,5 +1,5 @@
 import React from 'react'
-import { FileSearch, ScanText, Sparkles, X } from 'lucide-react'
+import { Eraser, FileSearch, ScanText, Sparkles, X } from 'lucide-react'
 import { DEFAULT_REFERENCE_PARENT_MAX_SCORE } from '../../../review/references'
 
 export interface ReferenceToolResult {
@@ -32,6 +32,7 @@ interface ReferenceToolsPanelProps {
   onScanPdfText: () => void
   onScanOcr: () => void
   onCancelScan: () => void
+  onClearScannedReferences: () => void
   onToggleOcrLanguage: (language: string) => void
 }
 
@@ -47,8 +48,10 @@ export const ReferenceToolsPanel = React.memo(function ReferenceToolsPanel({
   onScanPdfText,
   onScanOcr,
   onCancelScan,
+  onClearScannedReferences,
   onToggleOcrLanguage
 }: ReferenceToolsPanelProps): React.JSX.Element {
+  const [confirmClear, setConfirmClear] = React.useState(false)
   const scanDisabled =
     isScanning || isBusy || !hasKeptEntries || !hasActiveDocument || ocrLanguages.length === 0
   const methods = [
@@ -107,6 +110,37 @@ export const ReferenceToolsPanel = React.memo(function ReferenceToolsPanel({
         {isScanning && (
           <button type="button" className="secondary-button" onClick={onCancelScan}>
             <X size={16} aria-hidden="true" /> Cancel
+          </button>
+        )}
+        {confirmClear ? (
+          <span className="reference-tools-confirm" role="alert">
+            Remove scanned reference lines from all entry notes? Typed notes are kept.
+            <button
+              type="button"
+              className="danger-button"
+              onClick={() => {
+                onClearScannedReferences()
+                setConfirmClear(false)
+              }}
+            >
+              Confirm
+            </button>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => setConfirmClear(false)}
+            >
+              Keep
+            </button>
+          </span>
+        ) : (
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={isScanning || isBusy}
+            onClick={() => setConfirmClear(true)}
+          >
+            <Eraser size={16} aria-hidden="true" /> Clear scanned refs
           </button>
         )}
       </div>

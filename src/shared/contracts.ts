@@ -71,6 +71,11 @@ export interface TextStyleCluster {
   id: string
   fontFamily: string
   fontFace?: string
+  /** Original PDF.js font metadata when available. */
+  embeddedFontName?: string
+  postscriptName?: string
+  fontStyle?: string
+  embedded?: boolean
   fontSize: number
   fontWeight: TextStyleWeight
   italic: boolean

@@ -1,4 +1,7 @@
+import { mapFinancialEntry, type FinancialColumnMapping } from '../analysis'
 import type { ProjectEntry } from '../shared/contracts'
+import { resolveCurrencyCode } from '../shared/currencies'
+import { formatCurrencyAmount } from '../shared/currencyFormat'
 import {
   keptEntriesPageDimensions,
   type KeptEntriesCanvasLayout,
@@ -10,7 +13,12 @@ import {
   type KeptImageSourceDescriptor,
   KEPT_ENTRIES_LAYOUT_VERSION
 } from '../shared/keptEntriesLayout'
+import {
+  DEFAULT_KEPT_EXPORT_RUNNING_BALANCE,
+  type KeptExportRunningBalance
+} from '../shared/keptExportTemplate'
 import { buildEntryImageCrops } from './entryImages'
+import { buildRunningBalanceValues, type RunningBalanceInputRow } from './runningBalance'
 
 export type { KeptImageSourceDescriptor } from '../shared/keptEntriesLayout'
 
@@ -29,6 +37,11 @@ export interface KeptImagePlanOptions {
   preserveAspectRatio?: boolean
   /** Give every slot the largest resolved width and height so the column stays regular. */
   uniformSlots?: boolean
+  /** Optional running-balance text rendered beside session-entry images. */
+  runningBalance?: KeptImagePlacementOptions['runningBalance']
+  runningBalanceConfig?: KeptExportRunningBalance
+  entries?: readonly ProjectEntry[]
+  currencyCode?: Parameters<typeof resolveCurrencyCode>[0]
   idPrefix?: string
 }
 
@@ -95,6 +108,50 @@ function resolveSlot(
   return { width: naturalWidth, height: naturalHeight }
 }
 
+function mappingForImageBalances(): FinancialColumnMapping {
+  return {
+    amountColumns: ['money-out', 'money-in', 'balance'],
+    dateSource: 'detected-date',
+    descriptionSource: 'detected-description',
+    referenceSource: 'entry-notes',
+    categorySource: 'entry-category'
+  }
+}
+
+function resolveSessionRunningBalanceValues(
+  options: KeptImagePlanOptions
+): Map<string, string> | undefined {
+  const runningBalance = options.runningBalanceConfig ?? DEFAULT_KEPT_EXPORT_RUNNING_BALANCE
+  if (!options.runningBalance?.enabled || !runningBalance.enabled || !options.entries) {
+    return undefined
+  }
+
+  const mapping = mappingForImageBalances()
+  const currencyCode = resolveCurrencyCode(options.currencyCode)
+  const rows: RunningBalanceInputRow[] = options.entries.map((entry) => {
+    const mapped = mapFinancialEntry(entry, mapping)
+    return {
+      entryId: entry.id,
+      moneyIn: mapped?.moneyIn,
+      moneyOut: mapped?.moneyOut,
+      balance: mapped?.balance,
+      financiallyMapped: mapped !== null
+    }
+  })
+  const calculated = buildRunningBalanceValues(rows, runningBalance).values
+  const decimalPlaces = Math.max(
+    0,
+    Math.min(6, Math.trunc(runningBalance.decimalPlaces ?? DEFAULT_KEPT_EXPORT_RUNNING_BALANCE.decimalPlaces))
+  )
+
+  return new Map(
+    [...calculated].map(([entryId, value]) => [
+      entryId,
+      formatCurrencyAmount(value, currencyCode, { decimalPlaces })
+    ])
+  )
+}
+
 export function planKeptEntryImagePlacements(
   sources: readonly KeptImageSourceDescriptor[],
   options: KeptImagePlanOptions
@@ -126,6 +183,7 @@ export function planKeptEntryImagePlacements(
   const fillBetweenY = endY !== undefined && endY > options.startY
   const page = keptEntriesPageDimensions(options.pageSize, options.orientation)
   const prefix = options.idPrefix ?? 'kept-image'
+  const runningBalanceTextByEntryId = resolveSessionRunningBalanceValues(options)
 
   const slots: { source: KeptImageSourceDescriptor; width: number; height: number }[] = []
   for (const source of sources) {
@@ -170,7 +228,10 @@ export function planKeptEntryImagePlacements(
       y,
       width: slot.width,
       height: slot.height,
-      fit
+      fit,
+      ...(slot.source.entryId && runningBalanceTextByEntryId?.get(slot.source.entryId)
+        ? { runningBalanceText: runningBalanceTextByEntryId.get(slot.source.entryId) }
+        : {})
     }
     if (
       placement.x < 0 ||
