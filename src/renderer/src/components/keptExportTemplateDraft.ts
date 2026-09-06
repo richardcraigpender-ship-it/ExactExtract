@@ -207,7 +207,7 @@ export function createDefaultKeptExportPageTemplate(): KeptExportPageTemplateDra
       ...column,
       y: startY,
       height: columnHeight,
-      spacing: 28,
+      spacing: 20,
       overflow: 'next-page'
     }))
   }
@@ -296,7 +296,7 @@ export function createKeptExportColumn(
     y: 72,
     width: 180,
     height: 648,
-    spacing: 28,
+    spacing: 20,
     overflow: 'next-page'
   }
 }

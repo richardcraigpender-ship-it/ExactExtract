@@ -56,6 +56,12 @@ export function KeptEntriesCanvasWorkspace({
   const pageCount = keptEntriesLayoutPageCount(layout)
   const resolutionMessage = describeImageResolutionFailure(imageResolutionError)
   const currentPage = Math.min(Math.max(1, page), pageCount)
+  const imagesOnPage = (layout.images ?? []).filter(
+    (placement) => placement.pageNumber === currentPage
+  ).length
+  const textOnPage = layout.placements.filter(
+    (placement) => (placement.pageNumber ?? 1) === currentPage
+  ).length
   const selectedPlacement =
     layout.placements.find((placement) => placement.id === selectedPlacementId) ?? null
   const selectedImage =
@@ -186,14 +192,14 @@ export function KeptEntriesCanvasWorkspace({
               Next page
             </button>
           </div>
-          <div className="kept-canvas-preview-mode" role="group" aria-label="Canvas preview mode">
+          <div className="kept-canvas-preview-mode" role="group" aria-label="Canvas layer focus">
             <button
               className="secondary-button"
               type="button"
               aria-pressed={previewMode === 'images'}
               onClick={() => setPreviewMode('images')}
             >
-              PNG images
+              PNG layer
             </button>
             <button
               className="secondary-button"
@@ -201,7 +207,7 @@ export function KeptEntriesCanvasWorkspace({
               aria-pressed={previewMode === 'text'}
               onClick={() => setPreviewMode('text')}
             >
-              Kept text
+              Text layer
             </button>
             <button
               className="secondary-button"
@@ -209,9 +215,16 @@ export function KeptEntriesCanvasWorkspace({
               aria-pressed={previewMode === 'combined'}
               onClick={() => setPreviewMode('combined')}
             >
-              Combined
+              All layers
             </button>
           </div>
+          <p className="context-help" role="status">
+            {previewMode === 'images'
+              ? `PNG layer: ${imagesOnPage} on this page. Text is dimmed for alignment only.`
+              : previewMode === 'text'
+                ? `Text layer: ${textOnPage} on this page. Images are dimmed for alignment only.`
+                : `All layers: ${imagesOnPage} images and ${textOnPage} text boxes on this page.`}
+          </p>
           <div className="kept-canvas-zoom" aria-label="Canvas zoom">
             <button
               className="icon-button"
@@ -248,6 +261,7 @@ export function KeptEntriesCanvasWorkspace({
           <button
             className="secondary-button"
             type="button"
+            hidden={previewMode === 'text'}
             disabled={!onRefreshImages || isRefreshingImages}
             onClick={onRefreshImages}
           >
@@ -266,6 +280,10 @@ export function KeptEntriesCanvasWorkspace({
             <p className="context-help">
               {selectedImage.entryId ?? selectedImage.source.ref} is selected. Drag it on the canvas
               or use its corner handle to resize.
+            </p>
+          ) : previewMode === 'images' ? (
+            <p className="context-help">
+              Select a PNG to move or resize it. Font tools stay on the text layer.
             </p>
           ) : (
             <PlacementFontToolbar placement={selectedPlacement} onChange={replacePlacement} />

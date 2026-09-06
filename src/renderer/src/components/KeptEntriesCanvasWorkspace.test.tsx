@@ -88,14 +88,22 @@ test('starts on the first canvas page and reports the continuation total', () =>
   assert.doesNotMatch(markup, /data-image-placement-id="kept-image-2"/)
 })
 
-test('starts image layouts in PNG preview mode and offers text and combined views', () => {
+test('starts image layouts on the PNG layer and offers text and all-layer focus', () => {
   const markup = renderWorkspace()
 
-  assert.match(markup, /aria-label="Canvas preview mode"/)
-  assert.match(markup, /PNG images<\/button>/)
-  assert.match(markup, /Kept text<\/button>/)
-  assert.match(markup, /Combined<\/button>/)
-  assert.match(markup, /aria-pressed="true">PNG images<\/button>/)
+  assert.match(markup, /aria-label="Canvas layer focus"/)
+  assert.match(markup, /PNG layer<\/button>/)
+  assert.match(markup, /Text layer<\/button>/)
+  assert.match(markup, /All layers<\/button>/)
+  assert.match(markup, /aria-pressed="true">PNG layer<\/button>/)
+})
+
+test('reports layer-specific counts and keeps the inactive layer non-interactive', () => {
+  const markup = renderWorkspace()
+
+  assert.match(markup, /PNG layer: 1 on this page/)
+  assert.match(markup, /data-layer-active="true"/)
+  assert.match(markup, /Font tools stay on the text layer/)
 })
 
 test('offers bounded canvas zoom controls at seventy percent by default', () => {

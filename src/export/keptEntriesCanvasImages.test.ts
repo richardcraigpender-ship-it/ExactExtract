@@ -29,6 +29,13 @@ function decodeContent(pdfBytes: Uint8Array): string {
     .join('\n')
 }
 
+/** pdf-lib writes drawn text as hex strings for embedded standard-14 fonts. */
+function decodeHexText(content: string): string {
+  return content.replace(/<([\da-f]+)>/gi, (_, hex: string) =>
+    Buffer.from(hex, 'hex').toString('latin1')
+  )
+}
+
 function crc32(bytes: Uint8Array): number {
   let crc = 0xffffffff
   for (const byte of bytes) {
@@ -226,6 +233,44 @@ test('draws running balance text next to each session image when enabled', async
   assert.match(content, /<A333302E3030> Tj/)
 })
 
+test('draws the running balance as an embedded PNG when one was resolved for the placement', async () => {
+  const images = [imagePlacement({ runningBalanceText: '£10.00' })]
+  const options: KeptImagePlacementOptions = {
+    sourceMode: 'session-entry',
+    startX: 48,
+    startY: 60,
+    fillBetweenY: false,
+    entriesPerPage: 6,
+    gap: 12,
+    preserveAspectRatio: true,
+    uniformSlots: false,
+    runningBalance: {
+      enabled: true,
+      offsetX: 8,
+      offsetY: 4,
+      fontSize: 10,
+      color: '#17231c'
+    }
+  }
+
+  const bytes = await exportProjectKeptEntriesCanvasPdf(
+    project([entry('first')]),
+    { ...layout(images), imagePlacementOptions: options },
+    {
+      imageDataUrls: new Map([
+        ['first', pngDataUrl(20, 10)],
+        ['balance:kept-image-1', pngDataUrl(40, 14)]
+      ])
+    }
+  )
+  const content = decodeContent(bytes)
+  const imageDrawCount = [...content.matchAll(/\/Image-?\d+ Do/g)].length
+
+  // The balance PNG is embedded and drawn as an image, not as vector text.
+  assert.equal(imageDrawCount, 2)
+  assert.doesNotMatch(content, /<A331302E3030> Tj/)
+})
+
 test('does not draw running balance text when the option is disabled', async () => {
   const images = [imagePlacement({ runningBalanceText: '£10.00' })]
   const options: KeptImagePlacementOptions = {
@@ -289,6 +334,48 @@ test('inherits author from the source PDF when sourceFiles is provided', async (
   const reopened = await PDFDocument.load(bytes, { updateMetadata: false })
 
   assert.equal(reopened.getAuthor(), 'Acme Bank plc')
+})
+
+test('draws page numbers on every page when enabled on the layout', async () => {
+  const withNumbers: KeptEntriesCanvasLayout = {
+    ...layout([imagePlacement(), imagePlacement({ id: 'kept-image-2', pageNumber: 2, y: 200 })]),
+    pageNumbers: {
+      enabled: true,
+      matchSourceStyle: false,
+      anchor: 'bottom-center',
+      offsetX: 0,
+      offsetY: 24,
+      format: { template: 'Page {n} of {total}', startAt: 1 },
+      textStyle: {
+        fontRef: { kind: 'standard-14', family: 'Helvetica' },
+        fontSize: 9,
+        color: '#17231c',
+        fontWeight: 'normal',
+        fontStyle: 'normal'
+      },
+      scale: 1
+    }
+  }
+  withNumbers.images![1]!.pageNumber = 2
+
+  const bytes = await exportProjectKeptEntriesCanvasPdf(project([entry('first')]), withNumbers, {
+    imageDataUrls: new Map([['first', pngDataUrl(20, 10)]])
+  })
+  const content = decodeHexText(decodeContent(bytes))
+
+  assert.match(content, /Page 1 of 2/)
+  assert.match(content, /Page 2 of 2/)
+})
+
+test('does not draw page numbers when the layout has none configured', async () => {
+  const bytes = await exportProjectKeptEntriesCanvasPdf(
+    project([entry('first')]),
+    layout([imagePlacement()]),
+    { imageDataUrls: new Map([['first', pngDataUrl(20, 10)]]) }
+  )
+  const content = decodeHexText(decodeContent(bytes))
+
+  assert.doesNotMatch(content, /Page 1 of/)
 })
 
 test('places text and images on their own pages and keeps version-1 layouts single page', async () => {

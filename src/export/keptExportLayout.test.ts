@@ -198,4 +198,9 @@ test('renders references under the main text column when configured', () => {
       ['one', 'payee:reference', 'Ref: CARD-100']
     ]
   )
+  const payee = plan.pages[0]?.placements.find((placement) => placement.columnId === 'payee')
+  const reference = plan.pages[0]?.placements.find(
+    (placement) => placement.columnId === 'payee:reference'
+  )
+  assert.equal(reference?.y, (payee?.y ?? 0) + (payee?.style.fontSize ?? 0) + 1)
 })

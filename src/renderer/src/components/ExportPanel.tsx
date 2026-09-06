@@ -21,7 +21,7 @@ import {
   toKeptExportTemplate,
   type KeptExportTemplateDraft
 } from './keptExportTemplateDraft'
-import type { KeptExportTemplate } from '../../../shared/keptExportTemplate'
+import type { KeptExportPageNumbers, KeptExportTemplate } from '../../../shared/keptExportTemplate'
 import type { DetectedPageNumberMatch } from '../../../style'
 
 const PdfViewer = lazy(async () => {
@@ -75,6 +75,8 @@ interface ExportPanelProps {
     options: KeptImagePlacementOptions,
     uploadedSources: readonly KeptImageSourceDescriptor[]
   ) => void
+  keptImagePageNumbers?: KeptExportPageNumbers
+  onKeptImagePageNumbersChange?: (pageNumbers: KeptExportPageNumbers) => void
   onDetectPageNumbers?: () => Promise<DetectedPageNumberMatch | undefined>
 }
 
@@ -101,6 +103,8 @@ export const ExportPanel = React.memo(function ExportPanel({
   imagePlacementOptions,
   uploadedImageSources,
   onImagePlacementConfigurationChange,
+  keptImagePageNumbers,
+  onKeptImagePageNumbersChange,
   onDetectPageNumbers
 }: ExportPanelProps): React.JSX.Element {
   const [previewFormat, setPreviewFormat] = useState<PdfExportFormat>('pdf')
@@ -155,7 +159,7 @@ export const ExportPanel = React.memo(function ExportPanel({
                   <option value="pdf-compact">Compact layout</option>
                   <option value="pdf-kept">Kept entries</option>
                   <option value="pdf-kept-layout">Kept original layout</option>
-                  <option value="pdf-kept-canvas">Kept canvas layout</option>
+                  <option value="pdf-kept-canvas">Final placed-image PDF</option>
                   <option value="pdf-kept-template" disabled={!keptExportTemplate}>
                     Kept text template
                   </option>
@@ -232,7 +236,7 @@ export const ExportPanel = React.memo(function ExportPanel({
                 disabled={isSaving || keptEntries.length === 0}
                 onClick={onOpenKeptCanvas}
               >
-                <Images size={13} /> Open layout canvas
+                <Images size={13} /> Edit layout canvas
               </button>
             )}
             <button
@@ -314,7 +318,7 @@ export const ExportPanel = React.memo(function ExportPanel({
               disabled={isSaving}
               onClick={() => onSave('pdf-kept-canvas')}
             >
-              <FileOutput size={13} /> Kept canvas layout
+              <FileOutput size={13} /> Save placed-image PDF
             </button>
           </div>
         </details>
@@ -427,6 +431,9 @@ export const ExportPanel = React.memo(function ExportPanel({
             initialOptions={imagePlacementOptions}
             initialUploadedSources={uploadedImageSources}
             onConfigurationChange={onImagePlacementConfigurationChange ?? (() => undefined)}
+            initialPageNumbers={keptImagePageNumbers}
+            onPageNumbersChange={onKeptImagePageNumbersChange}
+            onDetectPageNumbers={onDetectPageNumbers}
           />
         </WorkspaceToolWindow>
       )}

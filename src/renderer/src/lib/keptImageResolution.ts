@@ -2,6 +2,17 @@ import type { KeptEntriesCanvasLayout, KeptImageSourceRef } from '../../../share
 import type { ProjectState } from '../../../shared/contracts'
 import { getProjectImageUrl, isProjectImageRef } from '../../../shared/projectImages'
 import { generateEntryPngFiles, type EntryPngFile } from './entryImageExport'
+import { renderTextLabelPng, type TextLabelImage } from './textLabelImage'
+
+type BalanceLabelRenderer = (
+  text: string,
+  options: { fontSize: number; color: string }
+) => TextLabelImage | undefined
+
+/** Keys a placement's rendered running-balance PNG in the same map as its image data URL. */
+export function keptImageBalanceRef(placementId: string): string {
+  return `balance:${placementId}`
+}
 
 export type SessionImageGenerator = (
   project: ProjectState,
@@ -76,7 +87,8 @@ export async function resolveKeptImageDataUrls(
   project: ProjectState,
   layout: KeptEntriesCanvasLayout | undefined,
   readPdf: (path: string) => Promise<Uint8Array>,
-  generate: SessionImageGenerator = generateEntryPngFiles
+  generate: SessionImageGenerator = generateEntryPngFiles,
+  renderBalanceLabel: BalanceLabelRenderer = renderTextLabelPng
 ): Promise<Map<string, string>> {
   const images = layout?.images ?? []
   if (images.length === 0) return new Map()
@@ -92,6 +104,18 @@ export async function resolveKeptImageDataUrls(
   if (sessionRefs.length > 0) {
     const session = await loadKeptSessionImageUrls(project, sessionRefs, readPdf, generate)
     for (const [ref, dataUrl] of session.urls) resolved.set(ref, dataUrl)
+  }
+
+  const runningBalance = layout?.imagePlacementOptions?.runningBalance
+  if (runningBalance?.enabled) {
+    for (const placement of images) {
+      if (!placement.runningBalanceText) continue
+      const label = renderBalanceLabel(placement.runningBalanceText, {
+        fontSize: runningBalance.fontSize,
+        color: runningBalance.color
+      })
+      if (label) resolved.set(keptImageBalanceRef(placement.id), label.dataUrl)
+    }
   }
 
   return resolved

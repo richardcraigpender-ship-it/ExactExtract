@@ -2,11 +2,12 @@ import { PDFDocument, StandardFonts, degrees, rgb, type PDFFont } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
 import type { ProjectState } from '../shared/contracts'
 import { applySourceMetadata, loadSourceMetadata } from './sourceMetadata'
+import { buildPageNumberDraw } from './pageNumbers'
 import {
   keptEntriesLayoutPageCount,
   keptEntriesPageDimensions,
   type KeptEntriesCanvasLayout,
-  type KeptEntryPlacement,
+  type KeptEntriesFontRef,
   type KeptImagePlacement
 } from '../shared/keptEntriesLayout'
 
@@ -143,15 +144,15 @@ function color(value: string): ReturnType<typeof rgb> {
 
 async function embedFont(
   pdf: PDFDocument,
-  placement: KeptEntryPlacement,
+  fontRef: KeptEntriesFontRef,
   systemFontBytes?: ReadonlyMap<string, Uint8Array>
 ): Promise<PDFFont> {
-  if (placement.fontRef.kind === 'system') {
-    const bytes = systemFontBytes?.get(placement.fontRef.family)
+  if (fontRef.kind === 'system') {
+    const bytes = systemFontBytes?.get(fontRef.family)
     if (bytes) return pdf.embedFont(bytes)
     return pdf.embedFont(StandardFonts.Helvetica)
   }
-  return pdf.embedFont(placement.fontRef.family)
+  return pdf.embedFont(fontRef.family)
 }
 
 function defaultLayout(project: ProjectState): KeptEntriesCanvasLayout {
@@ -236,13 +237,33 @@ export async function exportProjectKeptEntriesCanvasPdf(
     const runningBalance = layout.imagePlacementOptions?.runningBalance
     if (placement.runningBalanceText && runningBalance?.enabled) {
       const fontSize = Math.max(6, runningBalance.fontSize)
-      page.drawText(placement.runningBalanceText, {
-        x: box.x + box.width + runningBalance.offsetX,
-        y: pageSize.height - box.y - runningBalance.offsetY - fontSize,
-        size: fontSize,
-        font: runningBalanceFont,
-        color: color(runningBalance.color)
-      })
+      const balanceImage = decodeDataUrl(
+        options.imageDataUrls?.get(`balance:${placement.id}`) ?? ''
+      )
+      if (balanceImage) {
+        const embeddedBalance =
+          balanceImage.kind === 'png'
+            ? await pdf.embedPng(balanceImage.bytes)
+            : await pdf.embedJpg(balanceImage.bytes)
+        // Rendered at LABEL_SCALE in textLabelImage.ts, so its pixel size already carries the padding.
+        const displayHeight = fontSize * 1.3
+        const displayWidth = embeddedBalance.width * (displayHeight / embeddedBalance.height)
+        page.drawImage(embeddedBalance, {
+          x: box.x + box.width + runningBalance.offsetX,
+          y: pageSize.height - box.y - runningBalance.offsetY - displayHeight,
+          width: displayWidth,
+          height: displayHeight
+        })
+      } else {
+        // Falls back to vector text if the PNG label was not resolved for this export call.
+        page.drawText(placement.runningBalanceText, {
+          x: box.x + box.width + runningBalance.offsetX,
+          y: pageSize.height - box.y - runningBalance.offsetY - fontSize,
+          size: fontSize,
+          font: runningBalanceFont,
+          color: color(runningBalance.color)
+        })
+      }
     }
 
     const divider = layout.imagePlacementOptions?.divider
@@ -260,7 +281,7 @@ export async function exportProjectKeptEntriesCanvasPdf(
 
   for (const placement of layout.placements) {
     const page = pages[Math.min(pages.length, Math.max(1, placement.pageNumber ?? 1)) - 1]
-    const font = await embedFont(pdf, placement, options.systemFontBytes)
+    const font = await embedFont(pdf, placement.fontRef, options.systemFontBytes)
     page.drawText(placement.text, {
       x: placement.x,
       y: pageSize.height - placement.y - placement.height + placement.fontSize,
@@ -268,6 +289,33 @@ export async function exportProjectKeptEntriesCanvasPdf(
       font,
       color: color(placement.color),
       rotate: degrees(placement.rotation)
+    })
+  }
+
+  const pageNumbers = layout.pageNumbers
+  if (pageNumbers?.enabled) {
+    const pageNumberFont = await embedFont(
+      pdf,
+      pageNumbers.textStyle.fontRef,
+      options.systemFontBytes
+    )
+    pages.forEach((page, index) => {
+      const draw = buildPageNumberDraw(
+        pageNumbers,
+        index + 1,
+        pages.length,
+        pageSize.width,
+        pageSize.height,
+        (text, fontSize) => pageNumberFont.widthOfTextAtSize(text, fontSize)
+      )
+      if (!draw) return
+      page.drawText(draw.text, {
+        x: draw.x,
+        y: draw.y,
+        size: draw.fontSize,
+        font: pageNumberFont,
+        color: color(pageNumbers.textStyle.color)
+      })
     })
   }
 

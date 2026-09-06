@@ -10,12 +10,20 @@ import type { ProjectEntry } from '../../../shared/contracts'
 import {
   keptEntriesPageDimensions,
   type KeptEntriesDivider,
+  type KeptEntriesFontRef,
   type KeptEntriesOrientation,
   type KeptEntriesPageSize,
   type KeptImagePlacementOptions,
   type KeptImageRunningBalanceOptions
 } from '../../../shared/keptEntriesLayout'
-import type { KeptExportRunningBalance } from '../../../shared/keptExportTemplate'
+import {
+  DEFAULT_KEPT_EXPORT_PAGE_NUMBERS,
+  type KeptExportPageNumberAnchor,
+  type KeptExportPageNumbers,
+  type KeptExportRunningBalance
+} from '../../../shared/keptExportTemplate'
+import type { DetectedPageNumberMatch } from '../../../style'
+import { pageNumberMatchToKeptExportPageNumbers } from '../../../style'
 import { LengthField } from './LengthField'
 
 export type KeptImageSourceMode = 'session-entry' | 'uploaded-png'
@@ -38,6 +46,10 @@ interface KeptImagePlacementSectionProps {
     options: KeptImagePlacementOptions,
     uploadedSources: readonly KeptImageSourceDescriptor[]
   ) => void
+  initialPageNumbers?: KeptExportPageNumbers
+  onPageNumbersChange?: (pageNumbers: KeptExportPageNumbers) => void
+  /** The wizard: scans the active source PDF for its existing page-number style. */
+  onDetectPageNumbers?: () => Promise<DetectedPageNumberMatch | undefined>
 }
 
 interface PlacementOptions {
@@ -58,6 +70,22 @@ interface PlacementOptions {
 
 const DEFAULT_HORIZONTAL_MARGIN = 48
 const DEFAULT_VERTICAL_MARGIN = 72
+
+const STANDARD_FONTS: Array<Extract<KeptEntriesFontRef, { kind: 'standard-14' }>['family']> = [
+  'Helvetica',
+  'Helvetica-Bold',
+  'Times-Roman',
+  'Courier'
+]
+
+const PAGE_NUMBER_ANCHORS: Array<{ value: KeptExportPageNumberAnchor; label: string }> = [
+  { value: 'top-left', label: 'Top left' },
+  { value: 'top-center', label: 'Top center' },
+  { value: 'top-right', label: 'Top right' },
+  { value: 'bottom-left', label: 'Bottom left' },
+  { value: 'bottom-center', label: 'Bottom center' },
+  { value: 'bottom-right', label: 'Bottom right' }
+]
 
 function createDefaultDivider(pageWidth: number): KeptEntriesDivider {
   const startX = DEFAULT_HORIZONTAL_MARGIN
@@ -128,7 +156,10 @@ export function KeptImagePlacementSection({
   onPreviewPlacedImages,
   initialOptions,
   initialUploadedSources = [],
-  onConfigurationChange
+  onConfigurationChange,
+  initialPageNumbers,
+  onPageNumbersChange,
+  onDetectPageNumbers
 }: KeptImagePlacementSectionProps): React.JSX.Element {
   const [mode, setMode] = useState<KeptImageSourceMode>(
     initialOptions?.sourceMode ?? (sessionSources.length > 0 ? 'session-entry' : 'uploaded-png')
@@ -150,6 +181,45 @@ export function KeptImagePlacementSection({
     }
   })
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const [pageNumbers, setPageNumbers] = useState<KeptExportPageNumbers>(() => ({
+    ...DEFAULT_KEPT_EXPORT_PAGE_NUMBERS,
+    ...initialPageNumbers
+  }))
+  const [isDetectingPageNumbers, setIsDetectingPageNumbers] = useState(false)
+  const [pageNumberDetectionStatus, setPageNumberDetectionStatus] = useState<string | null>(null)
+
+  const updatePageNumbers = (
+    update: (current: KeptExportPageNumbers) => KeptExportPageNumbers,
+    matchesSource = false
+  ): void => {
+    setPageNumbers((current) => {
+      const next = { ...update(current), matchSourceStyle: matchesSource }
+      onPageNumbersChange?.(next)
+      return next
+    })
+  }
+
+  const detectPageNumbers = async (): Promise<void> => {
+    if (!onDetectPageNumbers) return
+    setIsDetectingPageNumbers(true)
+    setPageNumberDetectionStatus('Scanning the source PDF for existing page numbers...')
+    try {
+      const match = await onDetectPageNumbers()
+      if (!match) {
+        setPageNumberDetectionStatus(
+          'No confident page-number pattern was found on the source pages.'
+        )
+        return
+      }
+      updatePageNumbers(() => pageNumberMatchToKeptExportPageNumbers(match), true)
+      setPageNumberDetectionStatus(
+        `Matched "${match.format.template}" at ${match.anchor.replace('-', ' ')}.`
+      )
+    } finally {
+      setIsDetectingPageNumbers(false)
+    }
+  }
 
   const placementOptions = useMemo<KeptImagePlacementOptions>(
     () => ({
@@ -398,9 +468,10 @@ export function KeptImagePlacementSection({
           />
           Show running balance beside each session image
         </label>
-        {options.runningBalance.enabled && !(runningBalance?.enabled ?? false) && (
+        {options.runningBalance.enabled && (
           <p className="context-help">
-            Turn on Calculated balance in the kept text template to populate this column.
+            Opening balance and decimal places follow the Calculated balance settings in the kept
+            text template.
           </p>
         )}
         <div className="kept-image-grid">
@@ -514,6 +585,194 @@ export function KeptImagePlacementSection({
         </div>
       </fieldset>
 
+      <fieldset
+        className="kept-image-page-numbers"
+        aria-labelledby="kept-image-page-numbers-legend"
+      >
+        <legend id="kept-image-page-numbers-legend">Page numbers</legend>
+        <label className="kept-image-divider-toggle">
+          <input
+            type="checkbox"
+            checked={pageNumbers.enabled}
+            onChange={(event) =>
+              updatePageNumbers(
+                (current) => ({ ...current, enabled: event.target.checked }),
+                pageNumbers.matchSourceStyle && event.target.checked
+              )
+            }
+          />
+          Add page numbers
+        </label>
+        {onDetectPageNumbers && (
+          <div className="kept-image-page-numbers-detect">
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={isDetectingPageNumbers}
+              onClick={() => void detectPageNumbers()}
+            >
+              {isDetectingPageNumbers ? 'Scanning source...' : 'Match source page numbers'}
+            </button>
+            {pageNumberDetectionStatus && (
+              <span role="status" aria-live="polite">
+                {pageNumberDetectionStatus}
+              </span>
+            )}
+            {pageNumbers.enabled && pageNumbers.matchSourceStyle && !pageNumberDetectionStatus && (
+              <span role="status">Matched from the source document.</span>
+            )}
+          </div>
+        )}
+        <div className="kept-image-grid">
+          <label>
+            <span>Position</span>
+            <select
+              value={pageNumbers.anchor}
+              disabled={!pageNumbers.enabled}
+              onChange={(event) =>
+                updatePageNumbers((current) => ({
+                  ...current,
+                  anchor: event.target.value as KeptExportPageNumberAnchor
+                }))
+              }
+            >
+              {PAGE_NUMBER_ANCHORS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <LengthField
+            label="Horizontal offset"
+            value={pageNumbers.offsetX}
+            disabled={!pageNumbers.enabled}
+            onChange={(offsetX) => updatePageNumbers((current) => ({ ...current, offsetX }))}
+          />
+          <LengthField
+            label="Vertical offset"
+            min={0}
+            value={pageNumbers.offsetY}
+            disabled={!pageNumbers.enabled}
+            onChange={(offsetY) => updatePageNumbers((current) => ({ ...current, offsetY }))}
+          />
+          <label>
+            <span>Format</span>
+            <input
+              type="text"
+              value={pageNumbers.format.template}
+              disabled={!pageNumbers.enabled}
+              placeholder="{n}"
+              onChange={(event) =>
+                updatePageNumbers((current) => ({
+                  ...current,
+                  format: { ...current.format, template: event.target.value }
+                }))
+              }
+            />
+          </label>
+          <label>
+            <span>Start at</span>
+            <input
+              type="number"
+              step="1"
+              value={pageNumbers.format.startAt}
+              disabled={!pageNumbers.enabled}
+              onChange={(event) =>
+                updatePageNumbers((current) => ({
+                  ...current,
+                  format: {
+                    ...current.format,
+                    startAt: Math.trunc(numberValue(event.target.value, current.format.startAt))
+                  }
+                }))
+              }
+            />
+          </label>
+          <label>
+            <span>Scale</span>
+            <input
+              type="number"
+              min="0.1"
+              max="5"
+              step="0.1"
+              value={pageNumbers.scale}
+              disabled={!pageNumbers.enabled}
+              onChange={(event) =>
+                updatePageNumbers((current) => ({
+                  ...current,
+                  scale: Math.max(0.1, numberValue(event.target.value, current.scale))
+                }))
+              }
+            />
+          </label>
+          <label>
+            <span>Size</span>
+            <input
+              type="number"
+              min="6"
+              max="72"
+              value={pageNumbers.textStyle.fontSize}
+              disabled={!pageNumbers.enabled}
+              onChange={(event) =>
+                updatePageNumbers((current) => ({
+                  ...current,
+                  textStyle: {
+                    ...current.textStyle,
+                    fontSize: Math.max(6, Math.min(72, numberValue(event.target.value, 9)))
+                  }
+                }))
+              }
+            />
+          </label>
+          <label>
+            <span>Color</span>
+            <input
+              type="color"
+              value={pageNumbers.textStyle.color}
+              disabled={!pageNumbers.enabled}
+              onChange={(event) =>
+                updatePageNumbers((current) => ({
+                  ...current,
+                  textStyle: { ...current.textStyle, color: event.target.value }
+                }))
+              }
+            />
+          </label>
+          <label>
+            <span>PDF font</span>
+            <select
+              value={
+                pageNumbers.textStyle.fontRef.kind === 'standard-14'
+                  ? pageNumbers.textStyle.fontRef.family
+                  : ''
+              }
+              disabled={!pageNumbers.enabled}
+              onChange={(event) => {
+                const family = event.target.value as Extract<
+                  KeptEntriesFontRef,
+                  { kind: 'standard-14' }
+                >['family']
+                if (!family) return
+                updatePageNumbers((current) => ({
+                  ...current,
+                  textStyle: { ...current.textStyle, fontRef: { kind: 'standard-14', family } }
+                }))
+              }}
+            >
+              {pageNumbers.textStyle.fontRef.kind === 'system' && (
+                <option value="">System font</option>
+              )}
+              {STANDARD_FONTS.map((font) => (
+                <option key={font} value={font}>
+                  {font}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+      </fieldset>
+
       <p className="kept-image-summary" role="status">
         {canPlace
           ? `${plan.placements.length} images across ${plan.pageCount} ${plan.pageCount === 1 ? 'page' : 'pages'}.`
@@ -546,14 +805,14 @@ export function KeptImagePlacementSection({
             disabled={placedImageCount === 0}
             onClick={onPreviewPlacedImages}
           >
-            <Eye size={14} aria-hidden="true" /> Preview placed images
+            <Eye size={14} aria-hidden="true" /> Edit placed images
           </button>
         )}
       </div>
       {onPreviewPlacedImages && (
         <p className="kept-image-summary" role="status">
           {placedImageCount === 0
-            ? 'Place images to preview them on the canvas.'
+            ? 'Place images to edit them on the canvas.'
             : `${placedImageCount} ${placedImageCount === 1 ? 'image is' : 'images are'} on the canvas.`}
         </p>
       )}

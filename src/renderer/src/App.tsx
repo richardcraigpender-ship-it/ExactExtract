@@ -4282,6 +4282,10 @@ function App(): React.JSX.Element {
                       imagePlacementOptions={keptEntriesLayout.imagePlacementOptions}
                       uploadedImageSources={keptEntriesLayout.uploadedImageSources}
                       onImagePlacementConfigurationChange={handleImagePlacementConfigurationChange}
+                      keptImagePageNumbers={keptEntriesLayout.pageNumbers}
+                      onKeptImagePageNumbersChange={(pageNumbers) =>
+                        setKeptEntriesLayout((current) => ({ ...current, pageNumbers }))
+                      }
                       onDetectPageNumbers={detectActivePageNumberStyle}
                     />
                   ) : null,

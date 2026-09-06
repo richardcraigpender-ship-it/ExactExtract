@@ -11,7 +11,7 @@ export interface EntryPngFile {
 export async function generateEntryPngFiles(
   project: ProjectState,
   readPdf: (path: string) => Promise<Uint8Array>,
-  scale = 4
+  scale = 6
 ): Promise<EntryPngFile[]> {
   if (!Number.isFinite(scale) || scale <= 0) throw new Error('Image export scale must be positive.')
   const crops = buildEntryImageCrops(project.entries)
@@ -46,6 +46,8 @@ export async function generateEntryPngFiles(
         sourceCanvas.height = Math.ceil(viewport.height)
         const sourceContext = sourceCanvas.getContext('2d')
         if (!sourceContext) throw new Error('A 2D canvas context is required for image export.')
+        sourceContext.imageSmoothingEnabled = true
+        sourceContext.imageSmoothingQuality = 'high'
         await page.render({ canvas: sourceCanvas, canvasContext: sourceContext, viewport }).promise
         renderedPages.set(pageKey, sourceCanvas)
       }
@@ -65,6 +67,8 @@ export async function generateEntryPngFiles(
       outputCanvas.height = Math.max(1, Math.round(sourceHeight))
       const outputContext = outputCanvas.getContext('2d')
       if (!outputContext) throw new Error('A 2D canvas context is required for image export.')
+      outputContext.imageSmoothingEnabled = true
+      outputContext.imageSmoothingQuality = 'high'
       outputContext.fillStyle = '#fff'
       outputContext.fillRect(0, 0, outputCanvas.width, outputCanvas.height)
       outputContext.drawImage(

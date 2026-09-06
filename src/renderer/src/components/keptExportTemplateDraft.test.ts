@@ -18,6 +18,7 @@ test('creates the financial table default with twenty entries per page', () => {
   assert.equal(draft.pageOneTemplate.layoutMode, 'table-row')
   assert.equal(draft.pageOneTemplate.entriesPerPage, 20)
   assert.equal(draft.pageOneTemplate.showReferenceUnderMainText, true)
+  assert.equal(draft.pageOneTemplate.columns[0]?.spacing, 20)
   assert.deepEqual(
     draft.pageOneTemplate.columns.map((column) => column.sourceField),
     ['payee', 'money-out', 'money-in', 'balance']

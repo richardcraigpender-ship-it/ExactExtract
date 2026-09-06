@@ -1,3 +1,5 @@
+import type { KeptExportPageNumbers } from './keptExportTemplate'
+
 export type KeptEntriesPageSize = 'letter' | 'a4'
 export type KeptEntriesOrientation = 'portrait' | 'landscape'
 export type KeptEntriesFontRef =
@@ -120,6 +122,7 @@ export interface KeptEntriesCanvasLayout {
   /** Planned page total; page numbers carried by placements can still exceed it. */
   pageCount?: number
   background?: KeptEntriesBackground
+  pageNumbers?: KeptExportPageNumbers
 }
 
 const PAGE_DIMENSIONS = {

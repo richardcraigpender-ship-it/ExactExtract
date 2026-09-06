@@ -133,7 +133,7 @@ export function buildKeptExportRenderPlan(
             pageNumber,
             text: `Ref: ${reference}`,
             x: anchor.x,
-            y: anchor.y + anchor.style.fontSize + 3,
+            y: anchor.y + anchor.style.fontSize + 1,
             width: anchor.width,
             height: anchor.height,
             style

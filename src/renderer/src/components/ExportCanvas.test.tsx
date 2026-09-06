@@ -176,3 +176,94 @@ test('renders image dividers in the canvas preview', () => {
   assert.match(markup, /border-top:2px solid #336699/)
   assert.match(markup, /opacity:0.5/)
 })
+
+test('renders running balance text next to image placements when enabled', () => {
+  const markup = renderToStaticMarkup(
+    <ExportCanvas
+      layout={{
+        ...layout,
+        version: 2,
+        placements: [],
+        imagePlacementOptions: {
+          sourceMode: 'session-entry',
+          startX: 48,
+          startY: 72,
+          fillBetweenY: false,
+          entriesPerPage: 4,
+          gap: 12,
+          preserveAspectRatio: true,
+          uniformSlots: false,
+          runningBalance: {
+            enabled: true,
+            offsetX: 8,
+            offsetY: 4,
+            fontSize: 10,
+            color: '#17231c'
+          }
+        },
+        images: [
+          {
+            id: 'image-1',
+            source: { kind: 'session-entry', ref: 'entry-1' },
+            entryId: 'entry-1',
+            pageNumber: 1,
+            x: 48,
+            y: 72,
+            width: 200,
+            height: 100,
+            fit: 'contain',
+            runningBalanceText: '£95.00'
+          }
+        ]
+      }}
+    />
+  )
+
+  assert.match(markup, /export-canvas-image-balance/)
+  assert.match(markup, /£95\.00/)
+})
+
+test('hides running balance text when the balance column is disabled', () => {
+  const markup = renderToStaticMarkup(
+    <ExportCanvas
+      layout={{
+        ...layout,
+        version: 2,
+        placements: [],
+        imagePlacementOptions: {
+          sourceMode: 'session-entry',
+          startX: 48,
+          startY: 72,
+          fillBetweenY: false,
+          entriesPerPage: 4,
+          gap: 12,
+          preserveAspectRatio: true,
+          uniformSlots: false,
+          runningBalance: {
+            enabled: false,
+            offsetX: 8,
+            offsetY: 4,
+            fontSize: 10,
+            color: '#17231c'
+          }
+        },
+        images: [
+          {
+            id: 'image-1',
+            source: { kind: 'session-entry', ref: 'entry-1' },
+            entryId: 'entry-1',
+            pageNumber: 1,
+            x: 48,
+            y: 72,
+            width: 200,
+            height: 100,
+            fit: 'contain',
+            runningBalanceText: '£95.00'
+          }
+        ]
+      }}
+    />
+  )
+
+  assert.doesNotMatch(markup, /export-canvas-image-balance/)
+})

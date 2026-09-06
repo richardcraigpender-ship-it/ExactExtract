@@ -34,6 +34,7 @@ test('offers divider controls that stay disabled until the divider is enabled', 
       orientation="portrait"
       sessionSources={sessionSources}
       onPlaceImages={() => {}}
+      onPreviewPlacedImages={() => {}}
     />
   )
 
@@ -86,6 +87,7 @@ test('offers both image sources and the documented placement controls', () => {
       orientation="portrait"
       sessionSources={sessionSources}
       onPlaceImages={() => {}}
+      onPreviewPlacedImages={() => {}}
     />
   )
 
@@ -103,6 +105,7 @@ test('offers both image sources and the documented placement controls', () => {
   assert.match(markup, /Uniform crop dimensions/)
   assert.match(markup, /Fill between Start Y and End Y/)
   assert.match(markup, /Place images/)
+  assert.match(markup, /Edit placed images/)
 })
 
 test('reports the planned placement and page totals before the canvas changes', () => {
@@ -199,4 +202,65 @@ test('enables balance-column fields when the toggle is on', () => {
 
   assert.match(markup, /value="#336699"/)
   assert.match(markup, /value="12"/)
+})
+
+test('offers page-number controls that stay disabled until page numbers are enabled', () => {
+  const markup = renderToStaticMarkup(
+    <KeptImagePlacementSection
+      pageSize="letter"
+      orientation="portrait"
+      sessionSources={sessionSources}
+      onPlaceImages={() => {}}
+    />
+  )
+
+  assert.match(markup, /Page numbers/)
+  assert.match(markup, /Add page numbers/)
+  assert.match(markup, /Start at/)
+  assert.match(markup, /Horizontal offset \(pt\)/)
+  assert.doesNotMatch(markup, /Match source page numbers/)
+})
+
+test('offers the detect wizard only when a detect handler is supplied', () => {
+  const markup = renderToStaticMarkup(
+    <KeptImagePlacementSection
+      pageSize="letter"
+      orientation="portrait"
+      sessionSources={sessionSources}
+      onPlaceImages={() => {}}
+      onDetectPageNumbers={async () => undefined}
+    />
+  )
+
+  assert.match(markup, /Match source page numbers/)
+})
+
+test('enables page-number fields when page numbers are already configured', () => {
+  const markup = renderToStaticMarkup(
+    <KeptImagePlacementSection
+      pageSize="letter"
+      orientation="portrait"
+      sessionSources={sessionSources}
+      onPlaceImages={() => {}}
+      initialPageNumbers={{
+        enabled: true,
+        matchSourceStyle: false,
+        anchor: 'bottom-center',
+        offsetX: 0,
+        offsetY: 24,
+        format: { template: '{n}', startAt: 1 },
+        textStyle: {
+          fontRef: { kind: 'standard-14', family: 'Helvetica' },
+          fontSize: 9,
+          color: '#657067',
+          fontWeight: 'normal',
+          fontStyle: 'normal'
+        },
+        scale: 1
+      }}
+    />
+  )
+
+  assert.match(markup, /value="#657067"/)
+  assert.match(markup, /<input type="checkbox" checked=""/)
 })

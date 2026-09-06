@@ -6,6 +6,7 @@ import type { KeptEntriesCanvasLayout, KeptImagePlacement } from '../../../share
 import { getProjectImageUrl } from '../../../shared/projectImages'
 import {
   collectKeptImageRefs,
+  keptImageBalanceRef,
   loadKeptSessionImageUrls,
   resolveKeptImageDataUrls,
   resolveKeptImageUrl
@@ -188,4 +189,82 @@ test('a missing managed image simply stays unresolved', async () => {
   } finally {
     ;(globalThis as { window?: unknown }).window = restore
   }
+})
+
+test('renders a running-balance PNG label for each image and keys it to its placement', async () => {
+  const withBalances = layout([
+    { ...image('one', 'session-entry', 'entry-a'), runningBalanceText: '£120.00' },
+    { ...image('two', 'session-entry', 'entry-b'), runningBalanceText: '£90.00' }
+  ])
+  withBalances.imagePlacementOptions = {
+    sourceMode: 'session-entry',
+    startX: 0,
+    startY: 0,
+    fillBetweenY: false,
+    entriesPerPage: 6,
+    gap: 12,
+    preserveAspectRatio: true,
+    uniformSlots: false,
+    runningBalance: { enabled: true, offsetX: 8, offsetY: 4, fontSize: 10, color: '#17231c' }
+  }
+  const rendered: Array<{ text: string; fontSize: number; color: string }> = []
+
+  const resolved = await resolveKeptImageDataUrls(
+    project(),
+    withBalances,
+    readPdf,
+    async () => [
+      { name: 'a.png', content: 'AAA', entryId: 'entry-a' },
+      { name: 'b.png', content: 'BBB', entryId: 'entry-b' }
+    ],
+    (text, options) => {
+      rendered.push({ text, ...options })
+      return { dataUrl: `data:image/png;base64,LABEL-${text}`, width: 40, height: 14 }
+    }
+  )
+
+  assert.deepEqual(rendered.map((entry) => entry.text).sort(), ['£120.00', '£90.00'].sort())
+  assert.equal(resolved.get(keptImageBalanceRef('one')), 'data:image/png;base64,LABEL-£120.00')
+  assert.equal(resolved.get(keptImageBalanceRef('two')), 'data:image/png;base64,LABEL-£90.00')
+})
+
+test('skips balance-label rendering when running balance is disabled or text is missing', async () => {
+  const noRunningBalance = layout([
+    { ...image('one', 'session-entry', 'entry-a'), runningBalanceText: '£120.00' }
+  ])
+  const noText = layout([image('two', 'session-entry', 'entry-a')])
+  noText.imagePlacementOptions = {
+    sourceMode: 'session-entry',
+    startX: 0,
+    startY: 0,
+    fillBetweenY: false,
+    entriesPerPage: 6,
+    gap: 12,
+    preserveAspectRatio: true,
+    uniformSlots: false,
+    runningBalance: { enabled: true, offsetX: 8, offsetY: 4, fontSize: 10, color: '#17231c' }
+  }
+  let called = false
+  const renderBalanceLabel = (): undefined => {
+    called = true
+    return undefined
+  }
+
+  await resolveKeptImageDataUrls(
+    project(),
+    noRunningBalance,
+    readPdf,
+    async () => [{ name: 'a.png', content: 'AAA', entryId: 'entry-a' }],
+    renderBalanceLabel
+  )
+  assert.equal(called, false)
+
+  await resolveKeptImageDataUrls(
+    project(),
+    noText,
+    readPdf,
+    async () => [{ name: 'a.png', content: 'AAA', entryId: 'entry-a' }],
+    renderBalanceLabel
+  )
+  assert.equal(called, false)
 })

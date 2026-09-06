@@ -8,7 +8,11 @@ import type {
   KeptEntriesPageSize,
   KeptImagePlacementOptions
 } from '../../../shared/keptEntriesLayout'
-import type { KeptExportRunningBalance } from '../../../shared/keptExportTemplate'
+import type {
+  KeptExportPageNumbers,
+  KeptExportRunningBalance
+} from '../../../shared/keptExportTemplate'
+import type { DetectedPageNumberMatch } from '../../../style'
 import { KeptImagePlacementSection } from './KeptImagePlacementSection'
 
 interface KeptImageLayoutEditorProps {
@@ -28,6 +32,9 @@ interface KeptImageLayoutEditorProps {
     options: KeptImagePlacementOptions,
     uploadedSources: readonly KeptImageSourceDescriptor[]
   ) => void
+  initialPageNumbers?: KeptExportPageNumbers
+  onPageNumbersChange?: (pageNumbers: KeptExportPageNumbers) => void
+  onDetectPageNumbers?: () => Promise<DetectedPageNumberMatch | undefined>
 }
 
 export function KeptImageLayoutEditor({
@@ -43,7 +50,10 @@ export function KeptImageLayoutEditor({
   onClose,
   initialOptions,
   initialUploadedSources,
-  onConfigurationChange
+  onConfigurationChange,
+  initialPageNumbers,
+  onPageNumbersChange,
+  onDetectPageNumbers
 }: KeptImageLayoutEditorProps): React.JSX.Element {
   return (
     <section className="kept-image-layout-editor" aria-labelledby="kept-image-layout-editor-title">
@@ -68,6 +78,9 @@ export function KeptImageLayoutEditor({
           initialOptions={initialOptions}
           initialUploadedSources={initialUploadedSources}
           onConfigurationChange={onConfigurationChange}
+          initialPageNumbers={initialPageNumbers}
+          onPageNumbersChange={onPageNumbersChange}
+          onDetectPageNumbers={onDetectPageNumbers}
         />
       </div>
       <footer className="kept-image-layout-editor-footer">

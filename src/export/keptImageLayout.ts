@@ -121,9 +121,10 @@ function mappingForImageBalances(): FinancialColumnMapping {
 function resolveSessionRunningBalanceValues(
   options: KeptImagePlanOptions
 ): Map<string, string> | undefined {
-  const runningBalance = options.runningBalanceConfig ?? DEFAULT_KEPT_EXPORT_RUNNING_BALANCE
-  if (!options.runningBalance?.enabled || !runningBalance.enabled || !options.entries) {
-    return undefined
+  if (!options.runningBalance?.enabled || !options.entries) return undefined
+  const runningBalance = {
+    ...DEFAULT_KEPT_EXPORT_RUNNING_BALANCE,
+    ...options.runningBalanceConfig
   }
 
   const mapping = mappingForImageBalances()
