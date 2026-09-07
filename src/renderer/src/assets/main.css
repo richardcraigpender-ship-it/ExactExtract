@@ -2383,27 +2383,49 @@ button:disabled {
   margin: 0;
   padding-left: 16px;
 }
-.preview-reset-button {
-  width: calc(100% - 32px);
-  margin: 16px 16px 0;
+.kept-entries-preview-tool-stack {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
 }
-.kept-entries-preview-entries {
-  border-right: 1px solid var(--studio-border);
+.preview-tool-button,
+.preview-reset-button {
+  width: 100%;
+  justify-content: flex-start;
+}
+.preview-reset-button {
+  margin: 0;
 }
 .kept-entries-preview-context {
+  border-right: 1px solid var(--studio-border);
+}
+.kept-entries-preview-entries {
   border-left: 1px solid var(--studio-border);
 }
-.kept-canvas-pager {
+.kept-canvas-toolbar {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
   gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--studio-border);
+  border-radius: 8px;
+  background: var(--studio-raised);
 }
-.kept-canvas-pager > span {
+.kept-canvas-pager {
+  justify-content: space-between;
+}
+.kept-canvas-pager > span,
+.kept-canvas-zoom > span {
+  flex: 1 1 auto;
   color: var(--studio-text-muted);
   font-size: 11px;
   font-weight: 700;
+  text-align: center;
+}
+.tool-button {
+  min-height: 32px;
+  min-width: 32px;
+  border-radius: 6px;
 }
 .kept-canvas-preview-mode {
   display: grid;

@@ -202,5 +202,36 @@ test('renders references under the main text column when configured', () => {
   const reference = plan.pages[0]?.placements.find(
     (placement) => placement.columnId === 'payee:reference'
   )
-  assert.equal(reference?.y, (payee?.y ?? 0) + (payee?.style.fontSize ?? 0) + 1)
+  const pointsPerMm = 72 / 25.4
+  assert.equal(reference?.y, (payee?.y ?? 0) + (payee?.style.fontSize ?? 0) + 3)
+  assert.equal(reference?.height, (reference?.style.fontSize ?? 0) + 3 * pointsPerMm)
+})
+
+test('keeps a divider clear of the reference line beneath the payee', () => {
+  const current = template()
+  current.useSeparateLaterPages = false
+  current.pageOneTemplate.showReferenceUnderMainText = true
+  current.pageOneTemplate.divider = {
+    enabled: true,
+    startX: 40,
+    endX: 300,
+    width: 260,
+    thickness: 1,
+    color: '#336699',
+    opacity: 0.4
+  }
+
+  const plan = buildKeptExportRenderPlan(
+    [{ entryId: 'one', values: { payee: 'One', reference: 'CARD-100' } }],
+    current
+  )
+
+  const reference = plan.pages[0]?.placements.find(
+    (placement) => placement.columnId === 'payee:reference'
+  )
+  const divider = plan.pages[0]?.dividers[0]
+  const pointsPerMm = 72 / 25.4
+  const referenceTextBottom = (reference?.y ?? 0) + (reference?.style.fontSize ?? 0)
+
+  assert.ok((divider?.y ?? 0) >= referenceTextBottom + 3 * pointsPerMm - 0.001)
 })

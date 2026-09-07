@@ -7,6 +7,7 @@ import {
 } from '../../../export'
 import type { ProjectEntry } from '../../../shared/contracts'
 import type {
+  KeptEntriesBackground,
   KeptImagePlacementOptions,
   KeptImageSourceDescriptor
 } from '../../../shared/keptEntriesLayout'
@@ -67,6 +68,7 @@ interface ExportPanelProps {
   currencySymbol?: string
   onPlaceKeptImages?: (plan: KeptImagePlan) => void
   onOpenKeptCanvas?: () => void
+  onOpenKeptTextCanvas?: () => void
   placedImageCount?: number
   onPreviewPlacedImages?: () => void
   imagePlacementOptions?: KeptImagePlacementOptions
@@ -78,6 +80,11 @@ interface ExportPanelProps {
   keptImagePageNumbers?: KeptExportPageNumbers
   onKeptImagePageNumbersChange?: (pageNumbers: KeptExportPageNumbers) => void
   onDetectPageNumbers?: () => Promise<DetectedPageNumberMatch | undefined>
+  /** Offered to the template editor as an explicit copy source; the two stay separate fields. */
+  canvasBackground?: KeptEntriesBackground
+  initialTemplateEditorOpen?: boolean
+  initialImageLayoutEditorOpen?: boolean
+  onConfigurationEditorClosed?: () => void
 }
 
 export const ExportPanel = React.memo(function ExportPanel({
@@ -98,6 +105,7 @@ export const ExportPanel = React.memo(function ExportPanel({
   currencySymbol = '£',
   onPlaceKeptImages,
   onOpenKeptCanvas,
+  onOpenKeptTextCanvas,
   placedImageCount,
   onPreviewPlacedImages,
   imagePlacementOptions,
@@ -105,7 +113,11 @@ export const ExportPanel = React.memo(function ExportPanel({
   onImagePlacementConfigurationChange,
   keptImagePageNumbers,
   onKeptImagePageNumbersChange,
-  onDetectPageNumbers
+  onDetectPageNumbers,
+  canvasBackground,
+  initialTemplateEditorOpen = false,
+  initialImageLayoutEditorOpen = false,
+  onConfigurationEditorClosed
 }: ExportPanelProps): React.JSX.Element {
   const [previewFormat, setPreviewFormat] = useState<PdfExportFormat>('pdf')
   const [previewData, setPreviewData] = useState<Uint8Array | null>(null)
@@ -117,12 +129,20 @@ export const ExportPanel = React.memo(function ExportPanel({
       typeof localStorage !== 'undefined' &&
       localStorage.getItem('studio-kept-template-auto-close') === 'true'
   )
-  const [showTemplateEditor, setShowTemplateEditor] = useState(false)
-  const [showImageLayoutEditor, setShowImageLayoutEditor] = useState(false)
+  const [showTemplateEditor, setShowTemplateEditor] = useState(initialTemplateEditorOpen)
+  const [showImageLayoutEditor, setShowImageLayoutEditor] = useState(initialImageLayoutEditorOpen)
   const [templateDraft, setTemplateDraft] = useState<KeptExportTemplateDraft>(() =>
     createKeptExportTemplateDraft(keptExportTemplate)
   )
   const latestTemplateDraftRef = useRef(templateDraft)
+
+  React.useEffect(() => {
+    setShowTemplateEditor(initialTemplateEditorOpen)
+  }, [initialTemplateEditorOpen])
+
+  React.useEffect(() => {
+    setShowImageLayoutEditor(initialImageLayoutEditorOpen)
+  }, [initialImageLayoutEditorOpen])
   const sessionImageSources = useMemo(
     () => buildSessionKeptImageSources(keptEntries),
     [keptEntries]
@@ -236,7 +256,17 @@ export const ExportPanel = React.memo(function ExportPanel({
                 disabled={isSaving || keptEntries.length === 0}
                 onClick={onOpenKeptCanvas}
               >
-                <Images size={13} /> Edit layout canvas
+                <Images size={13} /> Edit PNG canvas
+              </button>
+            )}
+            {onOpenKeptTextCanvas && (
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={isSaving || keptEntries.length === 0}
+                onClick={onOpenKeptTextCanvas}
+              >
+                <FileText size={13} /> Edit text canvas
               </button>
             )}
             <button
@@ -355,6 +385,7 @@ export const ExportPanel = React.memo(function ExportPanel({
           onClose={() => {
             applyTemplateDraft(latestTemplateDraftRef.current)
             setShowTemplateEditor(false)
+            onConfigurationEditorClosed?.()
           }}
         >
           <KeptExportTemplateEditor
@@ -363,7 +394,11 @@ export const ExportPanel = React.memo(function ExportPanel({
               latestTemplateDraftRef.current = draft
             }}
             onDetectPageNumbers={onDetectPageNumbers}
-            onCancel={() => setShowTemplateEditor(false)}
+            canvasBackground={canvasBackground}
+            onCancel={() => {
+              setShowTemplateEditor(false)
+              onConfigurationEditorClosed?.()
+            }}
             onApply={(draft) => {
               applyTemplateDraft(draft)
               if (autoCloseTemplateEditor) setShowTemplateEditor(false)
@@ -386,7 +421,10 @@ export const ExportPanel = React.memo(function ExportPanel({
                       ? 'Kept text preview generated.'
                       : 'Kept text preview generated. Close this window to view it.'
                   )
-                  if (autoCloseTemplateEditor) setShowTemplateEditor(false)
+                  if (autoCloseTemplateEditor) {
+                    setShowTemplateEditor(false)
+                    onConfigurationEditorClosed?.()
+                  }
                 })
                 .catch((error: unknown) =>
                   setPreviewError(

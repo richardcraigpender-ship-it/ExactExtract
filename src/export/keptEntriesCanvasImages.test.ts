@@ -378,6 +378,47 @@ test('does not draw page numbers when the layout has none configured', async () 
   assert.doesNotMatch(content, /Page 1 of/)
 })
 
+test('embeds a managed background from the resolved image map', async () => {
+  const backgroundRef = `${'a'.repeat(64)}.png`
+  const withBackground: KeptEntriesCanvasLayout = {
+    ...layout([imagePlacement()]),
+    background: { ref: backgroundRef, x: 0, y: 0, width: 612, height: 792, opacity: 1 }
+  }
+
+  const warnings = getKeptEntriesCanvasWarnings(project([entry('first')]).entries, withBackground, {
+    imageDataUrls: new Map([
+      ['first', pngDataUrl(20, 10)],
+      [backgroundRef, pngDataUrl(40, 20)]
+    ])
+  })
+  const bytes = await exportProjectKeptEntriesCanvasPdf(project([entry('first')]), withBackground, {
+    imageDataUrls: new Map([
+      ['first', pngDataUrl(20, 10)],
+      [backgroundRef, pngDataUrl(40, 20)]
+    ])
+  })
+
+  assert.deepEqual(warnings, [])
+  assert.equal((await PDFDocument.load(bytes)).getPageCount(), 1)
+})
+
+test('warns when a managed background ref has no resolved bytes', () => {
+  const backgroundRef = `${'b'.repeat(64)}.png`
+  const warnings = getKeptEntriesCanvasWarnings(
+    project([entry('first')]).entries,
+    {
+      ...layout([imagePlacement()]),
+      background: { ref: backgroundRef, x: 0, y: 0, width: 612, height: 792, opacity: 1 }
+    },
+    { imageDataUrls: new Map([['first', pngDataUrl(20, 10)]]) }
+  )
+
+  assert.deepEqual(
+    warnings.map((warning) => warning.code),
+    ['missing-background']
+  )
+})
+
 test('places text and images on their own pages and keeps version-1 layouts single page', async () => {
   const multiPage: KeptEntriesCanvasLayout = {
     ...layout([imagePlacement({ pageNumber: 2 })]),

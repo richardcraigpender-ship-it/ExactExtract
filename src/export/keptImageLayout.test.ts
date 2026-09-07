@@ -219,19 +219,24 @@ test('attaches a running balance beside session images when the balance column i
     rawText: text,
     normalizedText: text
   })
-  const sources = [financialEntry('a', '01 Jan 2026 Coffee £5.00'), financialEntry('b', '02 Jan 2026 Books £15.00')]
-    .map((item) => ({
-      kind: 'session-entry' as const,
-      ref: item.id,
-      entryId: item.id,
-      naturalWidth: 200,
-      naturalHeight: 40
-    }))
+  const sources = [
+    financialEntry('a', '01 Jan 2026 Coffee £5.00'),
+    financialEntry('b', '02 Jan 2026 Books £15.00')
+  ].map((item) => ({
+    kind: 'session-entry' as const,
+    ref: item.id,
+    entryId: item.id,
+    naturalWidth: 200,
+    naturalHeight: 40
+  }))
   const plan = planKeptEntryImagePlacements(
     sources,
     options({
       runningBalance: { enabled: true, offsetX: 8, offsetY: 4, fontSize: 10, color: '#17231c' },
-      entries: [financialEntry('a', '01 Jan 2026 Coffee £5.00'), financialEntry('b', '02 Jan 2026 Books £15.00')]
+      entries: [
+        financialEntry('a', '01 Jan 2026 Coffee £5.00'),
+        financialEntry('b', '02 Jan 2026 Books £15.00')
+      ]
     })
   )
 

@@ -142,7 +142,10 @@ function resolveSessionRunningBalanceValues(
   const calculated = buildRunningBalanceValues(rows, runningBalance).values
   const decimalPlaces = Math.max(
     0,
-    Math.min(6, Math.trunc(runningBalance.decimalPlaces ?? DEFAULT_KEPT_EXPORT_RUNNING_BALANCE.decimalPlaces))
+    Math.min(
+      6,
+      Math.trunc(runningBalance.decimalPlaces ?? DEFAULT_KEPT_EXPORT_RUNNING_BALANCE.decimalPlaces)
+    )
   )
 
   return new Map(

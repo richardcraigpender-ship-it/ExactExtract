@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react'
 import { Check, Merge, Pencil, Plus, RefreshCw, ShieldAlert, Trash2, Undo2, X } from 'lucide-react'
-import type { ProjectEntry } from '../../../shared/contracts'
-import { generateForecast } from '../../../analysis'
+import type { EntryDirection, ProjectEntry } from '../../../shared/contracts'
+import { generateForecast, type ForecastCadence } from '../../../analysis'
 import {
   normalizeMerchantKey,
   type MerchantClassificationReason,
@@ -148,11 +148,16 @@ export const MerchantLibraryPanel = React.memo(function MerchantLibraryPanel({
   const [confirmForgetId, setConfirmForgetId] = useState<string | null>(null)
   const [panelTab, setPanelTab] = useState<'review' | 'databases'>('review')
   const [forecast, setForecast] = useState({
+    mode: 'random' as 'random' | 'recurring',
     startDate: new Date().toISOString().slice(0, 10),
     endDate: new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10),
     randomRowCount: '10',
     minSpend: '5',
     maxSpend: '50',
+    cadence: 'monthly' as ForecastCadence,
+    amount: '25',
+    variabilityPercent: '0',
+    direction: 'out' as EntryDirection,
     seed: String(Date.now() % 100000)
   })
   const [forecastMessage, setForecastMessage] = useState<string>()
@@ -272,25 +277,32 @@ export const MerchantLibraryPanel = React.memo(function MerchantLibraryPanel({
       {panelTab === 'review' && onAddScenarioRows && (
         <form
           className="merchant-library-form merchant-library-forecast"
-          aria-label="Random outgoing forecast"
+          aria-label="Merchant forecast"
           onSubmit={(event) => {
             event.preventDefault()
             try {
+              const isRandom = forecast.mode === 'random'
               const result = generateForecast(records, {
                 merchantIds: records
                   .filter((record) => isApproved(record) && record.forecastIncluded)
                   .map((record) => record.id),
                 startDate: forecast.startDate,
                 endDate: forecast.endDate,
-                cadence: 'monthly',
-                randomRowCount: Number(forecast.randomRowCount),
-                minSpend: Number(forecast.minSpend),
-                maxSpend: Number(forecast.maxSpend),
-                direction: 'out',
+                cadence: forecast.cadence,
+                randomRowCount: isRandom ? Number(forecast.randomRowCount) : 0,
+                ...(isRandom
+                  ? { minSpend: Number(forecast.minSpend), maxSpend: Number(forecast.maxSpend) }
+                  : {
+                      amount: Number(forecast.amount),
+                      variabilityPercent: Number(forecast.variabilityPercent)
+                    }),
+                direction: forecast.direction,
                 seed: Number(forecast.seed)
               })
               onAddScenarioRows(result.rows)
-              setForecastMessage(`Added ${result.rows.length} outgoing forecast rows.`)
+              setForecastMessage(
+                `Added ${result.rows.length} ${forecast.direction === 'out' ? 'outgoing' : 'incoming'} forecast rows.`
+              )
             } catch (error) {
               setForecastMessage(
                 error instanceof Error ? error.message : 'Unable to create forecast.'
@@ -298,7 +310,31 @@ export const MerchantLibraryPanel = React.memo(function MerchantLibraryPanel({
             }
           }}
         >
-          <strong>Random outgoing forecast</strong>
+          <strong>Merchant forecast</strong>
+          <label>
+            <span>Pattern</span>
+            <select
+              value={forecast.mode}
+              onChange={(event) =>
+                setForecast({ ...forecast, mode: event.target.value as 'random' | 'recurring' })
+              }
+            >
+              <option value="random">Random rows</option>
+              <option value="recurring">Recurring schedule</option>
+            </select>
+          </label>
+          <label>
+            <span>Direction</span>
+            <select
+              value={forecast.direction}
+              onChange={(event) =>
+                setForecast({ ...forecast, direction: event.target.value as EntryDirection })
+              }
+            >
+              <option value="out">Money out</option>
+              <option value="in">Money in</option>
+            </select>
+          </label>
           <label>
             <span>From</span>
             <input
@@ -315,36 +351,81 @@ export const MerchantLibraryPanel = React.memo(function MerchantLibraryPanel({
               onChange={(event) => setForecast({ ...forecast, endDate: event.target.value })}
             />
           </label>
-          <label>
-            <span>Random rows</span>
-            <input
-              type="number"
-              min="1"
-              step="1"
-              value={forecast.randomRowCount}
-              onChange={(event) => setForecast({ ...forecast, randomRowCount: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>Min spend</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={forecast.minSpend}
-              onChange={(event) => setForecast({ ...forecast, minSpend: event.target.value })}
-            />
-          </label>
-          <label>
-            <span>Max spend</span>
-            <input
-              type="number"
-              min="0"
-              step="0.01"
-              value={forecast.maxSpend}
-              onChange={(event) => setForecast({ ...forecast, maxSpend: event.target.value })}
-            />
-          </label>
+          {forecast.mode === 'random' ? (
+            <>
+              <label>
+                <span>Random rows</span>
+                <input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={forecast.randomRowCount}
+                  onChange={(event) =>
+                    setForecast({ ...forecast, randomRowCount: event.target.value })
+                  }
+                />
+              </label>
+              <label>
+                <span>Min spend</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={forecast.minSpend}
+                  onChange={(event) => setForecast({ ...forecast, minSpend: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Max spend</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={forecast.maxSpend}
+                  onChange={(event) => setForecast({ ...forecast, maxSpend: event.target.value })}
+                />
+              </label>
+            </>
+          ) : (
+            <>
+              <label>
+                <span>Cadence</span>
+                <select
+                  value={forecast.cadence}
+                  onChange={(event) =>
+                    setForecast({ ...forecast, cadence: event.target.value as ForecastCadence })
+                  }
+                >
+                  <option value="weekly">Weekly</option>
+                  <option value="fortnightly">Fortnightly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </label>
+              <label>
+                <span>Amount</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={forecast.amount}
+                  onChange={(event) => setForecast({ ...forecast, amount: event.target.value })}
+                />
+              </label>
+              <label>
+                <span>Variability %</span>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="1"
+                  value={forecast.variabilityPercent}
+                  onChange={(event) =>
+                    setForecast({ ...forecast, variabilityPercent: event.target.value })
+                  }
+                />
+              </label>
+            </>
+          )}
           <label>
             <span>Seed</span>
             <input

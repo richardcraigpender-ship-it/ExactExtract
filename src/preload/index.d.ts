@@ -75,6 +75,7 @@ export interface StudioBridge {
   }
   projectImages: {
     save: (files: Array<{ name: string; content: string }>) => Promise<ProjectImageDescriptor[]>
+    saveBackground: (content: string) => Promise<{ ref: string; byteLength: number }>
     readDataUrls: (refs: string[]) => Promise<Record<string, string>>
   }
 }

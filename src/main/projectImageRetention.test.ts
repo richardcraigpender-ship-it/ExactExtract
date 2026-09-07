@@ -41,6 +41,35 @@ test('collects only managed upload refs from a project layout', () => {
   assert.deepEqual(collectProjectImageRefs(null), [])
 })
 
+test('collects canvas and template background refs so they are never pruned', () => {
+  const canvasBackground = `${'c'.repeat(64)}.jpg`
+  const pageOneBackground = `${'d'.repeat(64)}.webp`
+  const laterPagesBackground = `${'e'.repeat(64)}.png`
+
+  const refs = collectProjectImageRefs({
+    keptEntriesLayout: { version: 2, background: { ref: canvasBackground } },
+    keptExportTemplate: {
+      pageOneTemplate: { background: { ref: pageOneBackground } },
+      laterPagesTemplate: { background: { ref: laterPagesBackground } }
+    }
+  })
+
+  assert.deepEqual(refs.sort(), [canvasBackground, pageOneBackground, laterPagesBackground].sort())
+})
+
+test('ignores legacy inline backgrounds and unsafe background refs', () => {
+  assert.deepEqual(
+    collectProjectImageRefs({
+      keptEntriesLayout: { version: 2, background: { dataUrl: 'data:image/png;base64,AAAA' } },
+      keptExportTemplate: {
+        pageOneTemplate: { background: { ref: '../secret.png' } },
+        laterPagesTemplate: {}
+      }
+    }),
+    []
+  )
+})
+
 test('removes unreferenced images and interrupted writes, keeping referenced ones', async () => {
   const { images, projects } = await createWorkspace()
   await writeFile(join(projects, 'project-1.json'), projectJson([usedRef]))

@@ -103,7 +103,10 @@ export interface KeptImagePlacement {
 }
 
 export interface KeptEntriesBackground {
-  dataUrl: string
+  /** Content-addressed ref into managed image storage; the persisted form. */
+  ref?: string
+  /** Legacy inline bytes from before managed background storage, migrated to `ref` on load. */
+  dataUrl?: string
   x: number
   y: number
   width: number

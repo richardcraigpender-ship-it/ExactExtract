@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react'
-import { Check, FileOutput, Plus, RotateCcw, Trash2 } from 'lucide-react'
+import { Check, Copy, FileOutput, Plus, RotateCcw, Trash2 } from 'lucide-react'
 
-import type { KeptEntriesFontRef } from '../../../shared/keptEntriesLayout'
+import type { KeptEntriesBackground, KeptEntriesFontRef } from '../../../shared/keptEntriesLayout'
 import type {
   KeptExportDivider,
   KeptExportPageNumberAnchor,
@@ -48,6 +48,8 @@ interface KeptExportTemplateEditorProps {
   actionStatus?: string | null
   currencySymbol?: string
   onDetectPageNumbers?: () => Promise<DetectedPageNumberMatch | undefined>
+  /** The PNG canvas background, offered as a one-way copy source. */
+  canvasBackground?: KeptEntriesBackground
 }
 
 const STANDARD_FONTS: Array<Extract<KeptEntriesFontRef, { kind: 'standard-14' }>['family']> = [
@@ -132,6 +134,21 @@ function defaultDivider(pageWidth: number): KeptExportDivider {
 
 const DIVIDER_SPACING_OPTIONS = [0, 1, 2, 3, 4, 6, 8, 10, 12]
 
+function sameBackground(
+  a: KeptEntriesBackground | undefined,
+  b: KeptEntriesBackground | undefined
+): boolean {
+  if (!a || !b) return a === b
+  return (
+    a.dataUrl === b.dataUrl &&
+    a.x === b.x &&
+    a.y === b.y &&
+    a.width === b.width &&
+    a.height === b.height &&
+    a.opacity === b.opacity
+  )
+}
+
 export function KeptExportTemplateEditor({
   initialDraft,
   onDraftChange,
@@ -145,7 +162,8 @@ export function KeptExportTemplateEditor({
   onAutoCloseAfterActionChange,
   actionStatus,
   currencySymbol = '£',
-  onDetectPageNumbers
+  onDetectPageNumbers,
+  canvasBackground
 }: KeptExportTemplateEditorProps): React.JSX.Element {
   const [draft, setDraft] = useState<KeptExportTemplateDraft>(() =>
     cloneKeptExportTemplateDraft(initialDraft ?? createDefaultKeptExportTemplateDraft())
@@ -1057,6 +1075,26 @@ export function KeptExportTemplateEditor({
           defaultHeight={dimensions.height}
           onChange={(background) => setTemplate((current) => ({ ...current, background }))}
         />
+
+        {canvasBackground && (
+          <div className="kept-template-background-copy">
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={sameBackground(template.background, canvasBackground)}
+              onClick={() =>
+                setTemplate((current) => ({ ...current, background: { ...canvasBackground } }))
+              }
+            >
+              <Copy size={14} aria-hidden="true" /> Copy background from PNG canvas
+            </button>
+            <p className="context-help">
+              {sameBackground(template.background, canvasBackground)
+                ? 'This template already matches the PNG canvas background.'
+                : 'The PNG canvas and this template keep separate backgrounds. Copying replaces this template background only.'}
+            </p>
+          </div>
+        )}
 
         <section className="kept-template-section" aria-labelledby="kept-template-summary-title">
           <h3 id="kept-template-summary-title">Final-page financial summary</h3>

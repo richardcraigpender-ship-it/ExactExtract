@@ -179,3 +179,28 @@ test('treats a user decision as final over detection flags', () => {
     false
   )
 })
+
+test('offers direction and pattern choices instead of hardcoding outgoing monthly rows', () => {
+  const markup = render({ onAddScenarioRows: noop })
+
+  assert.match(markup, /Merchant forecast/)
+  assert.match(markup, /Money out/)
+  assert.match(markup, /Money in/)
+  assert.match(markup, /Random rows/)
+  assert.match(markup, /Recurring schedule/)
+})
+
+test('shows spend bounds for random rows and hides cadence until recurring is chosen', () => {
+  const markup = render({ onAddScenarioRows: noop })
+
+  assert.match(markup, /Min spend/)
+  assert.match(markup, /Max spend/)
+  assert.doesNotMatch(markup, /Fortnightly/)
+  assert.doesNotMatch(markup, /Variability/)
+})
+
+test('hides the forecast form entirely when the caller cannot accept scenario rows', () => {
+  const markup = render()
+
+  assert.doesNotMatch(markup, /Merchant forecast/)
+})

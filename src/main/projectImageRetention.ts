@@ -11,19 +11,40 @@ export interface ProjectImagePruneResult {
 /** Collects the managed refs an already-parsed project JSON depends on. */
 export function collectProjectImageRefs(project: unknown): string[] {
   if (typeof project !== 'object' || project === null) return []
-  const layout = (project as { keptEntriesLayout?: unknown }).keptEntriesLayout
-  if (typeof layout !== 'object' || layout === null) return []
-  const images = (layout as { images?: unknown }).images
-  if (!Array.isArray(images)) return []
   const refs: string[] = []
-  for (const image of images) {
-    const source = (image as { source?: unknown } | null)?.source
-    if (typeof source !== 'object' || source === null) continue
-    const { kind, ref } = source as { kind?: unknown; ref?: unknown }
-    if (kind === 'uploaded-png' && typeof ref === 'string' && isProjectImageRef(ref)) {
-      refs.push(ref)
+  const record = project as Record<string, unknown>
+
+  const addBackgroundRef = (value: unknown): void => {
+    const ref = (value as { ref?: unknown } | null)?.ref
+    if (typeof ref === 'string' && isProjectImageRef(ref)) refs.push(ref)
+  }
+
+  const layout = record.keptEntriesLayout
+  if (typeof layout === 'object' && layout !== null) {
+    const images = (layout as { images?: unknown }).images
+    if (Array.isArray(images)) {
+      for (const image of images) {
+        const source = (image as { source?: unknown } | null)?.source
+        if (typeof source !== 'object' || source === null) continue
+        const { kind, ref } = source as { kind?: unknown; ref?: unknown }
+        if (kind === 'uploaded-png' && typeof ref === 'string' && isProjectImageRef(ref)) {
+          refs.push(ref)
+        }
+      }
+    }
+    addBackgroundRef((layout as { background?: unknown }).background)
+  }
+
+  const template = record.keptExportTemplate
+  if (typeof template === 'object' && template !== null) {
+    for (const key of ['pageOneTemplate', 'laterPagesTemplate']) {
+      const page = (template as Record<string, unknown>)[key]
+      if (typeof page === 'object' && page !== null) {
+        addBackgroundRef((page as { background?: unknown }).background)
+      }
     }
   }
+
   return refs
 }
 

@@ -91,10 +91,17 @@ export async function resolveKeptImageDataUrls(
   renderBalanceLabel: BalanceLabelRenderer = renderTextLabelPng
 ): Promise<Map<string, string>> {
   const images = layout?.images ?? []
-  if (images.length === 0) return new Map()
+  const backgroundRef =
+    layout?.background?.ref && isProjectImageRef(layout.background.ref)
+      ? layout.background.ref
+      : undefined
+  if (images.length === 0 && !backgroundRef) return new Map()
 
   const resolved = new Map<string, string>()
-  const uploadedRefs = collectKeptImageRefs(layout, 'uploaded-png').filter(isProjectImageRef)
+  const uploadedRefs = [
+    ...collectKeptImageRefs(layout, 'uploaded-png').filter(isProjectImageRef),
+    ...(backgroundRef ? [backgroundRef] : [])
+  ]
   if (uploadedRefs.length > 0) {
     const dataUrls = await window.studio.projectImages.readDataUrls(uploadedRefs)
     for (const [ref, dataUrl] of Object.entries(dataUrls)) resolved.set(ref, dataUrl)

@@ -2,11 +2,33 @@ import { createHash, randomUUID } from 'node:crypto'
 import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 
-import { isProjectImageRef, type ProjectImageDescriptor } from '../shared/projectImages'
+import {
+  getProjectImageMimeType,
+  isProjectImageRef,
+  type ProjectImageDescriptor
+} from '../shared/projectImages'
 
 const PNG_SIGNATURE = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const MAX_FILE_COUNT = 500
 const MAX_IMAGE_BYTES = 25 * 1024 * 1024
+
+export type ProjectImageFormat = 'png' | 'jpg' | 'webp'
+
+/** Signature sniffing only; backgrounds never need their intrinsic size, so no decoder is used. */
+export function detectProjectImageFormat(bytes: Buffer): ProjectImageFormat {
+  if (bytes.byteLength >= 8 && bytes.subarray(0, 8).equals(PNG_SIGNATURE)) return 'png'
+  if (bytes.byteLength >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return 'jpg'
+  }
+  if (
+    bytes.byteLength >= 12 &&
+    bytes.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    bytes.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'webp'
+  }
+  throw new Error('Image must be a PNG, JPEG, or WebP file.')
+}
 
 export interface ProjectImageUpload {
   name: string
@@ -85,6 +107,24 @@ export class ProjectImageStore {
     return { ref, name: upload.name, width, height, byteLength: bytes.byteLength, bytes }
   }
 
+  /**
+   * Backgrounds are stored by content like uploads, but accept JPEG and WebP and skip the
+   * dimension read: a background always carries explicit page coordinates.
+   */
+  async saveBackground(value: unknown): Promise<{ ref: string; byteLength: number }> {
+    if (typeof value !== 'string' || value.length === 0) {
+      throw new Error('Background image content must be base64.')
+    }
+    const bytes = Buffer.from(value, 'base64')
+    if (bytes.byteLength === 0) throw new Error('Background image is empty.')
+    if (bytes.byteLength > MAX_IMAGE_BYTES) throw new Error('Background exceeds the 25 MB limit.')
+    const format = detectProjectImageFormat(bytes)
+    const ref = `${createHash('sha256').update(bytes).digest('hex')}.${format}`
+    await mkdir(this.root, { recursive: true })
+    await this.persist(ref, bytes)
+    return { ref, byteLength: bytes.byteLength }
+  }
+
   private async persist(ref: string, bytes: Buffer): Promise<void> {
     const target = this.pathFor(ref)
     if (await this.exists(target)) return
@@ -119,7 +159,7 @@ export class ProjectImageStore {
       refs.filter(isProjectImageRef).map(async (ref) => {
         try {
           const bytes = await this.read(ref)
-          resolved[ref] = `data:image/png;base64,${bytes.toString('base64')}`
+          resolved[ref] = `data:${getProjectImageMimeType(ref)};base64,${bytes.toString('base64')}`
         } catch {
           // A missing managed file is reported by the export warning path, not here.
         }

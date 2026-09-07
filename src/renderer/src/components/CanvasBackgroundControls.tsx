@@ -7,6 +7,7 @@ import {
   resizeBackgroundEdge,
   scaleBackground
 } from '../lib/canvasBackground'
+import { resolveBackgroundUrl, storeBackgroundImage } from '../lib/canvasBackgroundStorage'
 import { LengthField } from './LengthField'
 
 const SCALE_STEP = 0.1
@@ -28,6 +29,8 @@ export function CanvasBackgroundControls({
 }: CanvasBackgroundControlsProps): React.JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null)
   const [lockAspectRatio, setLockAspectRatio] = useState(true)
+  const [storeError, setStoreError] = useState<string | null>(null)
+  const previewUrl = resolveBackgroundUrl(background)
 
   const selectImage = (): void => {
     inputRef.current?.click()
@@ -52,23 +55,34 @@ export function CanvasBackgroundControls({
           const reader = new FileReader()
           reader.onload = () => {
             if (typeof reader.result !== 'string') return
-            onChange({
-              dataUrl: reader.result,
+            setStoreError(null)
+            void storeBackgroundImage(reader.result, {
               x: 0,
               y: 0,
               width: defaultWidth,
               height: defaultHeight,
               opacity: 1
             })
+              .then(onChange)
+              .catch((error: unknown) =>
+                setStoreError(
+                  error instanceof Error ? error.message : 'The background could not be stored.'
+                )
+              )
           }
           reader.readAsDataURL(file)
           event.target.value = ''
         }}
       />
+      {storeError && (
+        <p className="kept-image-error" role="alert">
+          {storeError}
+        </p>
+      )}
       {background ? (
         <div className="canvas-background-editor">
           <div className="canvas-background-preview">
-            <img src={background.dataUrl} alt="Selected canvas background" />
+            <img src={previewUrl} alt="Selected canvas background" />
             <button
               className="icon-button"
               type="button"

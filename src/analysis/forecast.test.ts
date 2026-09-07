@@ -106,6 +106,59 @@ test('creates an exact seeded number of random outgoing rows within spend bounds
   )
 })
 
+test('honours an incoming direction for both random and recurring rows', () => {
+  const random = generateForecast([merchant('salary')], {
+    ...assumptions,
+    merchantIds: ['salary'],
+    randomRowCount: 4,
+    minSpend: 100,
+    maxSpend: 200,
+    direction: 'in',
+    seed: 7
+  })
+  const recurring = generateForecast([merchant('salary')], {
+    ...assumptions,
+    merchantIds: ['salary'],
+    direction: 'in'
+  })
+
+  assert.equal(random.rows.length, 4)
+  assert.equal(
+    random.rows.every((row) => row.direction === 'in'),
+    true
+  )
+  assert.equal(
+    recurring.rows.every((row) => row.direction === 'in'),
+    true
+  )
+})
+
+test('spaces recurring rows by the chosen cadence', () => {
+  const weekly = generateForecast([merchant('rent')], {
+    ...assumptions,
+    merchantIds: ['rent'],
+    startDate: '2026-01-01',
+    endDate: '2026-01-29',
+    cadence: 'weekly'
+  })
+  const fortnightly = generateForecast([merchant('rent')], {
+    ...assumptions,
+    merchantIds: ['rent'],
+    startDate: '2026-01-01',
+    endDate: '2026-01-29',
+    cadence: 'fortnightly'
+  })
+
+  assert.deepEqual(
+    weekly.rows.map((row) => row.date),
+    ['2026-01-01', '2026-01-08', '2026-01-15', '2026-01-22', '2026-01-29']
+  )
+  assert.deepEqual(
+    fortnightly.rows.map((row) => row.date),
+    ['2026-01-01', '2026-01-15', '2026-01-29']
+  )
+})
+
 test('rejects invalid random-row and spend-bound settings', () => {
   assert.throws(
     () =>

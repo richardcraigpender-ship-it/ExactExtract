@@ -9,6 +9,7 @@ import type {
   KeptImageSourceRef
 } from '../../../shared/keptEntriesLayout'
 import { useCanvasDrag } from '../hooks/useCanvasDrag'
+import { resolveBackgroundUrl } from '../lib/canvasBackgroundStorage'
 import { getCanvasDropPoint, KEPT_ENTRY_DRAG_TYPE } from '../lib/canvasDrop'
 import { getCanvasPageDimensions } from '../lib/canvasScale'
 import './ExportCanvas.css'
@@ -17,7 +18,9 @@ interface ExportCanvasProps {
   layout: KeptEntriesCanvasLayout
   ariaLabel?: string
   zoom?: number
-  previewMode?: 'combined' | 'text' | 'images'
+  /** Each previewer owns one layer, so the other is omitted rather than dimmed. */
+  showText?: boolean
+  showImages?: boolean
   selectedPlacementId?: string | null
   onSelectPlacement?: (placementId: string) => void
   onPlacementChange?: (placement: KeptEntryPlacement) => void
@@ -92,7 +95,8 @@ export function ExportCanvas({
   layout,
   ariaLabel = 'Kept entries export page preview',
   zoom = 1,
-  previewMode = 'combined',
+  showText = true,
+  showImages = true,
   selectedPlacementId = null,
   onSelectPlacement,
   onPlacementChange,
@@ -107,10 +111,8 @@ export function ExportCanvas({
   const dimensions = getCanvasPageDimensions(layout.pageSize, layout.orientation)
   const canvasZoom = Math.min(2, Math.max(0.5, zoom))
   // Single-layer modes keep the other layer visible for alignment, but never selectable.
-  const textLayerActive = previewMode !== 'images'
-  const imageLayerActive = previewMode !== 'text'
-  const interactive = Boolean(onPlacementChange) && textLayerActive
-  const imagesInteractive = Boolean(onImagePlacementChange) && imageLayerActive
+  const interactive = Boolean(onPlacementChange) && showText
+  const imagesInteractive = Boolean(onImagePlacementChange) && showImages
   const drag = useCanvasDrag<KeptEntryPlacement>(dimensions, (placement) =>
     onPlacementChange?.(placement)
   )
@@ -120,12 +122,12 @@ export function ExportCanvas({
   const backgroundDrag = useCanvasDrag<KeptEntriesBackground>(dimensions, (background) =>
     onBackgroundChange?.(background)
   )
-  const visiblePlacements = layout.placements.filter(
-    (placement) => (placement.pageNumber ?? 1) === pageNumber
-  )
-  const visibleImages = (layout.images ?? []).filter(
-    (placement) => placement.pageNumber === pageNumber
-  )
+  const visiblePlacements = showText
+    ? layout.placements.filter((placement) => (placement.pageNumber ?? 1) === pageNumber)
+    : []
+  const visibleImages = showImages
+    ? (layout.images ?? []).filter((placement) => placement.pageNumber === pageNumber)
+    : []
   const imageDivider = layout.imagePlacementOptions?.divider
   const imageBalance = layout.imagePlacementOptions?.runningBalance
 
@@ -195,7 +197,7 @@ export function ExportCanvas({
             onPointerUp={onBackgroundChange ? backgroundDrag.endDrag : undefined}
             onPointerCancel={onBackgroundChange ? backgroundDrag.endDrag : undefined}
           >
-            <img src={layout.background.dataUrl} alt="" />
+            <img src={resolveBackgroundUrl(layout.background)} alt="" />
             {onBackgroundChange && (
               <span
                 className="export-canvas-resize-handle"
@@ -212,7 +214,7 @@ export function ExportCanvas({
             )}
           </div>
         )}
-        <div className="export-canvas-content" data-preview-mode={previewMode}>
+        <div className="export-canvas-content">
           {visibleImages.map((placement) => {
             const label = placement.entryId ?? placement.source.ref
             const src = resolveImageSource?.(placement.source)
@@ -229,7 +231,6 @@ export function ExportCanvas({
                     selectedImagePlacementId === placement.id ? 'is-selected' : ''
                   }`}
                   data-image-placement-id={placement.id}
-                  data-layer-active={imageLayerActive ? 'true' : 'false'}
                   data-source-kind={placement.source.kind}
                   data-fit={placement.fit}
                   data-resolved={src ? 'true' : 'false'}
@@ -323,7 +324,6 @@ export function ExportCanvas({
               }`}
               data-entry-id={placement.entryId}
               data-placement-id={placement.id}
-              data-layer-active={textLayerActive ? 'true' : 'false'}
               key={placement.id}
               role={interactive ? 'group' : undefined}
               aria-label={

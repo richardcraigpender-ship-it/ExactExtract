@@ -169,7 +169,9 @@ function sourceRows(project: ProjectState, template?: KeptExportTemplate): KeptE
 export async function exportProjectKeptEntriesTemplatePdf(
   project: ProjectState,
   template: KeptExportTemplate,
-  sourceFiles?: ReadonlyMap<string, Uint8Array>
+  sourceFiles?: ReadonlyMap<string, Uint8Array>,
+  /** Bytes for managed background refs; inline legacy backgrounds do not need this. */
+  backgroundDataUrls?: ReadonlyMap<string, string>
 ): Promise<Uint8Array> {
   const plan = buildKeptExportRenderPlan(sourceRows(project, template), template)
   if (plan.warnings.some((warning) => warning.code === 'no-columns')) {
@@ -184,20 +186,20 @@ export async function exportProjectKeptEntriesTemplatePdf(
   for (const renderedPage of plan.pages) {
     const pageSize = dimensions(renderedPage.template)
     const page = pdf.addPage([pageSize.width, pageSize.height])
-    const image =
-      renderedPage.template.background && decodeImage(renderedPage.template.background.dataUrl)
-    if (image) {
+    const background = renderedPage.template.background
+    const backgroundSource = background?.ref
+      ? backgroundDataUrls?.get(background.ref)
+      : background?.dataUrl
+    const image = backgroundSource ? decodeImage(backgroundSource) : undefined
+    if (image && background) {
       const embedded =
         image.kind === 'png' ? await pdf.embedPng(image.bytes) : await pdf.embedJpg(image.bytes)
       page.drawImage(embedded, {
-        x: renderedPage.template.background!.x,
-        y:
-          pageSize.height -
-          renderedPage.template.background!.y -
-          renderedPage.template.background!.height,
-        width: renderedPage.template.background!.width,
-        height: renderedPage.template.background!.height,
-        opacity: Math.max(0, Math.min(1, renderedPage.template.background!.opacity))
+        x: background.x,
+        y: pageSize.height - background.y - background.height,
+        width: background.width,
+        height: background.height,
+        opacity: Math.max(0, Math.min(1, background.opacity))
       })
     }
     for (const placement of renderedPage.placements) {

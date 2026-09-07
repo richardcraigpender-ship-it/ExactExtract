@@ -2,10 +2,10 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { mkdtemp, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import test from 'node:test'
 
-import { ProjectImageStore, readPngDimensions } from './projectImageStore'
+import { ProjectImageStore, detectProjectImageFormat, readPngDimensions } from './projectImageStore'
 import { isProjectImageRef } from '../shared/projectImages'
 
 /** Minimal valid PNG header plus IHDR for the requested size. */
@@ -26,6 +26,45 @@ async function createStore(): Promise<ProjectImageStore> {
 
 test('reads PNG dimensions from the IHDR header', () => {
   assert.deepEqual(readPngDimensions(pngBytes(240, 60)), { width: 240, height: 60 })
+})
+
+test('detects the three background formats by signature', () => {
+  const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(16)])
+  const webp = Buffer.concat([
+    Buffer.from('RIFF', 'ascii'),
+    Buffer.alloc(4),
+    Buffer.from('WEBP', 'ascii'),
+    Buffer.alloc(8)
+  ])
+
+  assert.equal(detectProjectImageFormat(pngBytes(4, 4)), 'png')
+  assert.equal(detectProjectImageFormat(jpeg), 'jpg')
+  assert.equal(detectProjectImageFormat(webp), 'webp')
+  assert.throws(() => detectProjectImageFormat(Buffer.from('not an image')), /PNG, JPEG, or WebP/)
+})
+
+test('stores a background by content and reuses the ref for identical bytes', async () => {
+  const store = await createStore()
+  const jpeg = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff]), Buffer.alloc(16, 7)])
+
+  const first = await store.saveBackground(jpeg.toString('base64'))
+  const second = await store.saveBackground(jpeg.toString('base64'))
+
+  assert.equal(first.ref, second.ref)
+  assert.match(first.ref, /\.jpg$/)
+  assert.ok(isProjectImageRef(first.ref))
+  assert.equal(first.ref, `${createHash('sha256').update(jpeg).digest('hex')}.jpg`)
+  assert.deepEqual(await readdir(dirname(store.resolvePath(first.ref))), [first.ref])
+})
+
+test('rejects background content that is empty or not an image', async () => {
+  const store = await createStore()
+
+  await assert.rejects(() => store.saveBackground(''), /must be base64/)
+  await assert.rejects(
+    () => store.saveBackground(Buffer.from('nope').toString('base64')),
+    /PNG, JPEG, or WebP/
+  )
 })
 
 test('rejects content that is not a PNG', () => {

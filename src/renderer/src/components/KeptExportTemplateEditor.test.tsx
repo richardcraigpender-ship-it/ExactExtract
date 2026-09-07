@@ -67,6 +67,56 @@ test('labels balance snapshot totals separately from closing balances', () => {
   assert.match(markup, /sum of snapshots, not the account closing balance/)
 })
 
+test('offers the canvas background copy only when a canvas background exists', () => {
+  const withoutCanvas = renderToStaticMarkup(
+    <KeptExportTemplateEditor onApply={() => {}} onExport={() => {}} />
+  )
+
+  assert.doesNotMatch(withoutCanvas, /Copy background from PNG canvas/)
+
+  const withCanvas = renderToStaticMarkup(
+    <KeptExportTemplateEditor
+      onApply={() => {}}
+      onExport={() => {}}
+      canvasBackground={{
+        dataUrl: 'data:image/png;base64,AAAA',
+        x: 0,
+        y: 0,
+        width: 612,
+        height: 792,
+        opacity: 1
+      }}
+    />
+  )
+
+  assert.match(withCanvas, /Copy background from PNG canvas/)
+  assert.match(withCanvas, /keep separate backgrounds/)
+})
+
+test('reports when the template already matches the canvas background', () => {
+  const background = {
+    dataUrl: 'data:image/png;base64,AAAA',
+    x: 0,
+    y: 0,
+    width: 612,
+    height: 792,
+    opacity: 1
+  }
+  const draft = createDefaultKeptExportTemplateDraft()
+  draft.pageOneTemplate.background = { ...background }
+
+  const markup = renderToStaticMarkup(
+    <KeptExportTemplateEditor
+      initialDraft={draft}
+      onApply={() => {}}
+      onExport={() => {}}
+      canvasBackground={background}
+    />
+  )
+
+  assert.match(markup, /already matches the PNG canvas background/)
+})
+
 test('disables apply and export and reports invalid PDF-point columns', () => {
   const draft = createDefaultKeptExportTemplateDraft()
   draft.pageOneTemplate.columns[0]!.x = 600

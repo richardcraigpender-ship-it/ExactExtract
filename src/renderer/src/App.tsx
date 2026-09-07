@@ -46,7 +46,8 @@ import {
   createDefaultKeptEntriesLayout
 } from './components/keptEntriesLayout'
 import { ReviewMergeSplitControls } from './components/ReviewMergeSplitControls'
-import { KeptEntriesCanvasWorkspace } from './components/KeptEntriesCanvasWorkspace'
+import { KeptPngCanvasWorkspace } from './components/KeptPngCanvasWorkspace'
+import { KeptTextCanvasWorkspace } from './components/KeptTextCanvasWorkspace'
 import {
   RightWorkspace,
   type RightWorkspaceCommand,
@@ -76,6 +77,10 @@ import {
   resolveKeptImageDataUrls,
   resolveKeptImageUrl
 } from './lib/keptImageResolution'
+import {
+  migrateLegacyBackground,
+  resolveTemplateBackgroundDataUrls
+} from './lib/canvasBackgroundStorage'
 import { useDebouncedValue } from './hooks/useDebouncedValue'
 import { useIncrementalReviewFilter } from './hooks/useIncrementalReviewFilter'
 import { normalizeReviewQuery } from './hooks/reviewFiltering'
@@ -368,15 +373,32 @@ function App(): React.JSX.Element {
   const merchantLibrary = useMerchantLibrary()
   const addScenarioRows = useCallback((rows: readonly ProjectEntry[]): void => {
     if (rows.length === 0) return
-    setProject((current) =>
-      current
-        ? {
-            ...current,
-            entries: [...current.entries, ...rows],
-            updatedAt: new Date().toISOString()
+    const occurredAt = new Date().toISOString()
+    setProject((current) => {
+      if (!current) return current
+      undoStackRef.current = [...undoStackRef.current, current.entries]
+      redoStackRef.current = []
+      setHistoryState({ undoCount: undoStackRef.current.length, redoCount: 0 })
+      return {
+        ...current,
+        entries: [...current.entries, ...rows],
+        auditTrail: [
+          ...current.auditTrail,
+          {
+            id: crypto.randomUUID(),
+            occurredAt,
+            action: 'scenario-rows-added',
+            entityType: 'project',
+            entityId: current.id,
+            details: {
+              rows: rows.length,
+              seed: (rows[0] as { scenarioSeed?: number }).scenarioSeed ?? 0
+            }
           }
-        : current
-    )
+        ],
+        updatedAt: occurredAt
+      }
+    })
   }, [])
   const [workspaceMode, setWorkspaceMode] = useState<RightWorkspaceMode>('source-pdf')
   const [analysisConfiguration, setAnalysisConfiguration] = useState<AnalysisConfiguration>(
@@ -397,7 +419,8 @@ function App(): React.JSX.Element {
     DEFAULT_KEPT_ENTRIES_LAYOUT
   )
   const [keptExportTemplate, setKeptExportTemplate] = useState<KeptExportTemplate | undefined>()
-  const [showKeptCanvas, setShowKeptCanvas] = useState(false)
+  const [showKeptCanvas, setShowKeptCanvas] = useState<'png' | 'text' | null>(null)
+  const [openKeptConfig, setOpenKeptConfig] = useState<'png' | 'text' | null>(null)
   // Session crops are regenerated for display only and dropped when the canvas closes.
   const [sessionImageUrls, setSessionImageUrls] = useState<ReadonlyMap<string, string>>(new Map())
   const [sessionImageError, setSessionImageError] = useState<string | null>(null)
@@ -1161,52 +1184,88 @@ function App(): React.JSX.Element {
     }
   }
 
-  const openProject = useCallback(async (projectId: string): Promise<void> => {
-    setError(null)
-    try {
-      const loaded = await window.studio.projects.load(projectId)
-      await Promise.all(
-        loaded.documents.map(async (document) => {
-          if (!document.removedPages?.length) return
-          const source = await window.studio.documents.readPdf(document.path)
-          const reduced = await window.studio.documents.removePdfPages(new Uint8Array(source), [
-            ...document.removedPages
-          ])
-          editedPdfDataRef.current.set(document.path, reduced.bytes)
-        })
-      )
-      const savedAnalysis = parseAnalysisState(
-        [...loaded.auditTrail].reverse().find((event) => event.action === 'analysis-state-saved')
-          ?.details?.state
-      )
-      setProject(loaded)
-      setKeptEntriesLayout(
-        loaded.keptEntriesLayout ?? createDefaultKeptEntriesLayout(loaded.entries)
-      )
-      setKeptExportTemplate(loaded.keptExportTemplate)
-      setAnalysisConfiguration(savedAnalysis?.configuration ?? DEFAULT_ANALYSIS_CONFIGURATION)
-      setWorkspaceMode('review')
-      setDocuments(loaded.documents)
-      setPreflight(restorePreflight(loaded))
-      setActivePath(loaded.documents[0]?.path ?? null)
-      setPdfData(null)
-      setMode(loaded.settings.extraction.mode)
-      setOcrLanguages(loaded.settings.extraction.ocrLanguages)
-      setPanePercent(loaded.settings.splitPanePercent)
-      setLengthUnit(loaded.settings.lengthUnit ?? CANONICAL_LENGTH_UNIT)
-      setCurrencyCode(resolveCurrencyCode(loaded.settings.currencyCode))
-      if (loaded.settings.theme !== 'system') setTheme(loaded.settings.theme)
-      setScreen(loaded.documents.length > 0 ? 'workspace' : 'import')
-      undoStackRef.current = []
-      redoStackRef.current = []
-      pageRemovalUndoRef.current = []
-      pageRemovalRedoRef.current = []
-      setPageRemovalHistory({ undoCount: 0, redoCount: 0 })
-      setHistoryState({ undoCount: 0, redoCount: 0 })
-    } catch (projectError) {
-      setError(projectError instanceof Error ? projectError.message : 'Unable to open project.')
+  const migrateProjectBackgrounds = useCallback(async (loaded: ProjectState): Promise<void> => {
+    const layoutBackground = loaded.keptEntriesLayout?.background
+    if (layoutBackground?.dataUrl && !layoutBackground.ref) {
+      const migrated = await migrateLegacyBackground(layoutBackground)
+      if (migrated !== layoutBackground) {
+        setKeptEntriesLayout((current) => ({ ...current, background: migrated }))
+      }
     }
+
+    const template = loaded.keptExportTemplate
+    if (!template) return
+    const [pageOne, laterPages] = await Promise.all([
+      migrateLegacyBackground(template.pageOneTemplate.background),
+      migrateLegacyBackground(template.laterPagesTemplate.background)
+    ])
+    if (
+      pageOne === template.pageOneTemplate.background &&
+      laterPages === template.laterPagesTemplate.background
+    ) {
+      return
+    }
+    setKeptExportTemplate((current) =>
+      current
+        ? {
+            ...current,
+            pageOneTemplate: { ...current.pageOneTemplate, background: pageOne },
+            laterPagesTemplate: { ...current.laterPagesTemplate, background: laterPages }
+          }
+        : current
+    )
   }, [])
+
+  const openProject = useCallback(
+    async (projectId: string): Promise<void> => {
+      setError(null)
+      try {
+        const loaded = await window.studio.projects.load(projectId)
+        await Promise.all(
+          loaded.documents.map(async (document) => {
+            if (!document.removedPages?.length) return
+            const source = await window.studio.documents.readPdf(document.path)
+            const reduced = await window.studio.documents.removePdfPages(new Uint8Array(source), [
+              ...document.removedPages
+            ])
+            editedPdfDataRef.current.set(document.path, reduced.bytes)
+          })
+        )
+        const savedAnalysis = parseAnalysisState(
+          [...loaded.auditTrail].reverse().find((event) => event.action === 'analysis-state-saved')
+            ?.details?.state
+        )
+        setProject(loaded)
+        setKeptEntriesLayout(
+          loaded.keptEntriesLayout ?? createDefaultKeptEntriesLayout(loaded.entries)
+        )
+        setKeptExportTemplate(loaded.keptExportTemplate)
+        void migrateProjectBackgrounds(loaded)
+        setAnalysisConfiguration(savedAnalysis?.configuration ?? DEFAULT_ANALYSIS_CONFIGURATION)
+        setWorkspaceMode('review')
+        setDocuments(loaded.documents)
+        setPreflight(restorePreflight(loaded))
+        setActivePath(loaded.documents[0]?.path ?? null)
+        setPdfData(null)
+        setMode(loaded.settings.extraction.mode)
+        setOcrLanguages(loaded.settings.extraction.ocrLanguages)
+        setPanePercent(loaded.settings.splitPanePercent)
+        setLengthUnit(loaded.settings.lengthUnit ?? CANONICAL_LENGTH_UNIT)
+        setCurrencyCode(resolveCurrencyCode(loaded.settings.currencyCode))
+        if (loaded.settings.theme !== 'system') setTheme(loaded.settings.theme)
+        setScreen(loaded.documents.length > 0 ? 'workspace' : 'import')
+        undoStackRef.current = []
+        redoStackRef.current = []
+        pageRemovalUndoRef.current = []
+        pageRemovalRedoRef.current = []
+        setPageRemovalHistory({ undoCount: 0, redoCount: 0 })
+        setHistoryState({ undoCount: 0, redoCount: 0 })
+      } catch (projectError) {
+        setError(projectError instanceof Error ? projectError.message : 'Unable to open project.')
+      }
+    },
+    [migrateProjectBackgrounds]
+  )
 
   const removeRecentProject = useCallback(async (projectId: string): Promise<void> => {
     await window.studio.projects.removeRecent(projectId)
@@ -2337,7 +2396,8 @@ function App(): React.JSX.Element {
         return exportProjectKeptEntriesTemplatePdf(
           projectSnapshot,
           appliedTemplate,
-          await loadSourceFiles()
+          await loadSourceFiles(),
+          await resolveTemplateBackgroundDataUrls(appliedTemplate)
         )
       }
       if (format === 'pdf-kept-canvas') {
@@ -2345,7 +2405,8 @@ function App(): React.JSX.Element {
           return exportProjectKeptEntriesTemplatePdf(
             projectSnapshot,
             template,
-            await loadSourceFiles()
+            await loadSourceFiles(),
+            await resolveTemplateBackgroundDataUrls(template)
           )
         }
         const [imageDataUrls, sourceFiles] = await Promise.all([
@@ -2866,7 +2927,7 @@ function App(): React.JSX.Element {
   const sessionImageRefKey = JSON.stringify(sessionImageRefs)
 
   useEffect(() => {
-    if (!showKeptCanvas || !projectSnapshotRef.current) return
+    if (showKeptCanvas !== 'png' || !projectSnapshotRef.current) return
     const refs = JSON.parse(sessionImageRefKey) as string[]
     let cancelled = false
     setIsRefreshingSessionImages(true)
@@ -3187,8 +3248,8 @@ function App(): React.JSX.Element {
 
   return (
     <div className="app-shell">
-      {showKeptCanvas && projectSnapshot && (
-        <KeptEntriesCanvasWorkspace
+      {showKeptCanvas === 'png' && projectSnapshot && (
+        <KeptPngCanvasWorkspace
           entries={projectSnapshot.entries}
           layout={keptEntriesLayout}
           isExporting={exportState.isSaving}
@@ -3200,10 +3261,31 @@ function App(): React.JSX.Element {
           }}
           onLayoutChange={setKeptEntriesLayout}
           onClose={() => {
-            setShowKeptCanvas(false)
+            setShowKeptCanvas(null)
             setSessionImageUrls(new Map())
             setSessionImageError(null)
             setIsRefreshingSessionImages(false)
+          }}
+          onOpenConfiguration={() => {
+            setShowKeptCanvas(null)
+            setOpenKeptConfig('png')
+          }}
+          onExport={() => void saveExport('pdf-kept-canvas')}
+          onReset={() =>
+            setKeptEntriesLayout(createDefaultKeptEntriesLayout(projectSnapshot.entries))
+          }
+        />
+      )}
+      {showKeptCanvas === 'text' && projectSnapshot && (
+        <KeptTextCanvasWorkspace
+          entries={projectSnapshot.entries}
+          layout={keptEntriesLayout}
+          isExporting={exportState.isSaving}
+          onLayoutChange={setKeptEntriesLayout}
+          onClose={() => setShowKeptCanvas(null)}
+          onOpenConfiguration={() => {
+            setShowKeptCanvas(null)
+            setOpenKeptConfig('text')
           }}
           onExport={() => void saveExport('pdf-kept-canvas')}
           onReset={() =>
@@ -4263,6 +4345,8 @@ function App(): React.JSX.Element {
                       snapshot={buildExportSnapshot(projectSnapshot)}
                       status={exportState.status}
                       isSaving={exportState.isSaving}
+                      initialTemplateEditorOpen={openKeptConfig === 'text'}
+                      initialImageLayoutEditorOpen={openKeptConfig === 'png'}
                       rowHeight={exportRowHeight}
                       onRowHeightChange={setExportRowHeight}
                       onSave={saveExport}
@@ -4276,9 +4360,10 @@ function App(): React.JSX.Element {
                       onTemplateApply={setKeptExportTemplate}
                       currencySymbol={currencySymbol(currencyCode)}
                       onPlaceKeptImages={handlePlaceKeptImages}
-                      onOpenKeptCanvas={() => setShowKeptCanvas(true)}
+                      onOpenKeptCanvas={() => setShowKeptCanvas('png')}
+                      onOpenKeptTextCanvas={() => setShowKeptCanvas('text')}
                       placedImageCount={keptEntriesLayout.images?.length ?? 0}
-                      onPreviewPlacedImages={() => setShowKeptCanvas(true)}
+                      onPreviewPlacedImages={() => setShowKeptCanvas('png')}
                       imagePlacementOptions={keptEntriesLayout.imagePlacementOptions}
                       uploadedImageSources={keptEntriesLayout.uploadedImageSources}
                       onImagePlacementConfigurationChange={handleImagePlacementConfigurationChange}
@@ -4286,7 +4371,9 @@ function App(): React.JSX.Element {
                       onKeptImagePageNumbersChange={(pageNumbers) =>
                         setKeptEntriesLayout((current) => ({ ...current, pageNumbers }))
                       }
+                      canvasBackground={keptEntriesLayout.background}
                       onDetectPageNumbers={detectActivePageNumberStyle}
+                      onConfigurationEditorClosed={() => setOpenKeptConfig(null)}
                     />
                   ) : null,
                   style: (

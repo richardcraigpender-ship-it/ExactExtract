@@ -474,6 +474,9 @@ app.whenReady().then(() => {
   ipcMain.handle('studio:project-images:save', (_event, value: unknown) =>
     projectImageStore.save(value)
   )
+  ipcMain.handle('studio:project-images:save-background', (_event, value: unknown) =>
+    projectImageStore.saveBackground(value)
+  )
   ipcMain.handle('studio:project-images:read-data-urls', (_event, refs: unknown) =>
     projectImageStore.readDataUrls(
       Array.isArray(refs) ? refs.filter((ref) => typeof ref === 'string') : []

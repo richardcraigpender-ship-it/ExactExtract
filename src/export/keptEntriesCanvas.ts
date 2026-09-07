@@ -47,6 +47,16 @@ function decodeDataUrl(dataUrl: string): { kind: 'png' | 'jpg'; bytes: Uint8Arra
   return { kind: match[1].toLowerCase() === 'image/png' ? 'png' : 'jpg', bytes }
 }
 
+/** Managed backgrounds arrive as refs, so their bytes come from the same map as placed images. */
+function backgroundDataUrl(
+  background: KeptEntriesCanvasLayout['background'],
+  options: KeptEntriesCanvasExportOptions
+): string | undefined {
+  if (!background) return undefined
+  if (background.ref) return options.imageDataUrls?.get(background.ref)
+  return background.dataUrl
+}
+
 export function getKeptEntriesCanvasWarnings(
   entries: readonly ProjectState['entries'][number][],
   layout: KeptEntriesCanvasLayout,
@@ -107,8 +117,9 @@ export function getKeptEntriesCanvasWarnings(
       })
     }
   }
-  if (layout.background && !decodeDataUrl(layout.background.dataUrl)) {
-    warnings.push({ code: 'missing-background' })
+  if (layout.background) {
+    const resolved = backgroundDataUrl(layout.background, options)
+    if (!resolved || !decodeDataUrl(resolved)) warnings.push({ code: 'missing-background' })
   }
   return warnings
 }
@@ -198,7 +209,8 @@ export async function exportProjectKeptEntriesCanvasPdf(
   )
 
   if (layout.background) {
-    const image = decodeDataUrl(layout.background.dataUrl)
+    const resolved = backgroundDataUrl(layout.background, options)
+    const image = resolved ? decodeDataUrl(resolved) : undefined
     if (image) {
       const embedded =
         image.kind === 'png' ? await pdf.embedPng(image.bytes) : await pdf.embedJpg(image.bytes)

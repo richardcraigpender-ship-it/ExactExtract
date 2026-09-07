@@ -82,6 +82,8 @@ const studio = {
   projectImages: {
     save: (files: Array<{ name: string; content: string }>) =>
       ipcRenderer.invoke('studio:project-images:save', files),
+    saveBackground: (content: string) =>
+      ipcRenderer.invoke('studio:project-images:save-background', content),
     readDataUrls: (refs: string[]) =>
       ipcRenderer.invoke('studio:project-images:read-data-urls', refs)
   }
