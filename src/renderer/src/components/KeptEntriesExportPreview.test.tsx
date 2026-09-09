@@ -6,12 +6,11 @@ import { KeptEntriesExportPreview } from './KeptEntriesExportPreview'
 
 void React
 
-test('renders the header actions and the three composed panel slots', () => {
+test('renders the header actions and the two composed panel slots', () => {
   const markup = renderToStaticMarkup(
     <KeptEntriesExportPreview
       onClose={() => {}}
       onExport={() => {}}
-      entriesPanel={<span>entries-slot</span>}
       canvas={<span>canvas-slot</span>}
       contextPanel={<span>context-slot</span>}
     />
@@ -19,12 +18,12 @@ test('renders the header actions and the three composed panel slots', () => {
 
   assert.match(markup, /Kept entries export preview/)
   assert.match(markup, /Export PDF/)
-  assert.match(markup, /entries-slot/)
   assert.match(markup, /canvas-slot/)
   assert.match(markup, /context-slot/)
   assert.match(markup, /role="dialog"/)
   assert.match(markup, /aria-modal="true"/)
   assert.match(markup, /aria-label="Close kept entries export preview"/)
+  assert.doesNotMatch(markup, /kept-entries-preview-entries/)
 })
 
 test('disables the export button and shows progress text while exporting', () => {
@@ -33,7 +32,6 @@ test('disables the export button and shows progress text while exporting', () =>
       onClose={() => {}}
       onExport={() => {}}
       isExporting
-      entriesPanel={null}
       canvas={null}
       contextPanel={null}
     />
@@ -49,7 +47,6 @@ test('renders the optional reset layout action', () => {
       onClose={() => undefined}
       onExport={() => undefined}
       onReset={() => undefined}
-      entriesPanel={null}
       canvas={null}
       contextPanel={null}
     />

@@ -79,7 +79,7 @@ test('offers the canvas background copy only when a canvas background exists', (
       onApply={() => {}}
       onExport={() => {}}
       canvasBackground={{
-        dataUrl: 'data:image/png;base64,AAAA',
+        ref: `${'b'.repeat(64)}.png`,
         x: 0,
         y: 0,
         width: 612,
@@ -95,7 +95,7 @@ test('offers the canvas background copy only when a canvas background exists', (
 
 test('reports when the template already matches the canvas background', () => {
   const background = {
-    dataUrl: 'data:image/png;base64,AAAA',
+    ref: `${'b'.repeat(64)}.png`,
     x: 0,
     y: 0,
     width: 612,

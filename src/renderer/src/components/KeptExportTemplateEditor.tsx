@@ -140,7 +140,7 @@ function sameBackground(
 ): boolean {
   if (!a || !b) return a === b
   return (
-    a.dataUrl === b.dataUrl &&
+    a.ref === b.ref &&
     a.x === b.x &&
     a.y === b.y &&
     a.width === b.width &&
@@ -1168,7 +1168,9 @@ export function KeptExportTemplateEditor({
             className="secondary-button"
             type="button"
             disabled={issues.length > 0 || isExporting || isPreviewing}
-            onClick={() => onPreview(cloneKeptExportTemplateDraft(draft))}
+            onClick={() => {
+              onPreview?.(cloneKeptExportTemplateDraft(draft))
+            }}
           >
             {isPreviewing ? 'Generating preview...' : 'Preview'}
           </button>

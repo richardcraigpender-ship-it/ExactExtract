@@ -11,7 +11,7 @@ import {
 
 function background(overrides: Partial<KeptEntriesBackground> = {}): KeptEntriesBackground {
   return {
-    dataUrl: 'data:image/png;base64,preview',
+    ref: `${'a'.repeat(64)}.png`,
     x: 10,
     y: 20,
     width: 300,

@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useMemo, useRef, useState } from 'react'
-import { Download, Eye, FileJson, FileText, FileOutput, Images, Table } from 'lucide-react'
+import { Download, Eye, FileJson, FileOutput, Images, Table } from 'lucide-react'
 import {
   buildSessionKeptImageSources,
   type ExportSnapshot,
@@ -30,31 +30,13 @@ const PdfViewer = lazy(async () => {
   return { default: module.PdfViewer }
 })
 
-export type PdfExportFormat =
-  | 'pdf'
-  | 'pdf-layout'
-  | 'pdf-compact'
-  | 'pdf-kept'
-  | 'pdf-kept-layout'
-  | 'pdf-kept-canvas'
-  | 'pdf-kept-template'
+export type PdfExportFormat = 'pdf' | 'pdf-kept-canvas' | 'pdf-kept-template'
 
 interface ExportPanelProps {
   snapshot: ExportSnapshot
   status: string
   isSaving: boolean
-  onSave: (
-    format:
-      | 'csv'
-      | 'json'
-      | 'pdf'
-      | 'pdf-layout'
-      | 'pdf-compact'
-      | 'pdf-kept'
-      | 'pdf-kept-layout'
-      | 'pdf-kept-canvas'
-      | 'entry-images'
-  ) => void
+  onSave: (format: 'csv' | 'json' | 'pdf' | 'pdf-kept-canvas' | 'entry-images') => void
   rowHeight?: string
   onRowHeightChange?: (value: string) => void
   selectedEntryId?: string | null
@@ -62,15 +44,15 @@ interface ExportPanelProps {
   onPreview?: (format: PdfExportFormat) => Promise<Uint8Array>
   keptEntries?: readonly ProjectEntry[]
   onTemplateExport?: (template: KeptExportTemplate) => void
-  onTemplatePreview?: (template: KeptExportTemplate) => Promise<Uint8Array>
+  onOpenKeptTemplateCanvas?: (template: KeptExportTemplate) => void
   keptExportTemplate?: KeptExportTemplate
   onTemplateApply?: (template: KeptExportTemplate) => void
   currencySymbol?: string
   onPlaceKeptImages?: (plan: KeptImagePlan) => void
   onOpenKeptCanvas?: () => void
   onOpenKeptTextCanvas?: () => void
-  placedImageCount?: number
   onPreviewPlacedImages?: () => void
+  placedImageCount?: number
   imagePlacementOptions?: KeptImagePlacementOptions
   uploadedImageSources?: readonly KeptImageSourceDescriptor[]
   onImagePlacementConfigurationChange?: (
@@ -99,15 +81,15 @@ export const ExportPanel = React.memo(function ExportPanel({
   onPreview,
   keptEntries = [],
   onTemplateExport,
-  onTemplatePreview,
+  onOpenKeptTemplateCanvas,
   keptExportTemplate,
   onTemplateApply,
   currencySymbol = '£',
   onPlaceKeptImages,
   onOpenKeptCanvas,
   onOpenKeptTextCanvas,
-  placedImageCount,
   onPreviewPlacedImages,
+  placedImageCount,
   imagePlacementOptions,
   uploadedImageSources,
   onImagePlacementConfigurationChange,
@@ -160,13 +142,76 @@ export const ExportPanel = React.memo(function ExportPanel({
       localStorage.setItem('studio-kept-template-auto-close', String(value))
     }
   }
+  void rowHeight
+  void onRowHeightChange
 
   return (
     <aside className="export-panel" aria-label="Export reviewed project">
       <div className="export-actions">
-        <section className="export-action-group" aria-label="Reviewed export">
-          <span className="export-action-group-label">Reviewed export</span>
+        <section className="export-action-group" aria-label="Data exports">
+          <span className="export-action-group-label">Data exports</span>
           <div className="export-primary-actions">
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={isSaving}
+              onClick={() => onSave('csv')}
+            >
+              <Table size={13} /> Save CSV
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={isSaving}
+              onClick={() => onSave('json')}
+            >
+              <FileJson size={13} /> Save JSON
+            </button>
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={isSaving || snapshot.summary.keptCount === 0}
+              onClick={() => onSave('entry-images')}
+              title="Create a folder of fixed-size PNG crops, sized to the largest kept source region so nothing is clipped"
+            >
+              <Images size={13} /> Save kept entry PNGs
+            </button>
+          </div>
+        </section>
+        <section className="export-action-group" aria-label="Layout and PDF studio">
+          <span className="export-action-group-label">Layout &amp; PDF studio</span>
+          <div className="export-primary-actions">
+            {(onOpenKeptTextCanvas || onOpenKeptCanvas) && (
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={isSaving || keptEntries.length === 0}
+                onClick={() => {
+                  if (onOpenKeptTextCanvas) {
+                    onOpenKeptTextCanvas()
+                    return
+                  }
+                  onOpenKeptCanvas?.()
+                }}
+              >
+                <FileOutput size={13} /> Formatted PDF Statement
+              </button>
+            )}
+            {onOpenKeptCanvas && (
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={isSaving || keptEntries.length === 0}
+                onClick={onOpenKeptCanvas}
+              >
+                <Images size={13} /> PNG Snippet Board
+              </button>
+            )}
+            {templateStatus && (
+              <span className="export-inline-status" role="status" aria-live="polite">
+                {templateStatus}
+              </span>
+            )}
             {onPreview && (
               <div className="export-preview-command">
                 <select
@@ -175,10 +220,6 @@ export const ExportPanel = React.memo(function ExportPanel({
                   onChange={(event) => setPreviewFormat(event.target.value as PdfExportFormat)}
                 >
                   <option value="pdf">Reviewed PDF</option>
-                  <option value="pdf-layout">Source layout</option>
-                  <option value="pdf-compact">Compact layout</option>
-                  <option value="pdf-kept">Kept entries</option>
-                  <option value="pdf-kept-layout">Kept original layout</option>
                   <option value="pdf-kept-canvas">Final placed-image PDF</option>
                   <option value="pdf-kept-template" disabled={!keptExportTemplate}>
                     Kept text template
@@ -211,147 +252,8 @@ export const ExportPanel = React.memo(function ExportPanel({
                 {previewError}
               </p>
             )}
-            <button
-              className="primary-button"
-              type="button"
-              disabled={isSaving}
-              onClick={() => onSave('pdf')}
-            >
-              <FileText size={13} /> Save PDF
-            </button>
-            {onTemplateExport && (
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={isSaving || keptEntries.length === 0}
-                onClick={() => {
-                  const draft = createKeptExportTemplateDraft(keptExportTemplate)
-                  latestTemplateDraftRef.current = draft
-                  setTemplateDraft(draft)
-                  setShowTemplateEditor(true)
-                }}
-              >
-                <FileOutput size={13} /> Configure kept text export
-              </button>
-            )}
-            {templateStatus && (
-              <span className="export-inline-status" role="status" aria-live="polite">
-                {templateStatus}
-              </span>
-            )}
-            {onPlaceKeptImages && (
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={isSaving}
-                onClick={() => setShowImageLayoutEditor(true)}
-              >
-                <Images size={13} /> Configure kept PNG layout
-              </button>
-            )}
-            {onOpenKeptCanvas && (
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={isSaving || keptEntries.length === 0}
-                onClick={onOpenKeptCanvas}
-              >
-                <Images size={13} /> Edit PNG canvas
-              </button>
-            )}
-            {onOpenKeptTextCanvas && (
-              <button
-                className="secondary-button"
-                type="button"
-                disabled={isSaving || keptEntries.length === 0}
-                onClick={onOpenKeptTextCanvas}
-              >
-                <FileText size={13} /> Edit text canvas
-              </button>
-            )}
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={isSaving}
-              onClick={() => onSave('csv')}
-            >
-              <Table size={13} /> Save CSV
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={isSaving}
-              onClick={() => onSave('json')}
-            >
-              <FileJson size={13} /> Save JSON
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={isSaving || snapshot.summary.keptCount === 0}
-              onClick={() => onSave('entry-images')}
-              title="Create a folder of fixed-size PNG crops, sized to the largest kept source region so nothing is clipped"
-            >
-              <Images size={13} /> Save kept entry PNGs
-            </button>
           </div>
         </section>
-        <details className="export-more-actions">
-          <summary>More PDF formats</summary>
-          <div>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={isSaving}
-              onClick={() => onSave('pdf-layout')}
-              title="Copy the original PDF pages and mark reviewed rows at their source positions"
-            >
-              <FileOutput size={13} /> Source layout
-            </button>
-            <label className="export-row-height">
-              <span>Compact row height</span>
-              <input
-                type="number"
-                min="1"
-                step="0.5"
-                value={rowHeight}
-                onChange={(event) => onRowHeightChange(event.target.value)}
-              />
-            </label>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={isSaving || !Number.isFinite(Number(rowHeight)) || Number(rowHeight) <= 0}
-              onClick={() => onSave('pdf-compact')}
-            >
-              <FileOutput size={13} /> Compact PDF
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={isSaving}
-              onClick={() => onSave('pdf-kept')}
-            >
-              <FileOutput size={13} /> Kept entries
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={isSaving}
-              onClick={() => onSave('pdf-kept-layout')}
-            >
-              <FileOutput size={13} /> Kept original layout
-            </button>
-            <button
-              className="secondary-button"
-              type="button"
-              disabled={isSaving}
-              onClick={() => onSave('pdf-kept-canvas')}
-            >
-              <FileOutput size={13} /> Save placed-image PDF
-            </button>
-          </div>
-        </details>
         <span role="status">
           <Download size={12} aria-hidden="true" /> {status}
         </span>
@@ -380,7 +282,7 @@ export const ExportPanel = React.memo(function ExportPanel({
       )}
       {showTemplateEditor && onTemplateExport && (
         <WorkspaceToolWindow
-          title="Configure kept text export"
+          title="Formatted PDF Statement"
           className="workspace-tool-window--kept-template"
           onClose={() => {
             applyTemplateDraft(latestTemplateDraftRef.current)
@@ -409,31 +311,10 @@ export const ExportPanel = React.memo(function ExportPanel({
               if (autoCloseTemplateEditor) setShowTemplateEditor(false)
             }}
             onPreview={(draft) => {
-              if (!onTemplatePreview) return
-              setPreviewError(null)
-              setTemplateStatus('Generating kept text preview...')
-              setIsPreviewing(true)
-              void onTemplatePreview(toKeptExportTemplate(draft))
-                .then((data) => {
-                  setPreviewData(data)
-                  setTemplateStatus(
-                    autoCloseTemplateEditor
-                      ? 'Kept text preview generated.'
-                      : 'Kept text preview generated. Close this window to view it.'
-                  )
-                  if (autoCloseTemplateEditor) {
-                    setShowTemplateEditor(false)
-                    onConfigurationEditorClosed?.()
-                  }
-                })
-                .catch((error: unknown) =>
-                  setPreviewError(
-                    error instanceof Error
-                      ? error.message
-                      : 'Unable to generate the kept-text preview.'
-                  )
-                )
-                .finally(() => setIsPreviewing(false))
+              applyTemplateDraft(draft)
+              setShowTemplateEditor(false)
+              onConfigurationEditorClosed?.()
+              onOpenKeptTemplateCanvas?.(toKeptExportTemplate(draft))
             }}
             isExporting={isSaving}
             isPreviewing={isPreviewing}
@@ -451,7 +332,7 @@ export const ExportPanel = React.memo(function ExportPanel({
       )}
       {showImageLayoutEditor && onPlaceKeptImages && (
         <WorkspaceToolWindow
-          title="Configure kept PNG layout"
+          title="PNG Snippet Board"
           className="workspace-tool-window--kept-image-layout"
           onClose={() => setShowImageLayoutEditor(false)}
         >
@@ -464,7 +345,7 @@ export const ExportPanel = React.memo(function ExportPanel({
             placedImageCount={placedImageCount ?? 0}
             onPlaceImages={onPlaceKeptImages}
             onUploadPngs={uploadProjectPngs}
-            onPreviewPlacedImages={onPreviewPlacedImages ?? onOpenKeptCanvas ?? (() => undefined)}
+            onPreviewPlacedImages={onPreviewPlacedImages ?? (() => undefined)}
             onClose={() => setShowImageLayoutEditor(false)}
             initialOptions={imagePlacementOptions}
             initialUploadedSources={uploadedImageSources}

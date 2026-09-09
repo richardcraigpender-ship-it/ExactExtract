@@ -56,15 +56,7 @@ export interface StudioBridge {
   }
   exports: {
     save: (request: {
-      format:
-        | 'csv'
-        | 'json'
-        | 'pdf'
-        | 'pdf-layout'
-        | 'pdf-compact'
-        | 'pdf-kept'
-        | 'pdf-kept-layout'
-        | 'pdf-kept-canvas'
+      format: 'csv' | 'json' | 'pdf' | 'pdf-kept-canvas'
       suggestedName: string
       content: string
     }) => Promise<{ status: 'cancelled' } | { status: 'saved'; path: string }>

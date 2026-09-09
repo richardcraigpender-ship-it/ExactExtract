@@ -66,6 +66,27 @@ test('reports the outcome of the last apply in a live region', () => {
   assert.match(markup, /Updated 2 highlights across 1 entry\./)
 })
 
+test('offers scoped entry marking actions when wired by the app', () => {
+  const markup = render({ onSetStatus: () => {} })
+
+  assert.match(markup, /Mark entries/)
+  assert.match(markup, /Keep/)
+  assert.match(markup, /Maybe/)
+  assert.match(markup, /Exclude/)
+  assert.match(markup, /Applies to the entries matched by the current highlight scope/)
+})
+
+test('disables scoped entry marking when no highlights are in scope', () => {
+  const markup = render({ affectedCount: 0, onSetStatus: () => {} })
+
+  assert.match(markup, /<button class="secondary-button" type="button" disabled="">Keep<\/button>/)
+  assert.match(markup, /<button class="secondary-button" type="button" disabled="">Maybe<\/button>/)
+  assert.match(
+    markup,
+    /<button class="secondary-button" type="button" disabled="">Exclude<\/button>/
+  )
+})
+
 // HT-C-006
 test('associates the value input with its validation message', () => {
   const markup = render()

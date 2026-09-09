@@ -116,7 +116,10 @@ function referenceForEntry(entry: ProjectState['entries'][number], rowReference?
   return extractEntryReferences(entry).join(', ')
 }
 
-function sourceRows(project: ProjectState, template?: KeptExportTemplate): KeptExportSourceRow[] {
+export function buildKeptExportSourceRows(
+  project: ProjectState,
+  template?: KeptExportTemplate
+): KeptExportSourceRow[] {
   const mapping = mappingForStats()
   const currencyCode = resolveCurrencyCode(project.settings.currencyCode)
   const kept = project.entries.filter((entry) => entry.status === 'keep')
@@ -173,7 +176,7 @@ export async function exportProjectKeptEntriesTemplatePdf(
   /** Bytes for managed background refs; inline legacy backgrounds do not need this. */
   backgroundDataUrls?: ReadonlyMap<string, string>
 ): Promise<Uint8Array> {
-  const plan = buildKeptExportRenderPlan(sourceRows(project, template), template)
+  const plan = buildKeptExportRenderPlan(buildKeptExportSourceRows(project, template), template)
   if (plan.warnings.some((warning) => warning.code === 'no-columns')) {
     throw new Error('The export template needs at least one column.')
   }
@@ -187,9 +190,7 @@ export async function exportProjectKeptEntriesTemplatePdf(
     const pageSize = dimensions(renderedPage.template)
     const page = pdf.addPage([pageSize.width, pageSize.height])
     const background = renderedPage.template.background
-    const backgroundSource = background?.ref
-      ? backgroundDataUrls?.get(background.ref)
-      : background?.dataUrl
+    const backgroundSource = background?.ref ? backgroundDataUrls?.get(background.ref) : undefined
     const image = backgroundSource ? decodeImage(backgroundSource) : undefined
     if (image && background) {
       const embedded =

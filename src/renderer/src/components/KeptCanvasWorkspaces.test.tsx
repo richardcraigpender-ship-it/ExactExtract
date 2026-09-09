@@ -7,6 +7,10 @@ import type { ProjectEntry } from '../../../shared/contracts'
 import type { KeptEntriesCanvasLayout } from '../../../shared/keptEntriesLayout'
 import { KeptPngCanvasWorkspace } from './KeptPngCanvasWorkspace'
 import { KeptTextCanvasWorkspace } from './KeptTextCanvasWorkspace'
+import {
+  createDefaultKeptExportTemplateDraft,
+  toKeptExportTemplate
+} from './keptExportTemplateDraft'
 
 void React
 
@@ -75,19 +79,38 @@ function renderPng(): string {
       onClose={() => {}}
       onExport={() => {}}
       onOpenConfiguration={() => {}}
+      onOpenPngConfiguration={() => {}}
+      onOpenTextConfiguration={() => {}}
+      onSwitchMode={() => {}}
     />
   )
 }
 
 function renderText(): string {
+  const draft = createDefaultKeptExportTemplateDraft()
+  draft.pageOneTemplate.defaultTextStyle = {
+    fontRef: { kind: 'standard-14', family: 'Times-Roman' },
+    fontSize: 16,
+    color: '#336699',
+    fontWeight: 'bold',
+    fontStyle: 'italic'
+  }
+  draft.pageOneTemplate.columns = draft.pageOneTemplate.columns.map((column) => ({
+    ...column,
+    textStyle: { ...draft.pageOneTemplate.defaultTextStyle }
+  }))
   return renderToStaticMarkup(
     <KeptTextCanvasWorkspace
       entries={[entry('first')]}
       layout={layout}
+      keptExportTemplate={toKeptExportTemplate(draft)}
       onLayoutChange={() => {}}
       onClose={() => {}}
       onExport={() => {}}
       onOpenConfiguration={() => {}}
+      onOpenTextConfiguration={() => {}}
+      onOpenPngConfiguration={() => {}}
+      onSwitchMode={() => {}}
     />
   )
 }
@@ -95,66 +118,99 @@ function renderText(): string {
 test('neither previewer offers layer-focus controls', () => {
   for (const markup of [renderPng(), renderText()]) {
     assert.doesNotMatch(markup, /Canvas layer focus/)
-    assert.doesNotMatch(markup, /PNG layer<\/button>/)
-    assert.doesNotMatch(markup, /Text layer<\/button>/)
-    assert.doesNotMatch(markup, /All layers<\/button>/)
     assert.doesNotMatch(markup, /data-layer-active/)
   }
 })
 
-test('the PNG previewer renders images and omits the text layer entirely', () => {
+test('the right-hand entries list panel is removed from both modes', () => {
+  for (const markup of [renderPng(), renderText()]) {
+    assert.doesNotMatch(markup, /kept-entries-preview-entries/)
+    assert.doesNotMatch(markup, /Kept entries list/)
+    assert.doesNotMatch(markup, /PLACED IMAGES/)
+    assert.doesNotMatch(markup, /kept-png-placement-item/)
+  }
+})
+
+test('the PNG mode renders images on the canvas and omits the text layer entirely', () => {
   const markup = renderPng()
 
-  assert.match(markup, /Kept PNG layout preview/)
+  assert.match(markup, /Canvas &amp; layout studio/)
   assert.match(markup, /data-image-placement-id="image-1"/)
   assert.doesNotMatch(markup, /data-placement-id="text-1"/)
   assert.doesNotMatch(markup, /Northwind Services/)
 })
 
-test('the text previewer renders text boxes and omits the image layer entirely', () => {
+test('the text mode renders text boxes on the canvas and omits the image layer entirely', () => {
   const markup = renderText()
 
-  assert.match(markup, /Kept text layout preview/)
+  assert.match(markup, /Canvas &amp; layout studio/)
   assert.match(markup, /data-placement-id="text-1"/)
+  assert.match(markup, /color:#336699/)
+  assert.match(markup, /font-family:&quot;Times New Roman&quot;, Times, serif/)
+  assert.match(markup, /font-size:16px/)
+  assert.match(markup, /font-style:italic/)
+  assert.match(markup, /font-weight:700/)
   assert.doesNotMatch(markup, /data-image-placement-id/)
 })
 
-test('each previewer carries only the tools its layer can use', () => {
-  const png = renderPng()
-  const text = renderText()
-
-  assert.match(png, /Refresh PNG snapshots/)
-  assert.doesNotMatch(png, /Change all entries/)
-
-  assert.doesNotMatch(text, /Refresh PNG snapshots/)
-})
-
-test('both previewers share the same pager, zoom, and background base', () => {
+test('both modes expose the sidebar toolbar including the place tab', () => {
   for (const markup of [renderPng(), renderText()]) {
-    assert.match(markup, /aria-label="Canvas pages"/)
-    assert.match(markup, /aria-label="Canvas zoom"/)
-    assert.match(markup, /Page 1 of 1/)
-    assert.match(markup, />70%</)
-    assert.match(markup, /CANVAS BACKGROUND/)
-    assert.match(markup, /Delete selected/)
+    assert.match(markup, /role="toolbar" aria-label="Preview tools"/)
+    assert.match(markup, />Setup<\/span>/)
+    assert.match(markup, />Pages<\/span>/)
+    assert.match(markup, />Zoom<\/span>/)
+    assert.match(markup, />Place<\/span>/)
+    assert.match(markup, />Background<\/span>/)
+    assert.match(markup, /aria-label="Setup options"/)
   }
 })
 
-test('each previewer exposes a configuration button and keeps tool controls to the left', () => {
-  const png = renderPng()
-  const text = renderText()
-
-  assert.match(png, /Configure PNG layout/)
-  assert.match(text, /Configure text export/)
-
-  assert.ok(png.indexOf('kept-entries-preview-context') < png.indexOf('kept-entries-preview-entries'))
-  assert.ok(text.indexOf('kept-entries-preview-context') < text.indexOf('kept-entries-preview-entries'))
-})
-
-test('delete stays disabled until something on the owned layer is selected', () => {
+test('the place tab is available for placing and locating entries', () => {
   for (const markup of [renderPng(), renderText()]) {
-    const index = markup.indexOf('Delete selected')
+    const index = markup.indexOf('>Place</span>')
     const start = markup.lastIndexOf('<button', index)
-    assert.match(markup.slice(start, index), /disabled=""/)
+    assert.match(markup.slice(start, index), /aria-pressed="false"/)
   }
+})
+
+test('both previewers share one studio window with an in-place mode switch', () => {
+  const png = renderPng()
+  const text = renderText()
+
+  for (const markup of [png, text]) {
+    assert.match(markup, /aria-label="Canvas mode"/)
+    assert.match(markup, /Formatted Text Statement/)
+    assert.match(markup, /PNG Snippet Board/)
+  }
+
+  assert.match(
+    png,
+    /<button type="button" class="mode-button is-active" aria-pressed="true" disabled="">PNG Snippet Board<\/button>/
+  )
+  assert.match(
+    text,
+    /<button type="button" class="mode-button is-active" aria-pressed="true" disabled="">Formatted Text Statement<\/button>/
+  )
+})
+
+test('the studio window has no duplicate configuration buttons', () => {
+  const png = renderPng()
+  const text = renderText()
+
+  assert.match(png, /Configure PNG Snippet Board/)
+  assert.doesNotMatch(png, /Configure Formatted Text Statement/)
+  assert.match(text, /Configure Formatted Text Statement/)
+  assert.doesNotMatch(text, /Configure PNG Snippet Board/)
+})
+
+test('each mode keeps the tool sidebar to the left of the canvas', () => {
+  const png = renderPng()
+  const text = renderText()
+
+  assert.ok(
+    png.indexOf('kept-entries-preview-context') < png.indexOf('kept-entries-preview-canvas')
+  )
+  assert.ok(
+    text.indexOf('kept-entries-preview-context') < text.indexOf('kept-entries-preview-canvas')
+  )
 })

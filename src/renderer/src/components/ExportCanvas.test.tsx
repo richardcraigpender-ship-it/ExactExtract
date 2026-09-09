@@ -27,7 +27,7 @@ const layout: KeptEntriesCanvasLayout = {
   pageSize: 'letter',
   orientation: 'portrait',
   background: {
-    dataUrl: 'data:image/png;base64,preview',
+    ref: `${'a'.repeat(64)}.png`,
     x: 0,
     y: 0,
     width: 612,
@@ -69,6 +69,67 @@ test('renders a layered responsive page from PDF-point placement data', () => {
   assert.match(markup, /font-weight:700/)
   assert.match(markup, /rotate\(2deg\)/)
   assert.ok(markup.indexOf('export-canvas-background') < markup.indexOf('export-canvas-content'))
+})
+
+test('renders the template render plan instead of static placements when provided', () => {
+  const templatePage = {
+    pageNumber: 1,
+    template: {
+      pageSize: 'letter',
+      orientation: 'portrait',
+      layoutMode: 'table-row',
+      entriesPerPage: 20,
+      defaultTextStyle: {
+        fontRef: { kind: 'standard-14', family: 'Helvetica' },
+        fontSize: 10,
+        color: '#112233',
+        fontWeight: 'normal',
+        fontStyle: 'normal'
+      },
+      columns: []
+    },
+    placements: [
+      {
+        entryId: 'entry-1',
+        columnId: 'payee',
+        pageNumber: 1,
+        text: 'TEMPLATE PAYEE ROW',
+        x: 48,
+        y: 100,
+        width: 200,
+        height: 12,
+        style: {
+          fontRef: { kind: 'standard-14', family: 'Helvetica' },
+          fontSize: 10,
+          color: '#112233',
+          fontWeight: 'bold',
+          fontStyle: 'normal'
+        }
+      }
+    ],
+    dividers: [
+      {
+        entryId: 'entry-1',
+        pageNumber: 1,
+        startX: 40,
+        endX: 300,
+        y: 120,
+        thickness: 2,
+        color: '#336699',
+        opacity: 0.5
+      }
+    ]
+  } as never
+
+  const markup = renderToStaticMarkup(<ExportCanvas layout={layout} templatePage={templatePage} />)
+
+  assert.match(markup, /TEMPLATE PAYEE ROW/)
+  assert.match(markup, /data-column-id="payee"/)
+  assert.match(markup, /color:#112233/)
+  assert.match(markup, /export-canvas-image-divider/)
+  assert.match(markup, /border-top:2px solid #336699/)
+  assert.doesNotMatch(markup, /data-placement-id="placement-1"/)
+  assert.doesNotMatch(markup, /Invoice total 120\.00/)
 })
 
 test('uses landscape dimensions and renders system-font free text', () => {

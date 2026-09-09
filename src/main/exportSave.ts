@@ -1,14 +1,6 @@
 import { basename, extname } from 'path'
 
-export type ExportFormat =
-  | 'csv'
-  | 'json'
-  | 'pdf'
-  | 'pdf-layout'
-  | 'pdf-compact'
-  | 'pdf-kept'
-  | 'pdf-kept-layout'
-  | 'pdf-kept-canvas'
+export type ExportFormat = 'csv' | 'json' | 'pdf' | 'pdf-kept-canvas'
 
 export interface ExportSaveRequest {
   format: ExportFormat
@@ -44,10 +36,6 @@ export function validateExportRequest(value: unknown): ExportSaveRequest {
     request.format !== 'csv' &&
     request.format !== 'json' &&
     request.format !== 'pdf' &&
-    request.format !== 'pdf-layout' &&
-    request.format !== 'pdf-compact' &&
-    request.format !== 'pdf-kept' &&
-    request.format !== 'pdf-kept-layout' &&
     request.format !== 'pdf-kept-canvas'
   ) {
     throw new Error('Export format must be csv, json, or pdf.')

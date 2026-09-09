@@ -27,7 +27,7 @@ export function CanvasPagerControls({
         Previous
       </button>
       <span role="status">
-        {currentPage}/{pageCount}
+        Page {currentPage} of {pageCount}
       </span>
       <button
         className="secondary-button tool-button"

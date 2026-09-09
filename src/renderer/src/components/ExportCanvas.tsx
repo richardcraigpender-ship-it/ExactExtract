@@ -12,6 +12,7 @@ import { useCanvasDrag } from '../hooks/useCanvasDrag'
 import { resolveBackgroundUrl } from '../lib/canvasBackgroundStorage'
 import { getCanvasDropPoint, KEPT_ENTRY_DRAG_TYPE } from '../lib/canvasDrop'
 import { getCanvasPageDimensions } from '../lib/canvasScale'
+import type { KeptExportPage, KeptExportTextStyle } from '../../../shared/keptExportTemplate'
 import './ExportCanvas.css'
 
 interface ExportCanvasProps {
@@ -21,6 +22,9 @@ interface ExportCanvasProps {
   /** Each previewer owns one layer, so the other is omitted rather than dimmed. */
   showText?: boolean
   showImages?: boolean
+  textStyleOverride?: KeptExportTextStyle
+  /** When provided (template mode), text renders from the template plan instead of layout.placements. */
+  templatePage?: KeptExportPage
   selectedPlacementId?: string | null
   onSelectPlacement?: (placementId: string) => void
   onPlacementChange?: (placement: KeptEntryPlacement) => void
@@ -49,26 +53,30 @@ function fontFamily(fontRef: KeptEntriesFontRef): string {
 function placementStyle(
   placement: KeptEntryPlacement,
   pageWidth: number,
-  pageHeight: number
+  pageHeight: number,
+  textStyleOverride?: KeptExportTextStyle
 ): React.CSSProperties {
+  const fontRef = textStyleOverride?.fontRef ?? placement.fontRef
+  const fontStyle = textStyleOverride?.fontStyle
+  const fontWeight = textStyleOverride?.fontWeight
   return {
     left: asPercent(placement.x, pageWidth),
     top: asPercent(placement.y, pageHeight),
     width: asPercent(placement.width, pageWidth),
     height: asPercent(placement.height, pageHeight),
-    color: placement.color,
-    fontFamily: fontFamily(placement.fontRef),
-    fontSize: `${placement.fontSize}px`,
+    color: textStyleOverride?.color ?? placement.color,
+    fontFamily: fontFamily(fontRef),
+    fontSize: `${textStyleOverride?.fontSize ?? placement.fontSize}px`,
     fontStyle:
-      placement.fontRef.kind === 'system' &&
-      placement.fontRef.style?.toLowerCase().includes('italic')
+      fontStyle === 'italic' ||
+      (fontRef.kind === 'system' && fontRef.style?.toLowerCase().includes('italic'))
         ? 'italic'
         : undefined,
     fontWeight:
-      placement.fontRef.kind === 'standard-14' && placement.fontRef.family === 'Helvetica-Bold'
+      fontWeight === 'bold' ||
+      (fontRef.kind === 'standard-14' && fontRef.family === 'Helvetica-Bold')
         ? 700
-        : placement.fontRef.kind === 'system' &&
-            placement.fontRef.style?.toLowerCase().includes('bold')
+        : fontRef.kind === 'system' && fontRef.style?.toLowerCase().includes('bold')
           ? 700
           : undefined,
     transform: `rotate(${placement.rotation}deg)`
@@ -97,6 +105,8 @@ export function ExportCanvas({
   zoom = 1,
   showText = true,
   showImages = true,
+  textStyleOverride,
+  templatePage,
   selectedPlacementId = null,
   onSelectPlacement,
   onPlacementChange,
@@ -125,6 +135,9 @@ export function ExportCanvas({
   const visiblePlacements = showText
     ? layout.placements.filter((placement) => (placement.pageNumber ?? 1) === pageNumber)
     : []
+  const templatePlacements = templatePage?.placements ?? []
+  const templateDividers = templatePage?.dividers ?? []
+  const useTemplateTextLayer = Boolean(templatePage)
   const visibleImages = showImages
     ? (layout.images ?? []).filter((placement) => placement.pageNumber === pageNumber)
     : []
@@ -197,7 +210,7 @@ export function ExportCanvas({
             onPointerUp={onBackgroundChange ? backgroundDrag.endDrag : undefined}
             onPointerCancel={onBackgroundChange ? backgroundDrag.endDrag : undefined}
           >
-            <img src={resolveBackgroundUrl(layout.background)} alt="" />
+            <img src={resolveBackgroundUrl(layout.background) ?? undefined} alt="" />
             {onBackgroundChange && (
               <span
                 className="export-canvas-resize-handle"
@@ -317,60 +330,102 @@ export function ExportCanvas({
               </React.Fragment>
             )
           })}
-          {visiblePlacements.map((placement) => (
-            <div
-              className={`export-canvas-placement ${
-                selectedPlacementId === placement.id ? 'is-selected' : ''
-              }`}
-              data-entry-id={placement.entryId}
-              data-placement-id={placement.id}
-              key={placement.id}
-              role={interactive ? 'group' : undefined}
-              aria-label={
-                interactive
-                  ? `${selectedPlacementId === placement.id ? 'Selected. ' : ''}Move text box: ${placement.text}`
-                  : undefined
-              }
-              tabIndex={interactive ? 0 : undefined}
-              style={placementStyle(placement, dimensions.width, dimensions.height)}
-              onClick={interactive ? () => onSelectPlacement?.(placement.id) : undefined}
-              onKeyDown={
-                interactive
-                  ? (event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault()
-                        onSelectPlacement?.(placement.id)
+          {templatePage &&
+            templateDividers.map((divider) => (
+              <span
+                key={`divider-${divider.entryId}-${divider.pageNumber}-${divider.y}`}
+                className="export-canvas-image-divider"
+                aria-hidden="true"
+                style={{
+                  left: asPercent(divider.startX, dimensions.width),
+                  top: asPercent(divider.y, dimensions.height),
+                  width: asPercent(Math.max(0, divider.endX - divider.startX), dimensions.width),
+                  borderTop: `${divider.thickness}px solid ${divider.color}`,
+                  opacity: divider.opacity
+                }}
+              />
+            ))}
+          {templatePage &&
+            templatePlacements.map((placement) => (
+              <div
+                key={`${placement.entryId}-${placement.columnId}`}
+                className="export-canvas-placement"
+                data-entry-id={placement.entryId}
+                data-column-id={placement.columnId}
+                style={{
+                  left: asPercent(placement.x, dimensions.width),
+                  top: asPercent(placement.y, dimensions.height),
+                  width: asPercent(placement.width, dimensions.width),
+                  color: placement.style.color,
+                  fontFamily: fontFamily(placement.style.fontRef),
+                  fontSize: `${placement.style.fontSize}px`,
+                  fontStyle: placement.style.fontStyle === 'italic' ? 'italic' : undefined,
+                  fontWeight: placement.style.fontWeight === 'bold' ? 700 : undefined
+                }}
+              >
+                {placement.text}
+              </div>
+            ))}
+          {!useTemplateTextLayer &&
+            visiblePlacements.map((placement) => (
+              <div
+                className={`export-canvas-placement ${
+                  selectedPlacementId === placement.id ? 'is-selected' : ''
+                }`}
+                data-entry-id={placement.entryId}
+                data-placement-id={placement.id}
+                key={placement.id}
+                role={interactive ? 'group' : undefined}
+                aria-label={
+                  interactive
+                    ? `${selectedPlacementId === placement.id ? 'Selected. ' : ''}Move text box: ${placement.text}`
+                    : undefined
+                }
+                tabIndex={interactive ? 0 : undefined}
+                style={placementStyle(
+                  placement,
+                  dimensions.width,
+                  dimensions.height,
+                  textStyleOverride
+                )}
+                onClick={interactive ? () => onSelectPlacement?.(placement.id) : undefined}
+                onKeyDown={
+                  interactive
+                    ? (event) => {
+                        if (event.key === 'Enter' || event.key === ' ') {
+                          event.preventDefault()
+                          onSelectPlacement?.(placement.id)
+                        }
                       }
-                    }
-                  : undefined
-              }
-              onPointerDown={
-                interactive
-                  ? (event) => {
-                      onSelectPlacement?.(placement.id)
-                      drag.beginDrag(event, placement, 'move')
-                    }
-                  : undefined
-              }
-              onPointerMove={interactive ? drag.continueDrag : undefined}
-              onPointerUp={interactive ? drag.endDrag : undefined}
-              onPointerCancel={interactive ? drag.endDrag : undefined}
-            >
-              {placement.text}
-              {interactive && selectedPlacementId === placement.id && (
-                <span
-                  className="export-canvas-resize-handle"
-                  role="button"
-                  aria-label={`Resize text box: ${placement.text}`}
-                  tabIndex={0}
-                  onPointerDown={(event) => drag.beginDrag(event, placement, 'resize')}
-                  onPointerMove={drag.continueDrag}
-                  onPointerUp={drag.endDrag}
-                  onPointerCancel={drag.endDrag}
-                />
-              )}
-            </div>
-          ))}
+                    : undefined
+                }
+                onPointerDown={
+                  interactive
+                    ? (event) => {
+                        onSelectPlacement?.(placement.id)
+                        drag.beginDrag(event, placement, 'move')
+                      }
+                    : undefined
+                }
+                onPointerMove={interactive ? drag.continueDrag : undefined}
+                onPointerUp={interactive ? drag.endDrag : undefined}
+                onPointerCancel={interactive ? drag.endDrag : undefined}
+              >
+                {placement.text}
+                {interactive && selectedPlacementId === placement.id && (
+                  <span
+                    className="export-canvas-resize-handle"
+                    role="button"
+                    aria-label={`Resize text box: ${placement.text}`}
+                    tabIndex={0}
+                    onPointerDown={(event) => drag.beginDrag(event, placement, 'resize')}
+                    onPointerMove={drag.continueDrag}
+                    onPointerUp={drag.endDrag}
+                    onPointerCancel={drag.endDrag}
+                  />
+                )}
+              </div>
+            ))}
         </div>
       </div>
     </div>

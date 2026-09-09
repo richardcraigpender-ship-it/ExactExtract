@@ -15,12 +15,33 @@ const LABEL_SCALE = 6
 
 export function renderTextLabelPng(
   text: string,
-  options: { fontSize: number; color: string }
+  options: {
+    fontSize: number
+    color: string
+    fontFamily?: string
+    fontWeight?: string
+    backgroundColor?: string
+  }
 ): TextLabelImage | undefined {
+  if (typeof document === 'undefined' || typeof document.createElement !== 'function') {
+    return undefined
+  }
   const trimmed = text.trim()
   if (!trimmed) return undefined
   const fontSize = Math.max(6, options.fontSize)
-  const font = `600 ${fontSize}px Helvetica, Arial, sans-serif`
+
+  const rawWeight = (options.fontWeight ?? '600').toLowerCase()
+  const weight =
+    rawWeight === 'bold' || rawWeight === '700'
+      ? '700'
+      : rawWeight === 'regular' || rawWeight === 'normal' || rawWeight === '400'
+        ? '400'
+        : '600'
+
+  const family = options.fontFamily?.trim() || 'Helvetica'
+  const fontStack = family.includes(',') ? family : `"${family.replaceAll('"', '\\"')}", sans-serif`
+
+  const font = `${weight} ${fontSize}px ${fontStack}`
 
   const measuringCanvas = document.createElement('canvas')
   const measuringContext = measuringCanvas.getContext('2d')
@@ -39,9 +60,13 @@ export function renderTextLabelPng(
   context.imageSmoothingEnabled = true
   context.imageSmoothingQuality = 'high'
   context.scale(LABEL_SCALE, LABEL_SCALE)
-  // A solid page-white background keeps the label visually consistent with the surrounding crops.
-  context.fillStyle = '#ffffff'
-  context.fillRect(0, 0, width, height)
+
+  const bgColor = options.backgroundColor?.trim().toLowerCase()
+  if (bgColor && bgColor !== 'transparent' && bgColor !== 'none') {
+    context.fillStyle = options.backgroundColor!
+    context.fillRect(0, 0, width, height)
+  }
+
   context.font = font
   context.fillStyle = options.color
   context.textBaseline = 'middle'

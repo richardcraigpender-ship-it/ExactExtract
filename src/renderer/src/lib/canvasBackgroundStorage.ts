@@ -4,15 +4,12 @@ import { getProjectImageUrl, isProjectImageRef } from '../../../shared/projectIm
 
 const DATA_URL_PATTERN = /^data:(image\/(?:png|jpeg|jpg|webp));base64,(.+)$/i
 
-/** Display source for a background, preferring managed storage over legacy inline bytes. */
+/** Display source for a background; managed refs stream over the privileged protocol. */
 export function resolveBackgroundUrl(
   background: KeptEntriesBackground | undefined
 ): string | undefined {
-  if (!background) return undefined
-  if (background.ref && isProjectImageRef(background.ref)) {
-    return getProjectImageUrl(background.ref)
-  }
-  return background.dataUrl
+  if (!background?.ref || !isProjectImageRef(background.ref)) return undefined
+  return getProjectImageUrl(background.ref)
 }
 
 /** Every managed ref a project depends on for backgrounds, so export can resolve bytes once. */
@@ -52,12 +49,15 @@ export async function resolveTemplateBackgroundDataUrls(
   return new Map(Object.entries(await window.studio.projectImages.readDataUrls(refs)))
 }
 
+/** Pre-migration shape: legacy projects on disk may still carry inline bytes. */
+export type LegacyKeptEntriesBackground = KeptEntriesBackground & { dataUrl?: string }
+
 /**
  * Moves a legacy inline background into managed storage. Returns the original when it is already
  * a ref, so callers can detect "nothing changed" by identity.
  */
 export async function migrateLegacyBackground(
-  background: KeptEntriesBackground | undefined
+  background: LegacyKeptEntriesBackground | undefined
 ): Promise<KeptEntriesBackground | undefined> {
   if (!background?.dataUrl || background.ref) return background
   const { dataUrl, ...geometry } = background

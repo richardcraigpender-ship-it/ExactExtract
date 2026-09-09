@@ -4,7 +4,7 @@ import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
 import type { KeptImageSourceDescriptor } from '../../../export'
-import { KeptImagePlacementSection } from './KeptImagePlacementSection'
+import { KeptImagePlacementSection, sampleDocumentTextStyle } from './KeptImagePlacementSection'
 
 void React
 
@@ -194,7 +194,10 @@ test('enables balance-column fields when the toggle is on', () => {
           offsetX: 8,
           offsetY: 4,
           fontSize: 12,
-          color: '#336699'
+          color: '#336699',
+          fontFamily: 'Consolas',
+          fontWeight: '700',
+          backgroundColor: '#fcfbfa'
         }
       }}
     />
@@ -202,6 +205,54 @@ test('enables balance-column fields when the toggle is on', () => {
 
   assert.match(markup, /value="#336699"/)
   assert.match(markup, /value="12"/)
+  assert.match(markup, /Consolas \(Monospace \/ Receipt\)/)
+  assert.match(markup, /Bold \(700\)/)
+  assert.match(markup, /Document cream \(#fcfbfa\)/)
+  assert.match(markup, /Match source document style/)
+})
+
+test('samples document text style from source document style profile', () => {
+  const documents = [
+    {
+      styleProfile: {
+        id: 'sp1',
+        documentId: 'doc1',
+        generatedAt: '2026-09-08',
+        detectorVersion: 1 as const,
+        source: 'digital' as const,
+        confidence: 'high' as const,
+        textStyles: [
+          {
+            id: 'ts1',
+            fontFamily: 'Courier',
+            fontSize: 9.5,
+            fontWeight: 'bold' as const,
+            italic: false,
+            underline: false,
+            colour: { hex: '#222222', name: 'Dark Gray' },
+            role: 'body' as const,
+            likelyRole: 'body' as const,
+            occurrenceCount: 10,
+            characterCount: 500,
+            pageNumbers: [1],
+            sampleText: ['sample']
+          }
+        ],
+        dividerStyles: [],
+        colourPalette: [],
+        pageSummaries: [],
+        warnings: []
+      }
+    }
+  ]
+
+  const sampled = sampleDocumentTextStyle(documents)
+  assert.deepEqual(sampled, {
+    fontFamily: 'Courier New',
+    fontWeight: '700',
+    fontSize: 10,
+    color: '#222222'
+  })
 })
 
 test('offers page-number controls that stay disabled until page numbers are enabled', () => {

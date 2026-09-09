@@ -9,6 +9,41 @@ export interface ProductUpdate {
 
 export const PRODUCT_UPDATES: readonly ProductUpdate[] = [
   {
+    date: '2026-09-09',
+    kind: 'Fixed',
+    title: 'Formatted text live preview parity',
+    summary:
+      'Formatted statement configuration changes now regenerate a PDF-backed live preview from the same renderer used by final export.'
+  },
+  {
+    date: '2026-09-09',
+    kind: 'Changed',
+    title: 'Canvas & layout studio tools',
+    summary:
+      'The live preview sidebar now starts with a tool picker for setup, pages, zoom, placement, selection, and background options.'
+  },
+  {
+    date: '2026-09-09',
+    kind: 'Changed',
+    title: 'Unified text and PNG previews',
+    summary:
+      'Formatted text statements and PNG snippet boards now share one preview window with per-mode configuration buttons.'
+  },
+  {
+    date: '2026-09-09',
+    kind: 'Fixed',
+    title: 'Marks panel entry actions',
+    summary:
+      'The Marks panel can now apply scoped Keep, Maybe, and Exclude decisions to the entries matched by the active highlight scope.'
+  },
+  {
+    date: '2026-09-09',
+    kind: 'Fixed',
+    title: 'Payee reference line spacing',
+    summary:
+      'Formatted PDF references now sit on a distinct line below the payee row with divider clearance that avoids overlap.'
+  },
+  {
     date: '2026-09-01',
     kind: 'Feature',
     title: 'OCR reference re-scan',

@@ -79,7 +79,8 @@ import {
 } from './lib/keptImageResolution'
 import {
   migrateLegacyBackground,
-  resolveTemplateBackgroundDataUrls
+  resolveTemplateBackgroundDataUrls,
+  type LegacyKeptEntriesBackground
 } from './lib/canvasBackgroundStorage'
 import { useDebouncedValue } from './hooks/useDebouncedValue'
 import { useIncrementalReviewFilter } from './hooks/useIncrementalReviewFilter'
@@ -141,15 +142,13 @@ import {
 } from '../../review'
 import {
   buildExportSnapshot,
+  buildKeptExportRenderPlan,
+  buildKeptExportSourceRows,
   exportProjectCsv,
-  exportProjectCompactedSourceLayoutPdf,
   exportProjectJson,
-  exportProjectKeptEntriesPdf,
   exportProjectKeptEntriesCanvasPdf,
   exportProjectKeptEntriesTemplatePdf,
-  exportProjectKeptLayoutPdf,
   exportProjectPdf,
-  exportProjectSourceLayoutPdf,
   withKeptImagePlacements,
   type KeptImagePlan
 } from '../../export'
@@ -878,9 +877,10 @@ function App(): React.JSX.Element {
       resolveHighlightTargets(project?.entries ?? [], {
         scope: highlightScope,
         documentId: activeDocumentId,
-        // Keep-scope edits span the whole document; the other scopes stay on the page in
-        // view so a bulk edit can't silently reach highlights the user cannot see.
-        pageNumber: highlightScope === 'keep' ? undefined : requestedPdfPage,
+        // Keep and checked-entries scopes are already precisely defined without the page in
+        // view, so only 'entry'/'all' stay restricted to the visible page.
+        pageNumber:
+          highlightScope === 'keep' || highlightScope === 'selected' ? undefined : requestedPdfPage,
         selectedEntryId,
         selectedEntryIds: selectedReviewIds
       }),
@@ -914,9 +914,19 @@ function App(): React.JSX.Element {
       setProject((current) => {
         if (!current) return current
         const updatedAt = new Date().toISOString()
+        const currentTargets = resolveHighlightTargets(current.entries, {
+          scope: highlightScope,
+          documentId: activeDocumentId,
+          pageNumber:
+            highlightScope === 'keep' || highlightScope === 'selected'
+              ? undefined
+              : requestedPdfPage,
+          selectedEntryId,
+          selectedEntryIds: selectedReviewIdsRef.current
+        })
         const result = applyHighlightGeometry(
           current.entries,
-          highlightTargets,
+          currentTargets,
           { field, mode, value, unit },
           current.pages,
           updatedAt
@@ -933,7 +943,60 @@ function App(): React.JSX.Element {
         return { ...current, updatedAt, entries: result.entries }
       })
     },
-    [highlightTargets]
+    [activeDocumentId, highlightScope, requestedPdfPage, selectedEntryId]
+  )
+
+  const setHighlightTargetStatus = useCallback(
+    (status: ReviewStatus): void => {
+      setProject((current) => {
+        if (!current) return current
+        const targets = resolveHighlightTargets(current.entries, {
+          scope: highlightScope,
+          documentId: activeDocumentId,
+          pageNumber:
+            highlightScope === 'keep' || highlightScope === 'selected'
+              ? undefined
+              : requestedPdfPage,
+          selectedEntryId,
+          selectedEntryIds: selectedReviewIdsRef.current
+        })
+        const targetEntryIds = new Set(targets.map((target) => target.entryId))
+        const changedIds = current.entries
+          .filter((entry) => targetEntryIds.has(entry.id) && entry.status !== status)
+          .map((entry) => entry.id)
+        if (changedIds.length === 0) {
+          setHighlightResult('No entries were changed.')
+          return current
+        }
+        const updatedAt = new Date().toISOString()
+        undoStackRef.current = [...undoStackRef.current, current.entries]
+        redoStackRef.current = []
+        setHistoryState({ undoCount: undoStackRef.current.length, redoCount: 0 })
+        const changedIdSet = new Set(changedIds)
+        setHighlightResult(
+          `Marked ${changedIds.length} entr${changedIds.length === 1 ? 'y' : 'ies'} as ${status}.`
+        )
+        return {
+          ...current,
+          updatedAt,
+          entries: current.entries.map((entry) =>
+            changedIdSet.has(entry.id) ? { ...entry, status, updatedAt } : entry
+          ),
+          auditTrail: [
+            ...current.auditTrail,
+            {
+              id: crypto.randomUUID(),
+              occurredAt: updatedAt,
+              action: 'bulk-review-status-changed',
+              entityType: 'project',
+              entityId: current.id,
+              details: { status, count: changedIds.length, source: 'marks-panel' }
+            }
+          ]
+        }
+      })
+    },
+    [activeDocumentId, highlightScope, requestedPdfPage, selectedEntryId]
   )
 
   const projectSnapshot = useMemo<ProjectState | null>(() => {
@@ -1185,7 +1248,9 @@ function App(): React.JSX.Element {
   }
 
   const migrateProjectBackgrounds = useCallback(async (loaded: ProjectState): Promise<void> => {
-    const layoutBackground = loaded.keptEntriesLayout?.background
+    // Legacy project files can still carry inline bytes; the runtime type is ref-only.
+    const layoutBackground = loaded.keptEntriesLayout?.background as
+      LegacyKeptEntriesBackground | undefined
     if (layoutBackground?.dataUrl && !layoutBackground.ref) {
       const migrated = await migrateLegacyBackground(layoutBackground)
       if (migrated !== layoutBackground) {
@@ -2366,7 +2431,11 @@ function App(): React.JSX.Element {
   }, [])
 
   const generatePdfExport = useCallback(
-    async (format: PdfExportFormat, template?: KeptExportTemplate): Promise<Uint8Array> => {
+    async (
+      format: PdfExportFormat,
+      template?: KeptExportTemplate,
+      layers?: { text?: boolean; images?: boolean }
+    ): Promise<Uint8Array> => {
       if (!projectSnapshot) throw new Error('Open a project before previewing an export.')
       const loadSourceFiles = async (): Promise<Map<string, Uint8Array>> => {
         const sourceFiles = new Map<string, Uint8Array>()
@@ -2409,47 +2478,38 @@ function App(): React.JSX.Element {
             await resolveTemplateBackgroundDataUrls(template)
           )
         }
+        const currentLayout = keptEntriesLayout
         const [imageDataUrls, sourceFiles] = await Promise.all([
-          resolveKeptImageDataUrls(
-            projectSnapshot,
-            projectSnapshot.keptEntriesLayout,
-            async (path) => {
-              const editedData = editedPdfDataRef.current.get(path)
-              return editedData ?? new Uint8Array(await window.studio.documents.readPdf(path))
-            }
-          ),
+          resolveKeptImageDataUrls(projectSnapshot, currentLayout, async (path) => {
+            const editedData = editedPdfDataRef.current.get(path)
+            return editedData ?? new Uint8Array(await window.studio.documents.readPdf(path))
+          }),
           loadSourceFiles()
         ])
-        return exportProjectKeptEntriesCanvasPdf(
-          projectSnapshot,
-          projectSnapshot.keptEntriesLayout,
-          { imageDataUrls, sourceFiles }
-        )
+        return exportProjectKeptEntriesCanvasPdf(projectSnapshot, currentLayout, {
+          imageDataUrls,
+          sourceFiles,
+          layers
+        })
       }
-      const sourceFiles = await loadSourceFiles()
-      if (format === 'pdf-layout') return exportProjectSourceLayoutPdf(projectSnapshot, sourceFiles)
-      if (format === 'pdf-compact') {
-        return exportProjectCompactedSourceLayoutPdf(projectSnapshot, sourceFiles)
-      }
-      if (format === 'pdf-kept') return exportProjectKeptEntriesPdf(projectSnapshot, sourceFiles)
-      return exportProjectKeptLayoutPdf(projectSnapshot, sourceFiles)
+      throw new Error(`Unsupported preview format: ${format}`)
     },
-    [analysisSnapshot, keptExportTemplate, projectSnapshot]
+    [analysisSnapshot, keptEntriesLayout, keptExportTemplate, projectSnapshot]
   )
+
+  const keptTextRenderPlan = useMemo(() => {
+    if (!projectSnapshot || !keptExportTemplate) return undefined
+    return buildKeptExportRenderPlan(
+      buildKeptExportSourceRows(projectSnapshot, keptExportTemplate),
+      keptExportTemplate
+    )
+  }, [projectSnapshot, keptExportTemplate])
 
   const saveExport = useCallback(
     async (
-      format:
-        | 'csv'
-        | 'json'
-        | 'pdf'
-        | 'pdf-layout'
-        | 'pdf-compact'
-        | 'pdf-kept'
-        | 'pdf-kept-layout'
-        | 'pdf-kept-canvas'
-        | 'entry-images',
-      template?: KeptExportTemplate
+      format: 'csv' | 'json' | 'pdf' | 'pdf-kept-canvas' | 'entry-images',
+      template?: KeptExportTemplate,
+      layers?: { text?: boolean; images?: boolean }
     ): Promise<void> => {
       if (!projectSnapshot) return
       setExportState({ isSaving: true, status: `Preparing ${format.toUpperCase()}...` })
@@ -2477,7 +2537,7 @@ function App(): React.JSX.Element {
         else if (format === 'json') {
           content = exportProjectJson(projectSnapshot, { includeExcluded: true })
         } else {
-          const bytes = await generatePdfExport(format, template)
+          const bytes = await generatePdfExport(format, template, layers)
           let binary = ''
           for (let offset = 0; offset < bytes.length; offset += 32768) {
             binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768))
@@ -2879,8 +2939,11 @@ function App(): React.JSX.Element {
   }, [sourcePageEntries])
 
   const selectAllFilteredEntries = useCallback(() => {
-    setSelectedReviewIds(new Set(filteredEntries.map((entry) => entry.id)))
-  }, [filteredEntries])
+    // Without View all or a search query, only the entries on screen should be checked;
+    // otherwise every entry matching the current filters and search bar is checked.
+    const targets = viewAllReviewEntries || hasSearchQuery ? filteredEntries : pagedEntries
+    setSelectedReviewIds(new Set(targets.map((entry) => entry.id)))
+  }, [filteredEntries, hasSearchQuery, pagedEntries, viewAllReviewEntries])
 
   const clearReviewSelection = useCallback(() => {
     setSelectedReviewIds(new Set())
@@ -2959,12 +3022,10 @@ function App(): React.JSX.Element {
     [saveExport]
   )
 
-  const handleTemplatePreview = useCallback(
-    (template: KeptExportTemplate) => {
-      return generatePdfExport('pdf-kept-canvas', template)
-    },
-    [generatePdfExport]
-  )
+  const handleTemplatePreview = useCallback((template: KeptExportTemplate) => {
+    setKeptExportTemplate(template)
+    setShowKeptCanvas('text')
+  }, [])
 
   const handleRemovePagesAction = useCallback(
     (pages: number[]) => {
@@ -3124,7 +3185,10 @@ function App(): React.JSX.Element {
             <button
               className="secondary-button"
               type="button"
-              disabled={filteredEntries.length === 0}
+              disabled={
+                (viewAllReviewEntries || hasSearchQuery ? filteredEntries : pagedEntries).length ===
+                0
+              }
               onClick={selectAllFilteredEntries}
             >
               All results
@@ -3225,6 +3289,7 @@ function App(): React.JSX.Element {
       historyState.redoCount,
       historyState.undoCount,
       mergeSelectedReviewEntries,
+      pagedEntries,
       redoReview,
       reviewCategories,
       reviewCategory,
@@ -3242,7 +3307,8 @@ function App(): React.JSX.Element {
       setBulkEntryStatus,
       sourcePageEntries,
       splitSelectedReviewEntry,
-      undoReview
+      undoReview,
+      viewAllReviewEntries
     ]
   )
 
@@ -3252,6 +3318,7 @@ function App(): React.JSX.Element {
         <KeptPngCanvasWorkspace
           entries={projectSnapshot.entries}
           layout={keptEntriesLayout}
+          keptExportTemplate={keptExportTemplate}
           isExporting={exportState.isSaving}
           resolveImageSource={resolveCanvasImageSource}
           imageResolutionError={sessionImageError ?? undefined}
@@ -3270,7 +3337,16 @@ function App(): React.JSX.Element {
             setShowKeptCanvas(null)
             setOpenKeptConfig('png')
           }}
-          onExport={() => void saveExport('pdf-kept-canvas')}
+          onOpenPngConfiguration={() => {
+            setShowKeptCanvas(null)
+            setOpenKeptConfig('png')
+          }}
+          onOpenTextConfiguration={() => {
+            setShowKeptCanvas(null)
+            setOpenKeptConfig('text')
+          }}
+          onSwitchMode={() => setShowKeptCanvas('text')}
+          onExport={() => void saveExport('pdf-kept-canvas', undefined, { text: false })}
           onReset={() =>
             setKeptEntriesLayout(createDefaultKeptEntriesLayout(projectSnapshot.entries))
           }
@@ -3280,6 +3356,8 @@ function App(): React.JSX.Element {
         <KeptTextCanvasWorkspace
           entries={projectSnapshot.entries}
           layout={keptEntriesLayout}
+          keptExportTemplate={keptExportTemplate}
+          textRenderPlan={keptTextRenderPlan}
           isExporting={exportState.isSaving}
           onLayoutChange={setKeptEntriesLayout}
           onClose={() => setShowKeptCanvas(null)}
@@ -3287,7 +3365,19 @@ function App(): React.JSX.Element {
             setShowKeptCanvas(null)
             setOpenKeptConfig('text')
           }}
-          onExport={() => void saveExport('pdf-kept-canvas')}
+          onOpenTextConfiguration={() => {
+            setShowKeptCanvas(null)
+            setOpenKeptConfig('text')
+          }}
+          onOpenPngConfiguration={() => {
+            setShowKeptCanvas(null)
+            setOpenKeptConfig('png')
+          }}
+          onSwitchMode={() => setShowKeptCanvas('png')}
+          onExport={() => {
+            const draftTemplate = keptExportTemplate ?? toKeptExportTemplate(createKeptExportTemplateDraft())
+            void saveExport('pdf-kept-canvas', draftTemplate)
+          }}
           onReset={() =>
             setKeptEntriesLayout(createDefaultKeptEntriesLayout(projectSnapshot.entries))
           }
@@ -4355,7 +4445,7 @@ function App(): React.JSX.Element {
                       onSelectEntry={focusEntryInReview}
                       keptEntries={projectSnapshot.entries}
                       onTemplateExport={handleTemplateExport}
-                      onTemplatePreview={handleTemplatePreview}
+                      onOpenKeptTemplateCanvas={handleTemplatePreview}
                       keptExportTemplate={keptExportTemplate}
                       onTemplateApply={setKeptExportTemplate}
                       currencySymbol={currencySymbol(currencyCode)}
@@ -4443,12 +4533,14 @@ function App(): React.JSX.Element {
                       styleMode={highlightStyleMode}
                       scope={highlightScope}
                       affectedCount={highlightTargets.length}
+                      checkedCount={selectedReviewIds.size}
                       measurements={highlightMeasurements}
                       lastResult={highlightResult}
                       onChangeVisible={setHighlightsVisible}
                       onChangeEditMode={setHighlightEditMode}
                       onChangeStyleMode={setHighlightStyleMode}
                       onChangeScope={setHighlightScope}
+                      onSetStatus={setHighlightTargetStatus}
                       onApply={applyHighlightEdit}
                     />
                   )

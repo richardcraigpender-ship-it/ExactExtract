@@ -30,7 +30,7 @@ export function CanvasBackgroundControls({
   const inputRef = useRef<HTMLInputElement>(null)
   const [lockAspectRatio, setLockAspectRatio] = useState(true)
   const [storeError, setStoreError] = useState<string | null>(null)
-  const previewUrl = resolveBackgroundUrl(background)
+  const previewUrl = background ? resolveBackgroundUrl(background) : undefined
 
   const selectImage = (): void => {
     inputRef.current?.click()

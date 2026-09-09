@@ -1,16 +1,8 @@
 export { exportProjectCsv } from './csv'
-export { buildCompactSourceRows, prepareCompactSourceRows } from './compact'
-export type { CompactSourceRow, CompactSourceRowContract } from './compact'
 export { exportProjectJson } from './json'
 export { buildEntryImageCrops } from './entryImages'
 export type { EntryImageCrop } from './entryImages'
-export {
-  exportProjectCompactedSourceLayoutPdf,
-  exportProjectKeptEntriesPdf,
-  exportProjectKeptLayoutPdf,
-  exportProjectPdf,
-  exportProjectSourceLayoutPdf
-} from './pdf'
+export { exportProjectPdf } from './pdf'
 export { exportProjectKeptEntriesCanvasPdf } from './keptEntriesCanvas'
 export { buildKeptExportRenderPlan } from './keptExportLayout'
 export {
@@ -25,7 +17,10 @@ export type {
   KeptImagePlanWarningCode,
   KeptImageSourceDescriptor
 } from './keptImageLayout'
-export { exportProjectKeptEntriesTemplatePdf } from './keptExportTemplatePdf'
+export {
+  buildKeptExportSourceRows,
+  exportProjectKeptEntriesTemplatePdf
+} from './keptExportTemplatePdf'
 export { buildRunningBalanceValues } from './runningBalance'
 export type { RunningBalanceInputRow, RunningBalanceResult } from './runningBalance'
 export {

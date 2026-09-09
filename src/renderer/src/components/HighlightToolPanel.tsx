@@ -1,5 +1,6 @@
 import React, { useState } from 'react'
 
+import type { ReviewStatus } from '../../../shared/contracts'
 import {
   describeHighlightScope,
   type HighlightGeometryField,
@@ -20,7 +21,7 @@ const FIELDS: { id: HighlightGeometryField; label: string }[] = [
 
 const SCOPES: { id: HighlightScope; label: string }[] = [
   { id: 'entry', label: 'Selected entry' },
-  { id: 'selected', label: 'Checked entries' },
+  { id: 'selected', label: 'Checked entries (review queue)' },
   { id: 'keep', label: 'All keep entries' },
   { id: 'all', label: 'All on page' }
 ]
@@ -31,12 +32,15 @@ export interface HighlightToolPanelProps {
   styleMode: HighlightStyleMode
   scope: HighlightScope
   affectedCount: number
+  /** How many entries are currently checked in the review queue, regardless of scope. */
+  checkedCount?: number
   measurements?: HighlightMeasurement | null
   lastResult?: string | null
   onChangeVisible: (visible: boolean) => void
   onChangeEditMode: (editMode: boolean) => void
   onChangeStyleMode: (styleMode: HighlightStyleMode) => void
   onChangeScope: (scope: HighlightScope) => void
+  onSetStatus?: (status: ReviewStatus) => void
   onApply: (
     field: HighlightGeometryField,
     mode: 'absolute' | 'delta',
@@ -57,12 +61,14 @@ export function HighlightToolPanel({
   styleMode,
   scope,
   affectedCount,
+  checkedCount = 0,
   measurements,
   lastResult,
   onChangeVisible,
   onChangeEditMode,
   onChangeStyleMode,
   onChangeScope,
+  onSetStatus,
   onApply
 }: HighlightToolPanelProps): React.JSX.Element {
   const [field, setField] = useState<HighlightGeometryField>('x')
@@ -125,6 +131,61 @@ export function HighlightToolPanel({
       </fieldset>
 
       <fieldset className="highlight-tool-group">
+        <legend>Scope</legend>
+        <label>
+          <span>Apply to</span>
+          <select
+            value={scope}
+            onChange={(event) => onChangeScope(event.target.value as HighlightScope)}
+          >
+            {SCOPES.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <p className="highlight-tool-hint">
+          {scope === 'keep'
+            ? 'Keep entries are matched across the whole document.'
+            : scope === 'selected'
+              ? 'Checked entries are matched wherever they are, regardless of the page in view.'
+              : 'Only highlights on the page in view are affected.'}
+        </p>
+        {checkedCount > 0 && scope !== 'selected' && (
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={() => onChangeScope('selected')}
+          >
+            Edit {checkedCount} checked entr{checkedCount === 1 ? 'y' : 'ies'} from review queue
+          </button>
+        )}
+      </fieldset>
+
+      {onSetStatus && (
+        <fieldset className="highlight-tool-group">
+          <legend>Mark entries</legend>
+          <p className="highlight-tool-hint">
+            Applies to the entries matched by the current highlight scope.
+          </p>
+          <div className="highlight-tool-decisions" aria-label="Mark scoped entries">
+            {(['keep', 'maybe', 'exclude'] as const).map((status) => (
+              <button
+                className="secondary-button"
+                type="button"
+                key={status}
+                disabled={affectedCount === 0}
+                onClick={() => onSetStatus(status)}
+              >
+                {status === 'keep' ? 'Keep' : status === 'maybe' ? 'Maybe' : 'Exclude'}
+              </button>
+            ))}
+          </div>
+        </fieldset>
+      )}
+
+      <fieldset className="highlight-tool-group">
         <legend>Position and size</legend>
 
         {measurements?.status === 'measured' ? (
@@ -158,24 +219,6 @@ export function HighlightToolPanel({
           </p>
         )}
 
-        <label>
-          <span>Apply to</span>
-          <select
-            value={scope}
-            onChange={(event) => onChangeScope(event.target.value as HighlightScope)}
-          >
-            {SCOPES.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <p className="highlight-tool-hint">
-          {scope === 'keep'
-            ? 'Keep entries are matched across the whole document.'
-            : 'Only highlights on the page in view are affected.'}
-        </p>
         <label>
           <span>Property</span>
           <select

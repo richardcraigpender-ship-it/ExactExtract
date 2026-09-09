@@ -56,6 +56,9 @@ export interface KeptImageRunningBalanceOptions {
   offsetY: number
   fontSize: number
   color: string
+  fontFamily?: string
+  fontWeight?: string
+  backgroundColor?: string
 }
 
 export interface KeptImagePlacementOptions {
@@ -103,10 +106,8 @@ export interface KeptImagePlacement {
 }
 
 export interface KeptEntriesBackground {
-  /** Content-addressed ref into managed image storage; the persisted form. */
+  /** Content-addressed ref into managed image storage; the only persisted form. */
   ref?: string
-  /** Legacy inline bytes from before managed background storage, migrated to `ref` on load. */
-  dataUrl?: string
   x: number
   y: number
   width: number

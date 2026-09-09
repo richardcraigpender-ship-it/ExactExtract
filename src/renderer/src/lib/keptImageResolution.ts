@@ -6,7 +6,13 @@ import { renderTextLabelPng, type TextLabelImage } from './textLabelImage'
 
 type BalanceLabelRenderer = (
   text: string,
-  options: { fontSize: number; color: string }
+  options: {
+    fontSize: number
+    color: string
+    fontFamily?: string
+    fontWeight?: string
+    backgroundColor?: string
+  }
 ) => TextLabelImage | undefined
 
 /** Keys a placement's rendered running-balance PNG in the same map as its image data URL. */
@@ -119,7 +125,10 @@ export async function resolveKeptImageDataUrls(
       if (!placement.runningBalanceText) continue
       const label = renderBalanceLabel(placement.runningBalanceText, {
         fontSize: runningBalance.fontSize,
-        color: runningBalance.color
+        color: runningBalance.color,
+        fontFamily: runningBalance.fontFamily,
+        fontWeight: runningBalance.fontWeight,
+        backgroundColor: runningBalance.backgroundColor
       })
       if (label) resolved.set(keptImageBalanceRef(placement.id), label.dataUrl)
     }

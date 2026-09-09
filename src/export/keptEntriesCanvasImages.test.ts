@@ -419,6 +419,68 @@ test('warns when a managed background ref has no resolved bytes', () => {
   )
 })
 
+test('layer filters exclude the hidden layer from warnings and drawn content', async () => {
+  const withTextAndImage: KeptEntriesCanvasLayout = {
+    ...layout([imagePlacement()]),
+    placements: [
+      {
+        id: 'text-1',
+        text: 'TextOnlyLayer',
+        pageNumber: 1,
+        x: 48,
+        y: 300,
+        width: 200,
+        height: 20,
+        rotation: 0,
+        fontRef: { kind: 'standard-14', family: 'Helvetica' },
+        fontSize: 11,
+        color: '#17231c'
+      }
+    ]
+  }
+  const options = { imageDataUrls: new Map([['first', pngDataUrl(20, 10)]]) }
+
+  const combined = decodeHexText(
+    decodeContent(
+      await exportProjectKeptEntriesCanvasPdf(project([entry('first')]), withTextAndImage, options)
+    )
+  )
+  const imagesOnly = decodeHexText(
+    decodeContent(
+      await exportProjectKeptEntriesCanvasPdf(project([entry('first')]), withTextAndImage, {
+        ...options,
+        layers: { text: false }
+      })
+    )
+  )
+
+  assert.match(combined, /TextOnlyLayer/)
+  assert.doesNotMatch(imagesOnly, /TextOnlyLayer/)
+
+  const missingImageLayout = layout([
+    imagePlacement({ source: { kind: 'uploaded-png', ref: 'missing' }, entryId: undefined })
+  ])
+  const bothLayers = getKeptEntriesCanvasWarnings(
+    project([entry('first')]).entries,
+    missingImageLayout,
+    options
+  )
+  const textOnly = getKeptEntriesCanvasWarnings(
+    project([entry('first')]).entries,
+    missingImageLayout,
+    { ...options, layers: { images: false } }
+  )
+
+  assert.deepEqual(
+    bothLayers.map((warning) => warning.code),
+    ['missing-image']
+  )
+  assert.deepEqual(
+    textOnly.map((warning) => warning.code),
+    ['empty-layout']
+  )
+})
+
 test('places text and images on their own pages and keeps version-1 layouts single page', async () => {
   const multiPage: KeptEntriesCanvasLayout = {
     ...layout([imagePlacement({ pageNumber: 2 })]),

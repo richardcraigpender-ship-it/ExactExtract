@@ -6,24 +6,26 @@ interface KeptEntriesExportPreviewProps {
   onClose: () => void
   onExport: () => void
   isExporting?: boolean
-  entriesPanel: React.ReactNode
   canvas: React.ReactNode
   contextPanel: React.ReactNode
   onReset?: () => void
   title?: string
-  entriesLabel?: string
+  /** Current studio mode, rendered as a segmented switch in the header. */
+  studioMode?: 'text' | 'png'
+  /** Switches the studio to the other mode without closing this window. */
+  onSwitchMode?: () => void
 }
 
 export function KeptEntriesExportPreview({
   onClose,
   onExport,
   isExporting = false,
-  entriesPanel,
   canvas,
   contextPanel,
   onReset,
   title = 'Kept entries export preview',
-  entriesLabel = 'Kept entries list'
+  studioMode,
+  onSwitchMode
 }: KeptEntriesExportPreviewProps): React.JSX.Element {
   const { dialogRef, onKeyDown: trapFocus } = useModalFocusTrap<HTMLDivElement>()
 
@@ -43,6 +45,28 @@ export function KeptEntriesExportPreview({
       >
         <header className="kept-entries-preview-header">
           <strong id="kept-entries-preview-title">{title}</strong>
+          {studioMode && (
+            <div className="kept-canvas-mode-switch" role="group" aria-label="Canvas mode">
+              <button
+                type="button"
+                className={studioMode === 'text' ? 'mode-button is-active' : 'mode-button'}
+                aria-pressed={studioMode === 'text'}
+                disabled={studioMode === 'text' || !onSwitchMode}
+                onClick={onSwitchMode}
+              >
+                Formatted Text Statement
+              </button>
+              <button
+                type="button"
+                className={studioMode === 'png' ? 'mode-button is-active' : 'mode-button'}
+                aria-pressed={studioMode === 'png'}
+                disabled={studioMode === 'png' || !onSwitchMode}
+                onClick={onSwitchMode}
+              >
+                PNG Snippet Board
+              </button>
+            </div>
+          )}
           <div className="kept-entries-preview-actions">
             <button className="secondary-button" type="button" onClick={onClose}>
               Cancel
@@ -84,9 +108,6 @@ export function KeptEntriesExportPreview({
           <div className="kept-entries-preview-canvas" aria-label="Export layout canvas">
             {canvas}
           </div>
-          <aside className="kept-entries-preview-entries" aria-label={entriesLabel}>
-            {entriesPanel}
-          </aside>
         </div>
       </div>
     </div>

@@ -21,7 +21,7 @@ test('renders precise placement and opacity controls for a selected background',
     <CanvasBackgroundControls
       label="Later pages background"
       background={{
-        dataUrl: 'data:image/png;base64,preview',
+        ref: `${'a'.repeat(64)}.png`,
         x: 12,
         y: 24,
         width: 300,
@@ -48,7 +48,7 @@ test('offers proportional scaling commands for a selected background', () => {
   const markup = renderToStaticMarkup(
     <CanvasBackgroundControls
       background={{
-        dataUrl: 'data:image/png;base64,preview',
+        ref: `${'a'.repeat(64)}.png`,
         x: 0,
         y: 0,
         width: 300,

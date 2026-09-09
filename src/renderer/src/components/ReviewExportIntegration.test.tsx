@@ -53,7 +53,7 @@ const snapshot: ExportSnapshot = {
   summary: { documentCount: 1, keptCount: 0, maybeCount: 0, excludedCount: 0 }
 }
 
-test('renders PDF, CSV, and JSON save commands with preview status', () => {
+test('renders CSV, JSON, and PNG save commands with preview status', () => {
   const markup = renderToStaticMarkup(
     <ExportPanel
       snapshot={snapshot}
@@ -64,13 +64,13 @@ test('renders PDF, CSV, and JSON save commands with preview status', () => {
     />
   )
 
-  assert.match(markup, /Save PDF/)
   assert.match(markup, /Save kept entry PNGs/)
   assert.match(markup, /Save CSV/)
   assert.match(markup, /Save JSON/)
   assert.match(markup, /Preview PDF/)
-  assert.match(markup, /Reviewed export/)
-  assert.match(markup, /Kept original layout/)
+  assert.match(markup, /Data exports/)
+  assert.match(markup, /Layout &amp; PDF studio/)
+  assert.doesNotMatch(markup, /More PDF formats/)
   assert.match(markup, /Ready to export/)
   assert.match(markup, /Review project/)
 })
@@ -138,7 +138,7 @@ test('offers the kept text template preview only once a template is configured',
   assert.match(withTemplate, /<option value="pdf-kept-template">Kept text template<\/option>/)
 })
 
-test('separates kept text and PNG layout configuration commands', () => {
+test('routes both studio modes into the unified canvas window', () => {
   const markup = renderToStaticMarkup(
     <ExportPanel
       snapshot={{ ...snapshot, summary: { ...snapshot.summary, keptCount: 1 } }}
@@ -146,13 +146,13 @@ test('separates kept text and PNG layout configuration commands', () => {
       isSaving={false}
       onSave={() => {}}
       keptEntries={[entry('entry-1', 'keep')]}
-      onTemplateExport={() => {}}
-      onPlaceKeptImages={() => {}}
+      onOpenKeptTextCanvas={() => {}}
+      onOpenKeptCanvas={() => {}}
     />
   )
 
-  assert.match(markup, /Configure kept text export/)
-  assert.match(markup, /Configure kept PNG layout/)
+  assert.match(markup, /Formatted PDF Statement/)
+  assert.match(markup, /PNG Snippet Board/)
 })
 
 test('marks the selected export preview entry and offers it as a review-navigation target', () => {

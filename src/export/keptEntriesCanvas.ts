@@ -17,6 +17,8 @@ export interface KeptEntriesCanvasExportOptions {
   imageDataUrls?: ReadonlyMap<string, string>
   /** Read only for Author/Keywords/CreationDate; page content is never taken from these. */
   sourceFiles?: ReadonlyMap<string, Uint8Array>
+  /** Which layers to draw; each owning workspace exports only its own layer. Defaults to both. */
+  layers?: { text?: boolean; images?: boolean }
 }
 
 export type KeptEntriesCanvasWarningCode =
@@ -52,9 +54,8 @@ function backgroundDataUrl(
   background: KeptEntriesCanvasLayout['background'],
   options: KeptEntriesCanvasExportOptions
 ): string | undefined {
-  if (!background) return undefined
-  if (background.ref) return options.imageDataUrls?.get(background.ref)
-  return background.dataUrl
+  if (!background?.ref) return undefined
+  return options.imageDataUrls?.get(background.ref)
 }
 
 export function getKeptEntriesCanvasWarnings(
@@ -66,12 +67,15 @@ export function getKeptEntriesCanvasWarnings(
   const keptIds = new Set(
     entries.filter((entry) => entry.status === 'keep').map((entry) => entry.id)
   )
-  const images = layout.images ?? []
+  const showText = options.layers?.text !== false
+  const showImages = options.layers?.images !== false
+  const placements = showText ? layout.placements : []
+  const images = showImages ? (layout.images ?? []) : []
   const warnings: KeptEntriesCanvasWarning[] = []
-  if (layout.placements.length === 0 && images.length === 0 && keptIds.size > 0) {
+  if (placements.length === 0 && images.length === 0 && keptIds.size > 0) {
     warnings.push({ code: 'empty-layout' })
   }
-  for (const placement of layout.placements) {
+  for (const placement of placements) {
     if (placement.entryId && !keptIds.has(placement.entryId)) {
       warnings.push({ code: 'missing-entry', placementId: placement.id })
     }
@@ -226,9 +230,11 @@ export async function exportProjectKeptEntriesCanvasPdf(
     }
   }
 
+  const showImages = options.layers?.images !== false
+  const showText = options.layers?.text !== false
   const embeddedImages = new Map<string, Awaited<ReturnType<typeof pdf.embedPng>>>()
   const runningBalanceFont = await pdf.embedFont(StandardFonts.Helvetica)
-  for (const placement of layout.images ?? []) {
+  for (const placement of showImages ? (layout.images ?? []) : []) {
     const page = pages[Math.min(pages.length, Math.max(1, placement.pageNumber)) - 1]
     let embedded = embeddedImages.get(placement.source.ref)
     if (!embedded) {
@@ -291,7 +297,7 @@ export async function exportProjectKeptEntriesCanvasPdf(
     }
   }
 
-  for (const placement of layout.placements) {
+  for (const placement of showText ? layout.placements : []) {
     const page = pages[Math.min(pages.length, Math.max(1, placement.pageNumber ?? 1)) - 1]
     const font = await embedFont(pdf, placement.fontRef, options.systemFontBytes)
     page.drawText(placement.text, {

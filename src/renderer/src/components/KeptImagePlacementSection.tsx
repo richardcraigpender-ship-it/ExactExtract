@@ -6,7 +6,7 @@ import {
   type KeptImagePlan,
   type KeptImageSourceDescriptor
 } from '../../../export'
-import type { ProjectEntry } from '../../../shared/contracts'
+import type { ProjectEntry, TextStyleCluster } from '../../../shared/contracts'
 import {
   keptEntriesPageDimensions,
   type KeptEntriesDivider,
@@ -33,6 +33,7 @@ interface KeptImagePlacementSectionProps {
   orientation: KeptEntriesOrientation
   sessionSources?: readonly KeptImageSourceDescriptor[]
   keptEntries?: readonly ProjectEntry[]
+  documents?: readonly { styleProfile?: { textStyles?: readonly TextStyleCluster[] } }[]
   runningBalance?: KeptExportRunningBalance
   onPlaceImages: (plan: KeptImagePlan) => void
   /** Copies picked PNGs into project-owned storage and returns managed descriptors. */
@@ -78,6 +79,81 @@ const STANDARD_FONTS: Array<Extract<KeptEntriesFontRef, { kind: 'standard-14' }>
   'Courier'
 ]
 
+export const EXPANDED_FONTS = [
+  { value: 'Helvetica', label: 'Helvetica (Sans-serif)' },
+  { value: 'Arial', label: 'Arial (Sans-serif)' },
+  { value: 'Aptos', label: 'Aptos (Sans-serif)' },
+  { value: 'Calibri', label: 'Calibri (Sans-serif)' },
+  { value: 'Segoe UI', label: 'Segoe UI (Sans-serif)' },
+  { value: 'Consolas', label: 'Consolas (Monospace / Receipt)' },
+  { value: 'Courier New', label: 'Courier New (Monospace / Receipt)' },
+  { value: 'Times New Roman', label: 'Times New Roman (Serif)' },
+  { value: 'Georgia', label: 'Georgia (Serif)' }
+]
+
+export const FONT_WEIGHT_OPTIONS = [
+  { value: '400', label: 'Regular (400)' },
+  { value: '600', label: 'Semibold (600)' },
+  { value: '700', label: 'Bold (700)' }
+]
+
+export const BACKGROUND_COLOR_OPTIONS = [
+  { value: '#ffffff', label: 'Paper white (#ffffff)' },
+  { value: '#fcfbfa', label: 'Document cream (#fcfbfa)' },
+  { value: 'transparent', label: 'Transparent' }
+]
+
+export function sampleDocumentTextStyle(
+  documents?: readonly { styleProfile?: { textStyles?: readonly TextStyleCluster[] } }[]
+):
+  | {
+      fontFamily: string
+      fontWeight: string
+      fontSize: number
+      color: string
+    }
+  | undefined {
+  if (!documents || documents.length === 0) return undefined
+  const clusters: TextStyleCluster[] = []
+  for (const doc of documents) {
+    if (doc.styleProfile?.textStyles) {
+      clusters.push(...doc.styleProfile.textStyles)
+    }
+  }
+  if (clusters.length === 0) return undefined
+
+  const bodyClusters = clusters.filter((c) => c.role === 'body' || c.likelyRole === 'body')
+  const candidates = bodyClusters.length > 0 ? bodyClusters : clusters
+  candidates.sort((a, b) => (b.characterCount ?? 0) - (a.characterCount ?? 0))
+  const best = candidates[0]
+  if (!best) return undefined
+
+  let family = best.fontFamily || 'Helvetica'
+  if (/courier/i.test(family)) family = 'Courier New'
+  else if (/consolas/i.test(family)) family = 'Consolas'
+  else if (/times/i.test(family)) family = 'Times New Roman'
+  else if (/georgia/i.test(family)) family = 'Georgia'
+  else if (/arial/i.test(family)) family = 'Arial'
+  else if (/aptos/i.test(family)) family = 'Aptos'
+  else if (/calibri/i.test(family)) family = 'Calibri'
+  else if (/segoe/i.test(family)) family = 'Segoe UI'
+  else if (/helvetica/i.test(family)) family = 'Helvetica'
+
+  const weight =
+    best.fontWeight === 'bold'
+      ? '700'
+      : best.fontWeight === 'semibold' || best.fontWeight === 'medium'
+        ? '600'
+        : '400'
+
+  return {
+    fontFamily: family,
+    fontWeight: weight,
+    fontSize: Math.round(best.fontSize) || 10,
+    color: best.colour?.hex ?? '#17231c'
+  }
+}
+
 const PAGE_NUMBER_ANCHORS: Array<{ value: KeptExportPageNumberAnchor; label: string }> = [
   { value: 'top-left', label: 'Top left' },
   { value: 'top-center', label: 'Top center' },
@@ -101,19 +177,33 @@ function createDefaultDivider(pageWidth: number): KeptEntriesDivider {
   }
 }
 
-function createDefaultRunningBalance(): KeptImageRunningBalanceOptions {
+function createDefaultRunningBalance(sampledStyle?: {
+  fontFamily?: string
+  fontWeight?: string
+  fontSize?: number
+  color?: string
+}): KeptImageRunningBalanceOptions {
   return {
     enabled: false,
     offsetX: 8,
     offsetY: 4,
-    fontSize: 10,
-    color: '#17231c'
+    fontSize: sampledStyle?.fontSize ?? 10,
+    color: sampledStyle?.color ?? '#17231c',
+    fontFamily: sampledStyle?.fontFamily ?? 'Helvetica',
+    fontWeight: sampledStyle?.fontWeight ?? '600',
+    backgroundColor: '#ffffff'
   }
 }
 
 function createDefaultOptions(
   pageSize: KeptEntriesPageSize,
-  orientation: KeptEntriesOrientation
+  orientation: KeptEntriesOrientation,
+  sampledStyle?: {
+    fontFamily?: string
+    fontWeight?: string
+    fontSize?: number
+    color?: string
+  }
 ): PlacementOptions {
   const page = keptEntriesPageDimensions(pageSize, orientation)
   const startY = DEFAULT_VERTICAL_MARGIN
@@ -131,7 +221,7 @@ function createDefaultOptions(
     preserveAspectRatio: true,
     uniformSlots: false,
     divider: createDefaultDivider(page.width),
-    runningBalance: createDefaultRunningBalance()
+    runningBalance: createDefaultRunningBalance(sampledStyle)
   }
 }
 
@@ -149,6 +239,7 @@ export function KeptImagePlacementSection({
   orientation,
   sessionSources = [],
   keptEntries = [],
+  documents = [],
   runningBalance,
   onPlaceImages,
   onUploadPngs,
@@ -161,6 +252,9 @@ export function KeptImagePlacementSection({
   onPageNumbersChange,
   onDetectPageNumbers
 }: KeptImagePlacementSectionProps): React.JSX.Element {
+  const sampledStyle = useMemo(() => sampleDocumentTextStyle(documents), [documents])
+  const [styleMatchStatus, setStyleMatchStatus] = useState<string | null>(null)
+
   const [mode, setMode] = useState<KeptImageSourceMode>(
     initialOptions?.sourceMode ?? (sessionSources.length > 0 ? 'session-entry' : 'uploaded-png')
   )
@@ -170,7 +264,7 @@ export function KeptImagePlacementSection({
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [isUploading, setIsUploading] = useState(false)
   const [options, setOptions] = useState<PlacementOptions>(() => {
-    const defaults = createDefaultOptions(pageSize, orientation)
+    const defaults = createDefaultOptions(pageSize, orientation, sampledStyle)
     return {
       ...defaults,
       ...initialOptions,
@@ -181,6 +275,22 @@ export function KeptImagePlacementSection({
     }
   })
   const inputRef = useRef<HTMLInputElement>(null)
+
+  const handleMatchSourceStyle = (): void => {
+    if (!sampledStyle) {
+      setStyleMatchStatus('No document text style profile was found in source documents.')
+      return
+    }
+    setRunningBalance({
+      fontFamily: sampledStyle.fontFamily,
+      fontWeight: sampledStyle.fontWeight,
+      fontSize: sampledStyle.fontSize,
+      color: sampledStyle.color
+    })
+    setStyleMatchStatus(
+      `Matched source style: ${sampledStyle.fontFamily}, ${sampledStyle.fontWeight === '700' ? 'Bold' : sampledStyle.fontWeight === '600' ? 'Semibold' : 'Regular'}, ${sampledStyle.color}.`
+    )
+  }
 
   const [pageNumbers, setPageNumbers] = useState<KeptExportPageNumbers>(() => ({
     ...DEFAULT_KEPT_EXPORT_PAGE_NUMBERS,
@@ -469,10 +579,27 @@ export function KeptImagePlacementSection({
           Show running balance beside each session image
         </label>
         {options.runningBalance.enabled && (
-          <p className="context-help">
-            Opening balance and decimal places follow the Calculated balance settings in the kept
-            text template.
-          </p>
+          <>
+            <p className="context-help">
+              Opening balance and decimal places follow the Calculated balance settings in the kept
+              text template.
+            </p>
+            <div className="kept-image-page-numbers-detect">
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={!options.runningBalance.enabled}
+                onClick={handleMatchSourceStyle}
+              >
+                Match source document style
+              </button>
+              {styleMatchStatus && (
+                <span role="status" aria-live="polite">
+                  {styleMatchStatus}
+                </span>
+              )}
+            </div>
+          </>
         )}
         <div className="kept-image-grid">
           <LengthField
@@ -489,6 +616,34 @@ export function KeptImagePlacementSection({
             disabled={!options.runningBalance.enabled}
             onChange={(offsetY) => setRunningBalance({ offsetY })}
           />
+          <label>
+            <span>Font family</span>
+            <select
+              value={options.runningBalance.fontFamily ?? 'Helvetica'}
+              disabled={!options.runningBalance.enabled}
+              onChange={(event) => setRunningBalance({ fontFamily: event.target.value })}
+            >
+              {EXPANDED_FONTS.map((font) => (
+                <option key={font.value} value={font.value}>
+                  {font.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Font weight</span>
+            <select
+              value={options.runningBalance.fontWeight ?? '600'}
+              disabled={!options.runningBalance.enabled}
+              onChange={(event) => setRunningBalance({ fontWeight: event.target.value })}
+            >
+              {FONT_WEIGHT_OPTIONS.map((weight) => (
+                <option key={weight.value} value={weight.value}>
+                  {weight.label}
+                </option>
+              ))}
+            </select>
+          </label>
           <label>
             <span>Font size</span>
             <input
@@ -511,6 +666,20 @@ export function KeptImagePlacementSection({
               disabled={!options.runningBalance.enabled}
               onChange={(event) => setRunningBalance({ color: event.target.value })}
             />
+          </label>
+          <label>
+            <span>Background</span>
+            <select
+              value={options.runningBalance.backgroundColor ?? '#ffffff'}
+              disabled={!options.runningBalance.enabled}
+              onChange={(event) => setRunningBalance({ backgroundColor: event.target.value })}
+            >
+              {BACKGROUND_COLOR_OPTIONS.map((bg) => (
+                <option key={bg.value} value={bg.value}>
+                  {bg.label}
+                </option>
+              ))}
+            </select>
           </label>
         </div>
       </fieldset>

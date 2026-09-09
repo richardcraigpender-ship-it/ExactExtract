@@ -19,11 +19,10 @@ function styleFor(template: KeptExportPageTemplate, column: KeptExportColumn): K
   return column.textStyle ?? template.defaultTextStyle
 }
 
-const POINTS_PER_MM = 72 / 25.4
-/** Sit the reference line 3 pt under the payee baseline so it matches the source gap. */
+/** Reference line sits on a separate line below the payee/description with a 3pt gap. */
 const REFERENCE_TOP_OFFSET_POINTS = 3
 /** Clear space kept under the reference line so dividers do not crowd it. */
-const REFERENCE_BOTTOM_GAP_MM = 3
+const REFERENCE_BOTTOM_GAP_POINTS = 3
 
 function referenceStyle(style: KeptExportTextStyle): KeptExportTextStyle {
   return { ...style, fontSize: Math.max(6, style.fontSize - 2), fontWeight: 'normal' }
@@ -142,7 +141,7 @@ export function buildKeptExportRenderPlan(
             y: anchor.y + anchor.style.fontSize + REFERENCE_TOP_OFFSET_POINTS,
             width: anchor.width,
             // The reference owns its own line box plus the clear space a divider must respect.
-            height: style.fontSize + REFERENCE_BOTTOM_GAP_MM * POINTS_PER_MM,
+            height: style.fontSize + REFERENCE_BOTTOM_GAP_POINTS,
             style
           })
         }
