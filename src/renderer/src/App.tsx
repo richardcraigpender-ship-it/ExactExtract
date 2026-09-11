@@ -1693,7 +1693,7 @@ function App(): React.JSX.Element {
                     action: 'entry-edited',
                     entityType: 'entry',
                     entityId: entryId,
-                    details: { fields: 'normalizedText,category,numericValue,date,notes,tags' }
+                    details: { fields: 'normalizedText,category,numericValue,date,notes,reference,tags' }
                   }
                 ]
               }

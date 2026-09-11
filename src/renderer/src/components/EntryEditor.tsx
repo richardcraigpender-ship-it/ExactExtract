@@ -8,6 +8,7 @@ export interface EntryEditPatch {
   numericValue?: number
   date?: string
   notes?: string
+  reference?: string
   tags: string[]
 }
 

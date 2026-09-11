@@ -235,6 +235,7 @@ button:disabled {
   display: block;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   margin: 0;
 }
 
@@ -252,6 +253,10 @@ button:disabled {
     var(--studio-bg);
 }
 
+.app-shell > * {
+  min-width: 0;
+  min-height: 0;
+}
 .app-header,
 .header-actions,
 .onboarding-actions,
@@ -261,6 +266,8 @@ button:disabled {
 }
 .app-header {
   justify-content: space-between;
+  flex-wrap: nowrap;
+  min-width: 0;
   min-height: 58px;
   padding: 8px 22px;
   border-bottom: 1px solid var(--studio-border);
@@ -275,8 +282,13 @@ button:disabled {
   min-width: 0;
   padding: 0 12px;
   overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
   color: var(--studio-text-muted);
   font-size: 12px;
+}
+.header-stats::-webkit-scrollbar {
+  display: none;
 }
 .header-stat {
   display: flex;
@@ -315,6 +327,7 @@ button:disabled {
 }
 .brand {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
   gap: 10px;
   border: 0;
@@ -1067,7 +1080,9 @@ button:disabled {
 .workspace {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  height: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 .source-rail {
   display: flex;
@@ -1221,8 +1236,13 @@ button:disabled {
   width: 48px;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
   border-right: 1px solid var(--studio-border);
   background: var(--studio-raised);
+}
+.workspace-tool-strip::-webkit-scrollbar {
+  display: none;
 }
 .workspace-tool-strip > div {
   display: grid;
@@ -1290,6 +1310,52 @@ button:disabled {
   border-radius: 2px 0 0 2px;
   background: currentColor;
   content: '';
+}
+
+@media (max-height: 760px) and (min-width: 761px) {
+  .app-shell {
+    grid-template-rows: minmax(48px, auto) minmax(0, 1fr);
+  }
+  .app-header {
+    min-height: 48px;
+    padding: 4px 14px;
+  }
+  .header-stats {
+    gap: 9px;
+    padding: 0 8px;
+  }
+  .source-pdf-panel {
+    gap: 8px;
+    padding: 10px;
+  }
+  .workspace-tool-strip button {
+    height: 38px;
+    padding-block: 3px;
+  }
+}
+
+@media (max-height: 980px) and (min-width: 761px) {
+  .workspace-tool-strip {
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .right-workspace-commands {
+    padding-bottom: 6px;
+  }
+  .workspace-tool-strip > [role='tablist'] {
+    padding-top: 6px;
+  }
+  .workspace-tool-strip button {
+    grid-template-rows: 1fr;
+    height: 32px;
+    padding: 2px;
+  }
+  .right-workspace-tool-label {
+    display: none;
+  }
+  .right-workspace-command-count {
+    top: 1px;
+    right: 2px;
+  }
 }
 .right-workspace-command-count {
   position: absolute;
