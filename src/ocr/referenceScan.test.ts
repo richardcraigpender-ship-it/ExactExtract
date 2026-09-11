@@ -165,6 +165,19 @@ test('skips low-confidence OCR reference candidates', () => {
   assert.deepEqual(result.candidates[0]?.references, ['CARD-200'])
 })
 
+test('verbatim mode keeps every confident block and reports its text unchanged', () => {
+  const result = extractOcrReferenceCandidates(
+    [block('one', 'To Forest, London, GBR'), block('two', 'Card 1112'), block('three', '   ')],
+    { mode: 'verbatim-detail' }
+  )
+
+  // A block with no reference marker is still captured, which token mode would have dropped.
+  assert.deepEqual(
+    result.candidates.map((candidate) => candidate.detailText),
+    ['To Forest, London, GBR', 'Card 1112']
+  )
+})
+
 test('does not mutate OCR blocks while creating candidates', () => {
   const source = [block('one', 'Ref CARD-100')]
   const snapshot = structuredClone(source)

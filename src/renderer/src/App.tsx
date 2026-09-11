@@ -141,6 +141,7 @@ import {
   type ReviewIssueCode
 } from '../../review'
 import {
+  buildSessionKeptImageSources,
   buildExportSnapshot,
   buildKeptExportRenderPlan,
   buildKeptExportSourceRows,
@@ -149,6 +150,7 @@ import {
   exportProjectKeptEntriesCanvasPdf,
   exportProjectKeptEntriesTemplatePdf,
   exportProjectPdf,
+  planKeptEntryImagePlacements,
   withKeptImagePlacements,
   type KeptImagePlan
 } from '../../export'
@@ -2961,18 +2963,88 @@ function App(): React.JSX.Element {
     setKeptEntriesLayout((current) => withKeptImagePlacements(current, plan))
   }, [])
 
+  // The config windows live inside ExportPanel, which only mounts on the Export tab.
+  const openKeptConfiguration = useCallback((kind: 'png' | 'text') => {
+    setShowKeptCanvas(null)
+    setWorkspaceMode('export')
+    setOpenKeptConfig(kind)
+  }, [])
+
   const handleImagePlacementConfigurationChange = useCallback(
     (
       imagePlacementOptions: KeptImagePlacementOptions,
       uploadedImageSources: readonly KeptImageSourceDescriptor[]
     ) => {
-      setKeptEntriesLayout((current) => ({
-        ...current,
-        imagePlacementOptions,
-        uploadedImageSources: uploadedImageSources ? [...uploadedImageSources] : undefined
-      }))
+      setKeptEntriesLayout((current) => {
+        const activeProject = projectSnapshotRef.current
+        if (!activeProject) {
+          return {
+            ...current,
+            imagePlacementOptions,
+            uploadedImageSources: [...uploadedImageSources]
+          }
+        }
+        const sources =
+          imagePlacementOptions.sourceMode === 'session-entry'
+            ? buildSessionKeptImageSources(activeProject.entries)
+            : [...uploadedImageSources]
+        const plan = planKeptEntryImagePlacements(sources, {
+          pageSize: current.pageSize,
+          orientation: current.orientation,
+          ...imagePlacementOptions,
+          entries: activeProject.entries.filter((entry) => entry.status === 'keep'),
+          runningBalanceConfig: activeProject.keptExportTemplate?.runningBalance
+        })
+        plan.options = imagePlacementOptions
+        return {
+          ...withKeptImagePlacements(current, plan),
+          uploadedImageSources: [...uploadedImageSources]
+        }
+      })
     },
     []
+  )
+
+  const applyKeptExportTemplate = useCallback(
+    (template: KeptExportTemplate): void => {
+      setKeptExportTemplate(template)
+      const entries = project?.entries
+      if (!entries) return
+      setKeptEntriesLayout((current) => {
+        const imagePlacementOptions = current.imagePlacementOptions
+        if (
+          imagePlacementOptions?.sourceMode !== 'session-entry' ||
+          !imagePlacementOptions.runningBalance?.enabled
+        ) {
+          return current
+        }
+        const plan = planKeptEntryImagePlacements(buildSessionKeptImageSources(entries), {
+          pageSize: current.pageSize,
+          orientation: current.orientation,
+          ...imagePlacementOptions,
+          entries: entries.filter((entry) => entry.status === 'keep'),
+          runningBalanceConfig: template.runningBalance
+        })
+        const balanceByEntryId = new Map(
+          plan.placements.flatMap((placement) =>
+            placement.entryId && placement.runningBalanceText
+              ? [[placement.entryId, placement.runningBalanceText] as const]
+              : []
+          )
+        )
+        return {
+          ...current,
+          images: (current.images ?? []).map((placement) => {
+            if (placement.source.kind !== 'session-entry') return placement
+            const runningBalanceText = balanceByEntryId.get(
+              placement.entryId ?? placement.source.ref
+            )
+            return { ...placement, ...(runningBalanceText ? { runningBalanceText } : {}) }
+          })
+        }
+      })
+    },
+    [project]
   )
 
   // Uploaded images stream from managed storage; session crops must be regenerated for display.
@@ -3327,24 +3399,19 @@ function App(): React.JSX.Element {
             setSessionImageRefreshToken((current) => current + 1)
           }}
           onLayoutChange={setKeptEntriesLayout}
+          documents={projectSnapshot.documents}
+          onPlaceKeptImages={handlePlaceKeptImages}
+          onImagePlacementConfigurationChange={handleImagePlacementConfigurationChange}
+          onDetectPageNumbers={detectActivePageNumberStyle}
           onClose={() => {
             setShowKeptCanvas(null)
             setSessionImageUrls(new Map())
             setSessionImageError(null)
             setIsRefreshingSessionImages(false)
           }}
-          onOpenConfiguration={() => {
-            setShowKeptCanvas(null)
-            setOpenKeptConfig('png')
-          }}
-          onOpenPngConfiguration={() => {
-            setShowKeptCanvas(null)
-            setOpenKeptConfig('png')
-          }}
-          onOpenTextConfiguration={() => {
-            setShowKeptCanvas(null)
-            setOpenKeptConfig('text')
-          }}
+          onOpenConfiguration={() => openKeptConfiguration('png')}
+          onOpenPngConfiguration={() => openKeptConfiguration('png')}
+          onOpenTextConfiguration={() => openKeptConfiguration('text')}
           onSwitchMode={() => setShowKeptCanvas('text')}
           onExport={() => void saveExport('pdf-kept-canvas', undefined, { text: false })}
           onReset={() =>
@@ -3357,25 +3424,18 @@ function App(): React.JSX.Element {
           entries={projectSnapshot.entries}
           layout={keptEntriesLayout}
           keptExportTemplate={keptExportTemplate}
+          onTextTemplateChange={applyKeptExportTemplate}
           textRenderPlan={keptTextRenderPlan}
           isExporting={exportState.isSaving}
           onLayoutChange={setKeptEntriesLayout}
           onClose={() => setShowKeptCanvas(null)}
-          onOpenConfiguration={() => {
-            setShowKeptCanvas(null)
-            setOpenKeptConfig('text')
-          }}
-          onOpenTextConfiguration={() => {
-            setShowKeptCanvas(null)
-            setOpenKeptConfig('text')
-          }}
-          onOpenPngConfiguration={() => {
-            setShowKeptCanvas(null)
-            setOpenKeptConfig('png')
-          }}
+          onOpenConfiguration={() => openKeptConfiguration('text')}
+          onOpenTextConfiguration={() => openKeptConfiguration('text')}
+          onOpenPngConfiguration={() => openKeptConfiguration('png')}
           onSwitchMode={() => setShowKeptCanvas('png')}
           onExport={() => {
-            const draftTemplate = keptExportTemplate ?? toKeptExportTemplate(createKeptExportTemplateDraft())
+            const draftTemplate =
+              keptExportTemplate ?? toKeptExportTemplate(createKeptExportTemplateDraft())
             void saveExport('pdf-kept-canvas', draftTemplate)
           }}
           onReset={() =>
@@ -4447,7 +4507,7 @@ function App(): React.JSX.Element {
                       onTemplateExport={handleTemplateExport}
                       onOpenKeptTemplateCanvas={handleTemplatePreview}
                       keptExportTemplate={keptExportTemplate}
-                      onTemplateApply={setKeptExportTemplate}
+                      onTemplateApply={applyKeptExportTemplate}
                       currencySymbol={currencySymbol(currencyCode)}
                       onPlaceKeptImages={handlePlaceKeptImages}
                       onOpenKeptCanvas={() => setShowKeptCanvas('png')}

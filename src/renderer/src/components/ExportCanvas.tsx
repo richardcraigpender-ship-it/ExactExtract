@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useMemo } from 'react'
 
 import type {
   KeptEntriesBackground,
@@ -12,7 +12,12 @@ import { useCanvasDrag } from '../hooks/useCanvasDrag'
 import { resolveBackgroundUrl } from '../lib/canvasBackgroundStorage'
 import { getCanvasDropPoint, KEPT_ENTRY_DRAG_TYPE } from '../lib/canvasDrop'
 import { getCanvasPageDimensions } from '../lib/canvasScale'
-import type { KeptExportPage, KeptExportTextStyle } from '../../../shared/keptExportTemplate'
+import type {
+  KeptExportPage,
+  KeptExportPageNumbers,
+  KeptExportTextStyle
+} from '../../../shared/keptExportTemplate'
+import { buildPageNumberDraw } from '../../../export/pageNumbers'
 import './ExportCanvas.css'
 
 interface ExportCanvasProps {
@@ -25,6 +30,8 @@ interface ExportCanvasProps {
   textStyleOverride?: KeptExportTextStyle
   /** When provided (template mode), text renders from the template plan instead of layout.placements. */
   templatePage?: KeptExportPage
+  templatePageNumbers?: KeptExportPageNumbers
+  templatePageCount?: number
   selectedPlacementId?: string | null
   onSelectPlacement?: (placementId: string) => void
   onPlacementChange?: (placement: KeptEntryPlacement) => void
@@ -113,6 +120,8 @@ export function ExportCanvas({
   onDropEntry,
   onBackgroundChange,
   pageNumber = 1,
+  templatePageNumbers,
+  templatePageCount = 1,
   selectedImagePlacementId = null,
   onSelectImagePlacement,
   onImagePlacementChange,
@@ -138,11 +147,32 @@ export function ExportCanvas({
   const templatePlacements = templatePage?.placements ?? []
   const templateDividers = templatePage?.dividers ?? []
   const useTemplateTextLayer = Boolean(templatePage)
+  const templateReferenceCount = templatePlacements.filter((placement) =>
+    placement.columnId.endsWith(':reference')
+  ).length
+  const textRendererStatus = useTemplateTextLayer
+    ? `Text renderer: template (${templatePlacements.length} placements, ${templateReferenceCount} references)`
+    : `Text renderer: legacy (${visiblePlacements.length} placements)`
   const visibleImages = showImages
     ? (layout.images ?? []).filter((placement) => placement.pageNumber === pageNumber)
     : []
   const imageDivider = layout.imagePlacementOptions?.divider
   const imageBalance = layout.imagePlacementOptions?.runningBalance
+
+  const pageNumberDraw = useMemo(() => {
+    if (!templatePage || !templatePageNumbers?.enabled) return undefined
+    const measureTextWidth = (text: string, fontSize: number): number => {
+      return text.length * fontSize * 0.6
+    }
+    return buildPageNumberDraw(
+      templatePageNumbers,
+      templatePage.pageNumber,
+      templatePageCount,
+      dimensions.width,
+      dimensions.height,
+      measureTextWidth
+    )
+  }, [templatePage, templatePageCount, templatePageNumbers, dimensions.width, dimensions.height])
 
   return (
     <div className="export-canvas-viewport">
@@ -184,6 +214,15 @@ export function ExportCanvas({
             : undefined
         }
       >
+        {showText && (
+          <output
+            className="export-canvas-renderer-debug"
+            aria-label="Text preview render branch"
+            data-render-branch={useTemplateTextLayer ? 'template' : 'legacy'}
+          >
+            {textRendererStatus}
+          </output>
+        )}
         {layout.background && (
           <div
             className={
@@ -210,7 +249,13 @@ export function ExportCanvas({
             onPointerUp={onBackgroundChange ? backgroundDrag.endDrag : undefined}
             onPointerCancel={onBackgroundChange ? backgroundDrag.endDrag : undefined}
           >
-            <img src={resolveBackgroundUrl(layout.background) ?? undefined} alt="" />
+            <img
+              src={resolveBackgroundUrl(layout.background) ?? undefined}
+              alt=""
+              style={{
+                filter: `blur(${((100 - (layout.background.sharpness ?? 100)) / 10).toFixed(2)}px)`
+              }}
+            />
             {onBackgroundChange && (
               <span
                 className="export-canvas-resize-handle"
@@ -345,6 +390,29 @@ export function ExportCanvas({
                 }}
               />
             ))}
+          {pageNumberDraw && (
+            <span
+              className="export-canvas-page-number"
+              style={{
+                position: 'absolute',
+                left: asPercent(pageNumberDraw.x, dimensions.width),
+                top: asPercent(
+                  dimensions.height - pageNumberDraw.y - pageNumberDraw.fontSize,
+                  dimensions.height
+                ),
+                fontSize: `${pageNumberDraw.fontSize}px`,
+                fontFamily: templatePageNumbers?.textStyle.fontRef
+                  ? fontFamily(templatePageNumbers.textStyle.fontRef)
+                  : 'inherit',
+                color: templatePageNumbers?.textStyle.color ?? '#000000',
+                fontWeight: templatePageNumbers?.textStyle.fontWeight === 'bold' ? 700 : 'inherit',
+                fontStyle:
+                  templatePageNumbers?.textStyle.fontStyle === 'italic' ? 'italic' : 'inherit'
+              }}
+            >
+              {pageNumberDraw.text}
+            </span>
+          )}
           {templatePage &&
             templatePlacements.map((placement) => (
               <div
@@ -360,7 +428,8 @@ export function ExportCanvas({
                   fontFamily: fontFamily(placement.style.fontRef),
                   fontSize: `${placement.style.fontSize}px`,
                   fontStyle: placement.style.fontStyle === 'italic' ? 'italic' : undefined,
-                  fontWeight: placement.style.fontWeight === 'bold' ? 700 : undefined
+                  fontWeight: placement.style.fontWeight === 'bold' ? 700 : undefined,
+                  textAlign: placement.align
                 }}
               >
                 {placement.text}

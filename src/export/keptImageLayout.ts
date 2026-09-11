@@ -118,9 +118,12 @@ function mappingForImageBalances(): FinancialColumnMapping {
   }
 }
 
-function resolveSessionRunningBalanceValues(
-  options: KeptImagePlanOptions
-): Map<string, string> | undefined {
+function resolveSessionRunningBalanceValues(options: {
+  runningBalance?: KeptImagePlacementOptions['runningBalance']
+  entries?: readonly ProjectEntry[]
+  runningBalanceConfig?: KeptExportRunningBalance
+  currencyCode?: Parameters<typeof resolveCurrencyCode>[0]
+}): Map<string, string> | undefined {
   if (!options.runningBalance?.enabled || !options.entries) return undefined
   const runningBalance = {
     ...DEFAULT_KEPT_EXPORT_RUNNING_BALANCE,
@@ -249,6 +252,19 @@ export function planKeptEntryImagePlacements(
         placementId: placement.id,
         message: `${slot.source.name ?? placement.source.ref} does not fit inside page ${pageNumber}.`
       })
+    }
+    if (placement.runningBalanceText && options.runningBalance) {
+      // Rough label width; enough to catch a balance pushed past the page edge and clipped away.
+      const labelWidth = placement.runningBalanceText.length * options.runningBalance.fontSize * 0.6
+      const labelLeft = placement.x + placement.width + options.runningBalance.offsetX
+      if (labelLeft + labelWidth > page.width) {
+        warnings.push({
+          code: 'out-of-bounds',
+          ref: placement.source.ref,
+          placementId: placement.id,
+          message: `The balance label for ${slot.source.name ?? placement.source.ref} starts at ${Math.round(labelLeft)}pt and runs past the ${Math.round(page.width)}pt page edge, so it is clipped. Reduce the image width, Start X, or the balance gap.`
+        })
+      }
     }
     placements.push(placement)
     y += slot.height + gap

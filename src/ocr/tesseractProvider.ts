@@ -3,7 +3,7 @@ import { createWorker, type ImageLike, type LoggerMessage, type Worker } from 't
 import type { OcrRecognizedBlock } from '../extraction'
 import {
   getOcrLanguageAssetUrl,
-  OCR_CORE_URL,
+  OCR_CORE_FILE_URL,
   OCR_LANGUAGE_DATA_URL,
   OCR_WORKER_URL
 } from '../shared/ocrAssets'
@@ -54,7 +54,7 @@ export function getOfflineTesseractWorkerOptions(
 ): Parameters<typeof createWorker>[2] {
   return {
     workerPath: OCR_WORKER_URL,
-    corePath: OCR_CORE_URL,
+    corePath: OCR_CORE_FILE_URL,
     langPath: OCR_LANGUAGE_DATA_URL,
     gzip: true,
     // Bundled language data is authoritative; avoid stale or incomplete browser-cache entries.

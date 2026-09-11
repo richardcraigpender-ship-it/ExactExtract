@@ -1,8 +1,15 @@
 import React from 'react'
 
-import type { ProjectEntry } from '../../../shared/contracts'
-import type { KeptEntriesCanvasLayout, KeptImageSourceRef } from '../../../shared/keptEntriesLayout'
+import type { DocumentStyleProfile, ProjectEntry } from '../../../shared/contracts'
+import type {
+  KeptEntriesCanvasLayout,
+  KeptImagePlacementOptions,
+  KeptImageSourceDescriptor,
+  KeptImageSourceRef
+} from '../../../shared/keptEntriesLayout'
 import type { KeptExportTemplate } from '../../../shared/keptExportTemplate'
+import type { DetectedPageNumberMatch } from '../../../style'
+import type { KeptImagePlan } from '../../../export'
 import { KeptCanvasStudioBody } from './KeptCanvasStudioBody'
 
 interface KeptPngCanvasWorkspaceProps {
@@ -16,6 +23,13 @@ interface KeptPngCanvasWorkspaceProps {
   onOpenConfiguration?: () => void
   onOpenTextConfiguration?: () => void
   onOpenPngConfiguration?: () => void
+  documents?: readonly { styleProfile?: DocumentStyleProfile }[]
+  onPlaceKeptImages?: (plan: KeptImagePlan) => void
+  onImagePlacementConfigurationChange?: (
+    options: KeptImagePlacementOptions,
+    uploadedSources: readonly KeptImageSourceDescriptor[]
+  ) => void
+  onDetectPageNumbers?: () => Promise<DetectedPageNumberMatch | undefined>
   onSwitchMode?: () => void
   isExporting?: boolean
   resolveImageSource?: (source: KeptImageSourceRef) => string | undefined

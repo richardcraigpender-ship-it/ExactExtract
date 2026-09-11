@@ -342,3 +342,35 @@ test('applying a plan preserves image placement options atomically', () => {
   assert.equal(updated.imagePlacementOptions?.runningBalance?.enabled, true)
   assert.equal(updated.imagePlacementOptions?.runningBalance?.offsetX, 8)
 })
+
+test('adds calculated running-balance text to enabled session-image placements', () => {
+  const entries = [
+    {
+      ...entry('one', 200, 100),
+      normalizedText: '2026-01-01 Payment to Coffee £10.00'
+    },
+    {
+      ...entry('two', 200, 100),
+      normalizedText: '2026-01-02 Payment from Refund £3.00'
+    }
+  ]
+  const plan = planKeptEntryImagePlacements(
+    [
+      { ...source('one'), kind: 'session-entry', entryId: 'one' },
+      { ...source('two'), kind: 'session-entry', entryId: 'two' }
+    ],
+    options({
+      entries,
+      runningBalance: { enabled: true, offsetX: 8, offsetY: 4, fontSize: 10, color: '#17231c' },
+      runningBalanceConfig: {
+        enabled: true,
+        openingBalance: 100,
+        fallback: 'zero',
+        balanceFieldMode: 'add-calculated',
+        decimalPlaces: 2
+      }
+    })
+  )
+
+  assert.deepEqual(plan.placements.map((placement) => placement.runningBalanceText), ['£90.00', '£93.00'])
+})

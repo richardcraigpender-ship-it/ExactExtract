@@ -156,6 +156,11 @@ export interface ProjectEntry {
   runningTotal?: number
   date?: string
   notes?: string
+  /**
+   * Verbatim reference / additional information printed under the payee row. Captured exactly as
+   * it appears in the source and never parsed into tokens, so exports can match the document.
+   */
+  reference?: string
   tags: string[]
   createdAt: string
   updatedAt: string

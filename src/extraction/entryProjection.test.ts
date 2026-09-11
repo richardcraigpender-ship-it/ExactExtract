@@ -1,8 +1,63 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { extractFinancialPayee, projectParserEntries } from './entryProjection'
+import {
+  collectTransactionContinuationLines,
+  extractFinancialPayee,
+  projectParserEntries
+} from './entryProjection'
 import { extractDocumentTextLayer } from './pipeline'
+import type { ExtractedLine } from './types'
+
+function line(id: string, text: string, y: number, pageNumber = 1): ExtractedLine {
+  return {
+    id,
+    documentId: 'document-1',
+    pageNumber,
+    blockIds: [],
+    text,
+    bbox: { x: 40, y, width: 400, height: 10 },
+    readingOrder: 0
+  }
+}
+
+test('attaches the detail lines printed under a transaction row to that row', () => {
+  const lines = [
+    line('l1', '19 Mar 2026 Forest £2.99 £1,534.93', 700),
+    line('l2', 'To Forest, London, GBR', 712),
+    line('l3', 'Card 1112', 724),
+    line('l4', '19 Mar 2026 Gopuff £26.34 £1,508.49', 748),
+    line('l5', 'To Gopuff, London, GBR', 760)
+  ]
+
+  const continuations = collectTransactionContinuationLines(lines, new Set(['l1', 'l4']))
+
+  assert.deepEqual(
+    continuations.get('l1')?.map((detail) => detail.text),
+    ['To Forest, London, GBR', 'Card 1112']
+  )
+  assert.deepEqual(
+    continuations.get('l4')?.map((detail) => detail.text),
+    ['To Gopuff, London, GBR']
+  )
+})
+
+test('stops claiming detail lines across a page break or a large vertical gap', () => {
+  const lines = [
+    line('l1', '19 Mar 2026 Forest £2.99 £1,534.93', 700),
+    line('l2', 'To Forest, London, GBR', 712),
+    // A footer far below the last row must not be captured as a reference.
+    line('l3', 'Page 1 of 325', 900),
+    line('l4', 'Next page header', 40, 2)
+  ]
+
+  const continuations = collectTransactionContinuationLines(lines, new Set(['l1']))
+
+  assert.deepEqual(
+    continuations.get('l1')?.map((detail) => detail.text),
+    ['To Forest, London, GBR']
+  )
+})
 
 test('projects persisted entries with deterministic source traceability', () => {
   const result = extractDocumentTextLayer('document-1', [
@@ -71,6 +126,43 @@ test('extracts financial payees before currency and multiple numeric columns', (
   )
   assert.equal(extractFinancialPayee('$120.00 50.00', true), undefined)
   assert.equal(extractFinancialPayee('Northwind Power $120.00', false), undefined)
+})
+
+test('extracts full incoming payment payee before trailing direction labels', () => {
+  assert.equal(
+    extractFinancialPayee('28th March 2026 Payment from MRS A. R. Smith money in £1,523.40', true),
+    'Payment from MRS A. R. Smith'
+  )
+})
+
+test('completes split payment-from payees from transaction detail lines', () => {
+  const result = {
+    documentId: 'document-1',
+    pages: [],
+    blocks: [],
+    lines: [
+      line('l1', '28th March 2026 Payment from £1,523.40', 700),
+      line('l2', 'MRS A. R. Smith', 712),
+      line('l3', 'Card 4165', 724),
+      line('l4', '29th March 2026 Coffee £3.40', 748)
+    ],
+    tables: [],
+    classification: {
+      kind: 'tabular' as const,
+      confidence: 0.9,
+      scores: {},
+      evidence: ['financial:statement']
+    },
+    preflight: { pages: [], recommendedMode: 'parser' as const, warnings: [] }
+  }
+
+  const entries = projectParserEntries(result, '2026-08-16T12:00:00.000Z')
+  const payment = entries.find((entry) => entry.id === 'l1:entry')
+
+  assert.equal(payment?.payee, 'Payment from MRS A. R. Smith')
+  assert.equal(payment?.normalizedText, '28th March 2026 Payment from MRS A. R. Smith £1,523.40')
+  assert.equal(payment?.reference, 'Card 4165')
+  assert.equal(payment?.notes, undefined)
 })
 
 test('does not collect honorific-led personal text as a payee', () => {

@@ -17,6 +17,7 @@ import {
   applyTextStyle,
   cloneKeptExportPageTemplate,
   cloneKeptExportTemplateDraft,
+  cloneKeptExportTextStyle,
   createDefaultKeptExportPageTemplate,
   createDefaultKeptExportTemplateDraft,
   createKeptExportColumn,
@@ -24,6 +25,7 @@ import {
   setSeparateLaterPages,
   updateDraftTemplate,
   validateKeptExportTemplateDraft,
+  type KeptExportAlignment,
   type KeptExportColumnDraft,
   type KeptExportPageTemplateDraft,
   type KeptExportSourceField,
@@ -36,6 +38,8 @@ import './KeptExportTemplateEditor.css'
 
 interface KeptExportTemplateEditorProps {
   initialDraft?: KeptExportTemplateDraft
+  /** Removes duplicate action chrome when the editor is embedded beside the live canvas. */
+  embedded?: boolean
   onDraftChange?: (draft: KeptExportTemplateDraft) => void
   onApply: (draft: KeptExportTemplateDraft) => void
   onExport: (draft: KeptExportTemplateDraft) => void
@@ -151,6 +155,7 @@ function sameBackground(
 
 export function KeptExportTemplateEditor({
   initialDraft,
+  embedded = false,
   onDraftChange,
   onApply,
   onExport,
@@ -202,6 +207,31 @@ export function KeptExportTemplateEditor({
       fontRef: patch.fontRef ? { ...patch.fontRef } : { ...textStyle.fontRef }
     }
     setTemplate((current) => applyTextStyle(current, nextStyle, applyToAll, selectedColumn?.id))
+  }
+
+  // Mirrors the layout engine's fallback so the controls preview the real reference style.
+  const derivedReferenceStyle: KeptExportTextStyle = {
+    ...textStyle,
+    fontSize: Math.max(6, textStyle.fontSize - 2),
+    fontWeight: 'normal'
+  }
+  const referenceStyle = template.referenceTextStyle ?? derivedReferenceStyle
+  const referenceStyleEnabled = Boolean(
+    template.showReferenceUnderMainText && template.referenceTextStyle
+  )
+
+  const setReferenceTextStyle = (patch: Partial<KeptExportTextStyle>): void => {
+    setTemplate((current) => {
+      const base = current.referenceTextStyle ?? derivedReferenceStyle
+      return {
+        ...current,
+        referenceTextStyle: {
+          ...base,
+          ...patch,
+          fontRef: patch.fontRef ? { ...patch.fontRef } : { ...base.fontRef }
+        }
+      }
+    })
   }
 
   const setDivider = (update: (current: KeptExportDivider) => KeptExportDivider): void => {
@@ -270,21 +300,31 @@ export function KeptExportTemplateEditor({
   }
 
   return (
-    <section className="kept-template-editor" aria-labelledby="kept-template-editor-title">
-      <header className="kept-template-editor-header">
-        <div>
-          <span className="eyebrow">KEPT EXPORT TEMPLATE</span>
-          <strong id="kept-template-editor-title">Page template</strong>
-        </div>
-        <div className="kept-template-editor-header-actions">
-          <button className="secondary-button" type="button" onClick={resetActiveTemplate}>
-            <RotateCcw size={14} aria-hidden="true" /> Reset template
-          </button>
-          <button className="secondary-button" type="button" onClick={resetAll}>
-            <RotateCcw size={14} aria-hidden="true" /> Reset all
-          </button>
-        </div>
-      </header>
+    <section
+      className={embedded ? 'kept-template-editor is-embedded' : 'kept-template-editor'}
+      aria-labelledby="kept-template-editor-title"
+    >
+      {!embedded && (
+        <header className="kept-template-editor-header">
+          <div>
+            <span className="eyebrow">KEPT EXPORT TEMPLATE</span>
+            <strong id="kept-template-editor-title">Page template</strong>
+          </div>
+          <div className="kept-template-editor-header-actions">
+            <button className="secondary-button" type="button" onClick={resetActiveTemplate}>
+              <RotateCcw size={14} aria-hidden="true" /> Reset template
+            </button>
+            <button className="secondary-button" type="button" onClick={resetAll}>
+              <RotateCcw size={14} aria-hidden="true" /> Reset all
+            </button>
+          </div>
+        </header>
+      )}
+      {embedded && (
+        <strong className="kept-template-embedded-title" id="kept-template-editor-title">
+          Formatted statement settings
+        </strong>
+      )}
 
       <fieldset className="kept-template-choice">
         <legend>Page templates</legend>
@@ -794,6 +834,25 @@ export function KeptExportTemplateEditor({
               />
             </label>
             <label>
+              <span>Weight</span>
+              <select
+                value={pageNumbers.textStyle.fontWeight}
+                disabled={!pageNumbers.enabled}
+                onChange={(event) =>
+                  setPageNumbers((current) => ({
+                    ...current,
+                    textStyle: {
+                      ...current.textStyle,
+                      fontWeight: event.target.value as KeptExportTextStyle['fontWeight']
+                    }
+                  }))
+                }
+              >
+                <option value="normal">Normal</option>
+                <option value="bold">Bold</option>
+              </select>
+            </label>
+            <label>
               <span>Color</span>
               <input
                 type="color"
@@ -932,6 +991,23 @@ export function KeptExportTemplateEditor({
                     />
                   ))}
                   <label>
+                    <span>Align</span>
+                    <select
+                      value={column.align ?? 'left'}
+                      onChange={(event) =>
+                        setTemplate((current) =>
+                          updateColumn(current, column.id, {
+                            align: event.target.value as KeptExportAlignment
+                          })
+                        )
+                      }
+                    >
+                      <option value="left">Left</option>
+                      <option value="center">Center</option>
+                      <option value="right">Right</option>
+                    </select>
+                  </label>
+                  <label>
                     <span>Overflow</span>
                     <select
                       value={column.overflow}
@@ -1068,6 +1144,117 @@ export function KeptExportTemplateEditor({
           />
         </section>
 
+        <section
+          className="kept-template-section"
+          aria-labelledby="kept-template-reference-font-title"
+        >
+          <div className="kept-template-section-heading">
+            <div>
+              <h3 id="kept-template-reference-font-title">Reference text style</h3>
+              <p>
+                {template.referenceTextStyle
+                  ? 'Applies to the reference line under the payee.'
+                  : 'Currently follows the payee style at a smaller size.'}
+              </p>
+            </div>
+            <label className="kept-template-change-all">
+              <input
+                type="checkbox"
+                checked={Boolean(template.referenceTextStyle)}
+                disabled={!template.showReferenceUnderMainText}
+                onChange={(event) =>
+                  setTemplate((current) => ({
+                    ...current,
+                    referenceTextStyle: event.target.checked
+                      ? cloneKeptExportTextStyle(derivedReferenceStyle)
+                      : undefined
+                  }))
+                }
+              />
+              Style separately
+            </label>
+          </div>
+          <div className="kept-template-grid kept-template-font-grid">
+            <label>
+              <span>PDF font</span>
+              <select
+                value={
+                  referenceStyle.fontRef.kind === 'standard-14' ? referenceStyle.fontRef.family : ''
+                }
+                disabled={!referenceStyleEnabled}
+                onChange={(event) => {
+                  const family = event.target.value as Extract<
+                    KeptEntriesFontRef,
+                    { kind: 'standard-14' }
+                  >['family']
+                  if (family) setReferenceTextStyle({ fontRef: { kind: 'standard-14', family } })
+                }}
+              >
+                {referenceStyle.fontRef.kind === 'system' && <option value="">System font</option>}
+                {STANDARD_FONTS.map((font) => (
+                  <option key={font} value={font}>
+                    {font}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span>Size</span>
+              <input
+                type="number"
+                min="6"
+                max="96"
+                value={referenceStyle.fontSize}
+                disabled={!referenceStyleEnabled}
+                onChange={(event) =>
+                  setReferenceTextStyle({
+                    fontSize: Math.max(6, Math.min(96, numberValue(event.target.value, 9)))
+                  })
+                }
+              />
+            </label>
+            <label>
+              <span>Color</span>
+              <input
+                type="color"
+                value={referenceStyle.color}
+                disabled={!referenceStyleEnabled}
+                onChange={(event) => setReferenceTextStyle({ color: event.target.value })}
+              />
+            </label>
+            <label>
+              <span>Weight</span>
+              <select
+                value={referenceStyle.fontWeight}
+                disabled={!referenceStyleEnabled}
+                onChange={(event) =>
+                  setReferenceTextStyle({
+                    fontWeight: event.target.value as KeptExportTextStyle['fontWeight']
+                  })
+                }
+              >
+                <option value="normal">Normal</option>
+                <option value="bold">Bold</option>
+              </select>
+            </label>
+            <label>
+              <span>Style</span>
+              <select
+                value={referenceStyle.fontStyle}
+                disabled={!referenceStyleEnabled}
+                onChange={(event) =>
+                  setReferenceTextStyle({
+                    fontStyle: event.target.value as KeptExportTextStyle['fontStyle']
+                  })
+                }
+              >
+                <option value="normal">Normal</option>
+                <option value="italic">Italic</option>
+              </select>
+            </label>
+          </div>
+        </section>
+
         <CanvasBackgroundControls
           label={activeTarget === 'page-one' ? 'Page 1 background' : 'Later pages background'}
           background={template.background}
@@ -1134,57 +1321,59 @@ export function KeptExportTemplateEditor({
         </div>
       )}
 
-      <footer className="kept-template-editor-footer">
-        <div className="kept-template-editor-footer-meta">
-          <label className="kept-template-auto-close">
-            <input
-              type="checkbox"
-              checked={autoCloseAfterAction}
-              onChange={(event) => onAutoCloseAfterActionChange?.(event.target.checked)}
-            />
-            Auto-close after actions
-          </label>
-          {actionStatus && (
-            <span className="kept-template-action-status" role="status" aria-live="polite">
-              {actionStatus}
-            </span>
+      {!embedded && (
+        <footer className="kept-template-editor-footer">
+          <div className="kept-template-editor-footer-meta">
+            <label className="kept-template-auto-close">
+              <input
+                type="checkbox"
+                checked={autoCloseAfterAction}
+                onChange={(event) => onAutoCloseAfterActionChange?.(event.target.checked)}
+              />
+              Auto-close after actions
+            </label>
+            {actionStatus && (
+              <span className="kept-template-action-status" role="status" aria-live="polite">
+                {actionStatus}
+              </span>
+            )}
+          </div>
+          {onCancel && (
+            <button className="secondary-button" type="button" onClick={onCancel}>
+              Cancel
+            </button>
           )}
-        </div>
-        {onCancel && (
-          <button className="secondary-button" type="button" onClick={onCancel}>
-            Cancel
-          </button>
-        )}
-        <button
-          className="secondary-button"
-          type="button"
-          disabled={issues.length > 0}
-          onClick={() => onApply(cloneKeptExportTemplateDraft(draft))}
-        >
-          <Check size={15} aria-hidden="true" /> Apply
-        </button>
-        {onPreview && (
           <button
             className="secondary-button"
             type="button"
-            disabled={issues.length > 0 || isExporting || isPreviewing}
-            onClick={() => {
-              onPreview?.(cloneKeptExportTemplateDraft(draft))
-            }}
+            disabled={issues.length > 0}
+            onClick={() => onApply(cloneKeptExportTemplateDraft(draft))}
           >
-            {isPreviewing ? 'Generating preview...' : 'Preview'}
+            <Check size={15} aria-hidden="true" /> Apply
           </button>
-        )}
-        <button
-          className="primary-button"
-          type="button"
-          disabled={issues.length > 0 || isExporting || isPreviewing}
-          onClick={() => onExport(cloneKeptExportTemplateDraft(draft))}
-        >
-          <FileOutput size={15} aria-hidden="true" />
-          {isExporting ? 'Exporting...' : 'Export PDF'}
-        </button>
-      </footer>
+          {onPreview && (
+            <button
+              className="secondary-button"
+              type="button"
+              disabled={issues.length > 0 || isExporting || isPreviewing}
+              onClick={() => {
+                onPreview?.(cloneKeptExportTemplateDraft(draft))
+              }}
+            >
+              {isPreviewing ? 'Generating preview...' : 'Preview'}
+            </button>
+          )}
+          <button
+            className="primary-button"
+            type="button"
+            disabled={issues.length > 0 || isExporting || isPreviewing}
+            onClick={() => onExport(cloneKeptExportTemplateDraft(draft))}
+          >
+            <FileOutput size={15} aria-hidden="true" />
+            {isExporting ? 'Exporting...' : 'Export PDF'}
+          </button>
+        </footer>
+      )}
     </section>
   )
 }

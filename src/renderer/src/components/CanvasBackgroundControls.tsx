@@ -61,7 +61,8 @@ export function CanvasBackgroundControls({
               y: 0,
               width: defaultWidth,
               height: defaultHeight,
-              opacity: 1
+              opacity: 1,
+              sharpness: 100
             })
               .then(onChange)
               .catch((error: unknown) =>
@@ -139,6 +140,19 @@ export function CanvasBackgroundControls({
                 value={background.opacity}
                 onChange={(event) =>
                   onChange({ ...background, opacity: Number(event.target.value) })
+                }
+              />
+            </label>
+            <label>
+              <span>Sharpness</span>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                step="5"
+                value={background.sharpness ?? 100}
+                onChange={(event) =>
+                  onChange({ ...background, sharpness: Number(event.target.value) })
                 }
               />
             </label>

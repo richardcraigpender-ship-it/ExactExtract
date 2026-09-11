@@ -30,18 +30,19 @@ export function KeptEntriesExportPreview({
   const { dialogRef, onKeyDown: trapFocus } = useModalFocusTrap<HTMLDivElement>()
 
   return (
-    <div className="kept-entries-preview-backdrop" role="presentation" onClick={onClose}>
+    <div className="kept-entries-preview-backdrop" role="presentation">
       <div
         ref={dialogRef}
-        className="kept-entries-preview"
+        className={
+          studioMode === 'text'
+            ? 'kept-entries-preview kept-entries-preview--text-template'
+            : 'kept-entries-preview'
+        }
         role="dialog"
         aria-modal="true"
         aria-labelledby="kept-entries-preview-title"
         onClick={(event) => event.stopPropagation()}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') onClose()
-          else trapFocus(event)
-        }}
+          onKeyDown={trapFocus}
       >
         <header className="kept-entries-preview-header">
           <strong id="kept-entries-preview-title">{title}</strong>
@@ -68,9 +69,6 @@ export function KeptEntriesExportPreview({
             </div>
           )}
           <div className="kept-entries-preview-actions">
-            <button className="secondary-button" type="button" onClick={onClose}>
-              Cancel
-            </button>
             <button
               className="primary-button"
               type="button"

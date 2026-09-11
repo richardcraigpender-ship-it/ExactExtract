@@ -30,6 +30,23 @@
   box-shadow: 0 12px 32px rgba(25, 35, 29, 0.2);
 }
 
+.export-canvas-renderer-debug {
+  position: absolute;
+  z-index: 2;
+  top: 8px;
+  right: 8px;
+  max-width: calc(100% - 16px);
+  padding: 4px 6px;
+  border: 1px solid #17231c;
+  border-radius: 2px;
+  color: #17231c;
+  background: rgba(255, 255, 255, 0.92);
+  font-family: monospace;
+  font-size: 10px;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
 .export-canvas-background,
 .export-canvas-placement {
   position: absolute;
@@ -61,7 +78,7 @@
 .export-canvas-placement {
   display: block;
   padding: 0;
-  overflow: hidden;
+  overflow: visible;
   line-height: 1.2;
   letter-spacing: 0;
   transform-origin: top left;

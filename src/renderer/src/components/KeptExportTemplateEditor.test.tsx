@@ -67,6 +67,38 @@ test('labels balance snapshot totals separately from closing balances', () => {
   assert.match(markup, /sum of snapshots, not the account closing balance/)
 })
 
+test('offers per-column alignment and a separate reference text style', () => {
+  const markup = renderToStaticMarkup(
+    <KeptExportTemplateEditor onApply={() => {}} onExport={() => {}} />
+  )
+
+  assert.match(markup, /Align/)
+  assert.match(markup, /<option value="center">Center<\/option>/)
+  assert.match(markup, /Reference text style/)
+  assert.match(markup, /Style separately/)
+  // Reference controls stay disabled until the user opts into styling them separately.
+  assert.match(markup, /Currently follows the payee style at a smaller size/)
+})
+
+test('enables the reference style controls once a reference style is configured', () => {
+  const draft = createDefaultKeptExportTemplateDraft()
+  draft.pageOneTemplate.showReferenceUnderMainText = true
+  draft.pageOneTemplate.referenceTextStyle = {
+    fontRef: { kind: 'standard-14', family: 'Courier' },
+    fontSize: 7,
+    color: '#994400',
+    fontWeight: 'bold',
+    fontStyle: 'italic'
+  }
+
+  const markup = renderToStaticMarkup(
+    <KeptExportTemplateEditor initialDraft={draft} onApply={() => {}} onExport={() => {}} />
+  )
+
+  assert.match(markup, /Applies to the reference line under the payee/)
+  assert.match(markup, /value="#994400"/)
+})
+
 test('offers the canvas background copy only when a canvas background exists', () => {
   const withoutCanvas = renderToStaticMarkup(
     <KeptExportTemplateEditor onApply={() => {}} onExport={() => {}} />

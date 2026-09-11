@@ -9,6 +9,7 @@ interface KeptTextCanvasWorkspaceProps {
   entries: readonly ProjectEntry[]
   layout: KeptEntriesCanvasLayout
   keptExportTemplate?: KeptExportTemplate
+  onTextTemplateChange?: (template: KeptExportTemplate) => void
   textRenderPlan?: KeptExportRenderPlan
   onLayoutChange: (layout: KeptEntriesCanvasLayout) => void
   onClose: () => void

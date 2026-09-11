@@ -24,8 +24,38 @@ const REFERENCE_TOP_OFFSET_POINTS = 3
 /** Clear space kept under the reference line so dividers do not crowd it. */
 const REFERENCE_BOTTOM_GAP_POINTS = 3
 
-function referenceStyle(style: KeptExportTextStyle): KeptExportTextStyle {
+function referenceStyle(
+  style: KeptExportTextStyle,
+  template: KeptExportPageTemplate
+): KeptExportTextStyle {
+  if (template.referenceTextStyle) return template.referenceTextStyle
   return { ...style, fontSize: Math.max(6, style.fontSize - 2), fontWeight: 'normal' }
+}
+
+function lineCount(text: string, width: number, fontSize: number): number {
+  const averageCharacterWidth = Math.max(1, fontSize * 0.55)
+  const charactersPerLine = Math.max(1, Math.floor(width / averageCharacterWidth))
+  return Math.max(1, Math.ceil(text.length / charactersPerLine))
+}
+
+function snippedLine(text: string, width: number, fontSize: number): string {
+  const averageCharacterWidth = Math.max(1, fontSize * 0.55)
+  const charactersPerLine = Math.max(1, Math.floor(width / averageCharacterWidth))
+  if (text.length <= charactersPerLine) return text
+  if (charactersPerLine <= 3) return text.slice(0, charactersPerLine)
+  return `${text.slice(0, charactersPerLine - 3).trimEnd()}...`
+}
+
+function shouldSnipForReference(
+  template: KeptExportPageTemplate,
+  column: KeptExportColumn,
+  reference: string
+): boolean {
+  return Boolean(
+    template.showReferenceUnderMainText &&
+    reference &&
+    (column.sourceField === 'payee' || column.sourceField === 'text')
+  )
 }
 
 function referenceColumn(template: KeptExportPageTemplate): KeptExportColumn | undefined {
@@ -42,6 +72,28 @@ function pageTemplate(template: KeptExportTemplate, pageNumber: number): KeptExp
     : template.laterPagesTemplate
 }
 
+interface RowGeometry {
+  startY: number
+  endY: number
+  spacing: number
+}
+
+function rowGeometry(template: KeptExportPageTemplate, column: KeptExportColumn): RowGeometry {
+  if (template.layoutMode === 'column-fill') {
+    return {
+      startY: template.fillBetweenY ? template.startY! : column.y,
+      endY: template.fillBetweenY ? template.endY! : column.y + column.height,
+      spacing: column.spacing
+    }
+  }
+  const anchor = referenceColumn(template) ?? column
+  return {
+    startY: template.fillBetweenY ? template.startY! : anchor.y,
+    endY: template.fillBetweenY ? template.endY! : anchor.y + anchor.height,
+    spacing: anchor.spacing
+  }
+}
+
 function effectiveEntriesPerPage(template: KeptExportPageTemplate): number {
   const { startY, endY } = template
   if (
@@ -55,7 +107,11 @@ function effectiveEntriesPerPage(template: KeptExportPageTemplate): number {
     return template.entriesPerPage
   }
   const range = endY - startY
-  const fitting = template.columns.map((column) => Math.floor(range / column.spacing))
+  const columns =
+    template.layoutMode === 'table-row'
+      ? [referenceColumn(template) ?? template.columns[0]!]
+      : template.columns
+  const fitting = columns.map((column) => Math.floor(range / column.spacing))
   return Math.max(1, Math.min(template.entriesPerPage, ...fitting))
 }
 
@@ -87,8 +143,34 @@ export function buildKeptExportRenderPlan(
         : pageRows.flatMap((row, rowIndex) =>
             currentTemplate.columns.map((column) => ({ row, rowIndex, column }))
           )
+    const rowOffsets: number[] = []
+    let nextRowOffset = 0
+    pageRows.forEach((row, rowIndex) => {
+      rowOffsets[rowIndex] = nextRowOffset
+      const anchor = referenceColumn(currentTemplate)
+      const anchorText = anchor ? valueFor(row, anchor.sourceField) : ''
+      const anchorStyle = anchor ? styleFor(currentTemplate, anchor) : undefined
+      const reference = valueFor(row, 'reference')
+      const payeeHeight =
+        anchor && anchorStyle
+          ? (currentTemplate.showReferenceUnderMainText && reference
+              ? 1
+              : lineCount(anchorText, anchor.width, anchorStyle.fontSize)) *
+            anchorStyle.fontSize *
+            1.2
+          : 0
+      const referenceHeight =
+        currentTemplate.showReferenceUnderMainText && reference && anchorStyle
+          ? referenceStyle(anchorStyle, currentTemplate).fontSize +
+            REFERENCE_TOP_OFFSET_POINTS +
+            REFERENCE_BOTTOM_GAP_POINTS
+          : 0
+      const geometry = rowGeometry(currentTemplate, anchor ?? currentTemplate.columns[0]!)
+      nextRowOffset += Math.max(geometry.spacing, payeeHeight + referenceHeight)
+    })
     rowPlacements.forEach(({ row, rowIndex, column }) => {
       const text = valueFor(row, column.sourceField)
+      const reference = valueFor(row, 'reference')
       if (!text) {
         warnings.push({
           code: 'missing-value',
@@ -98,10 +180,10 @@ export function buildKeptExportRenderPlan(
         })
         return
       }
-      const firstRowY = currentTemplate.fillBetweenY ? currentTemplate.startY! : column.y
-      const endY = currentTemplate.fillBetweenY ? currentTemplate.endY! : column.y + column.height
-      const y = firstRowY + rowIndex * column.spacing
-      if (y + column.spacing > endY) {
+      const geometry = rowGeometry(currentTemplate, column)
+      const y = geometry.startY + rowOffsets[rowIndex]!
+      const style = styleFor(currentTemplate, column)
+      if (y + geometry.spacing > geometry.endY) {
         warnings.push({
           code: 'overflow',
           entryId: row.entryId,
@@ -113,12 +195,15 @@ export function buildKeptExportRenderPlan(
         entryId: row.entryId,
         columnId: column.id,
         pageNumber,
-        text,
+        text: shouldSnipForReference(currentTemplate, column, reference)
+          ? snippedLine(text, column.width, style.fontSize)
+          : text,
         x: column.x,
         y,
         width: column.width,
-        height: column.spacing,
-        style: styleFor(currentTemplate, column)
+        height: geometry.spacing,
+        ...(column.align ? { align: column.align } : {}),
+        style
       })
     })
     if (currentTemplate.showReferenceUnderMainText) {
@@ -131,7 +216,7 @@ export function buildKeptExportRenderPlan(
             (placement) => placement.entryId === row.entryId && placement.columnId === column.id
           )
           if (!anchor) continue
-          const style = referenceStyle(anchor.style)
+          const style = referenceStyle(anchor.style, currentTemplate)
           placements.push({
             entryId: row.entryId,
             columnId: `${column.id}:reference`,
@@ -140,6 +225,7 @@ export function buildKeptExportRenderPlan(
             x: anchor.x,
             y: anchor.y + anchor.style.fontSize + REFERENCE_TOP_OFFSET_POINTS,
             width: anchor.width,
+            ...(column.align ? { align: column.align } : {}),
             // The reference owns its own line box plus the clear space a divider must respect.
             height: style.fontSize + REFERENCE_BOTTOM_GAP_POINTS,
             style

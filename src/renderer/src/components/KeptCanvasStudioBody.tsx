@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useCallback, useMemo, useState } from 'react'
 import {
   Images,
   Layers,
@@ -11,30 +11,31 @@ import {
 } from 'lucide-react'
 
 import type { ProjectEntry } from '../../../shared/contracts'
-import type {
-  KeptExportRenderPlan,
-  KeptExportTemplate,
-  KeptExportTextStyle
-} from '../../../shared/keptExportTemplate'
+import type { KeptExportRenderPlan, KeptExportTemplate } from '../../../shared/keptExportTemplate'
 import {
   keptEntriesLayoutPageCount,
+  keptEntriesPageDimensions,
   type KeptEntriesBackground,
   type KeptEntriesCanvasLayout,
-  type KeptEntryPlacement,
   type KeptImagePlacement,
   type KeptImageSourceRef
 } from '../../../shared/keptEntriesLayout'
 import { CanvasBackgroundControls } from './CanvasBackgroundControls'
-import {
-  CANVAS_DEFAULT_ZOOM,
-  CanvasPagerControls,
-  CanvasZoomControls
-} from './CanvasWorkspaceControls'
+import { CanvasPagerControls, CanvasZoomControls } from './CanvasWorkspaceControls'
 import { describeImageResolutionFailure } from '../lib/imageResolutionMessage'
 import { ExportCanvas } from './ExportCanvas'
 import { KeptEntriesExportPreview } from './KeptEntriesExportPreview'
-import { createKeptEntryPlacement } from './keptEntriesLayout'
-import { PlacementFontToolbar } from './PlacementFontToolbar'
+import { KeptExportTemplateEditor } from './KeptExportTemplateEditor'
+import { KeptImagePlacementSection } from './KeptImagePlacementSection'
+import { buildSessionKeptImageSources, type KeptImagePlan } from '../../../export'
+import { uploadProjectPngs } from '../lib/projectImageUploads'
+import type { DocumentStyleProfile } from '../../../shared/contracts'
+import type { DetectedPageNumberMatch } from '../../../style'
+import type {
+  KeptImagePlacementOptions,
+  KeptImageSourceDescriptor
+} from '../../../shared/keptEntriesLayout'
+import { createKeptExportTemplateDraft, toKeptExportTemplate } from './keptExportTemplateDraft'
 
 type ToolPanel = 'setup' | 'pages' | 'zoom' | 'place' | 'selection' | 'background'
 
@@ -43,6 +44,7 @@ interface KeptCanvasStudioBodyProps {
   layout: KeptEntriesCanvasLayout
   initialMode: 'text' | 'png'
   keptExportTemplate?: KeptExportTemplate
+  onTextTemplateChange?: (template: KeptExportTemplate) => void
   /** Template render plan; the text canvas draws from this so config edits match the final PDF. */
   textRenderPlan?: KeptExportRenderPlan
   onLayoutChange: (layout: KeptEntriesCanvasLayout) => void
@@ -52,6 +54,14 @@ interface KeptCanvasStudioBodyProps {
   onOpenConfiguration?: () => void
   onOpenTextConfiguration?: () => void
   onOpenPngConfiguration?: () => void
+  /** PNG configuration is hosted in this panel, so the studio owns these directly. */
+  documents?: readonly { styleProfile?: DocumentStyleProfile }[]
+  onPlaceKeptImages?: (plan: KeptImagePlan) => void
+  onImagePlacementConfigurationChange?: (
+    options: KeptImagePlacementOptions,
+    uploadedSources: readonly KeptImageSourceDescriptor[]
+  ) => void
+  onDetectPageNumbers?: () => Promise<DetectedPageNumberMatch | undefined>
   onSwitchMode?: () => void
   isExporting?: boolean
   resolveImageSource?: (source: KeptImageSourceRef) => string | undefined
@@ -66,6 +76,7 @@ export function KeptCanvasStudioBody({
   layout,
   initialMode,
   keptExportTemplate,
+  onTextTemplateChange,
   textRenderPlan,
   onLayoutChange,
   onClose,
@@ -74,6 +85,10 @@ export function KeptCanvasStudioBody({
   onOpenConfiguration,
   onOpenTextConfiguration,
   onOpenPngConfiguration,
+  documents = [],
+  onPlaceKeptImages,
+  onImagePlacementConfigurationChange,
+  onDetectPageNumbers,
   onSwitchMode,
   isExporting = false,
   resolveImageSource,
@@ -81,38 +96,43 @@ export function KeptCanvasStudioBody({
   onRefreshImages,
   isRefreshingImages = false
 }: KeptCanvasStudioBodyProps): React.JSX.Element {
-  const [selectedPlacementId, setSelectedPlacementId] = useState<string | null>(null)
   const [selectedImagePlacementId, setSelectedImagePlacementId] = useState<string | null>(null)
   const [page, setPage] = useState(1)
-  const [zoom, setZoom] = useState(CANVAS_DEFAULT_ZOOM)
+  const [zoom, setZoom] = useState(1)
   const [studioMode, setStudioMode] = useState<'text' | 'png'>(initialMode)
   const [toolPanel, setToolPanel] = useState<ToolPanel>('setup')
 
   const images = layout.images ?? []
-  const pageCount = keptEntriesLayoutPageCount(layout)
+  const sessionImageSources = useMemo(() => buildSessionKeptImageSources(entries), [entries])
+  const templatePages = textRenderPlan?.pages ?? []
+  const pageCount =
+    studioMode === 'text' && textRenderPlan
+      ? Math.max(1, templatePages.length)
+      : keptEntriesLayoutPageCount(layout)
   const currentPage = Math.min(Math.max(1, page), pageCount)
   const resolutionMessage = describeImageResolutionFailure(imageResolutionError)
-  const textOnPage = layout.placements.filter(
-    (placement) => (placement.pageNumber ?? 1) === currentPage
-  ).length
+  const templatePage = templatePages.find((candidate) => candidate.pageNumber === currentPage)
   const imagesOnPage = images.filter((placement) => placement.pageNumber === currentPage).length
-  const selectedPlacement =
-    layout.placements.find((placement) => placement.id === selectedPlacementId) ?? null
+  const textOnPage = templatePage
+    ? templatePage.placements.length
+    : layout.placements.filter((placement) => (placement.pageNumber ?? 1) === currentPage).length
   const selectedImage =
     images.find((placement) => placement.id === selectedImagePlacementId) ?? null
-  const keptEntries = entries.filter((entry) => entry.status === 'keep')
-  const placedEntryIds = new Set(
-    layout.placements.flatMap((placement) => (placement.entryId ? [placement.entryId] : []))
-  )
 
-  const replacePlacement = (next: KeptEntryPlacement): void => {
-    onLayoutChange({
-      ...layout,
-      placements: layout.placements.map((placement) =>
-        placement.id === next.id ? next : placement
-      )
-    })
-  }
+  const balanceOptions = layout.imagePlacementOptions?.runningBalance
+  const pageWidth = keptEntriesPageDimensions(layout.pageSize, layout.orientation).width
+  const clippedBalanceCount = balanceOptions?.enabled
+    ? images.filter((placement) => {
+        if (placement.pageNumber !== currentPage || !placement.runningBalanceText) return false
+        const labelWidth = placement.runningBalanceText.length * balanceOptions.fontSize * 0.6
+        return placement.x + placement.width + balanceOptions.offsetX + labelWidth > pageWidth
+      }).length
+    : 0
+  const balancesEnabledButMissing = Boolean(
+    balanceOptions?.enabled &&
+    imagesOnPage > 0 &&
+    images.every((placement) => !placement.runningBalanceText)
+  )
 
   const replaceImage = (next: KeptImagePlacement): void => {
     onLayoutChange({
@@ -122,15 +142,6 @@ export function KeptCanvasStudioBody({
   }
 
   const deleteSelected = (): void => {
-    if (studioMode === 'text') {
-      if (!selectedPlacement) return
-      onLayoutChange({
-        ...layout,
-        placements: layout.placements.filter((placement) => placement.id !== selectedPlacement.id)
-      })
-      setSelectedPlacementId(null)
-      return
-    }
     if (!selectedImage) return
     onLayoutChange({
       ...layout,
@@ -143,29 +154,6 @@ export function KeptCanvasStudioBody({
     onLayoutChange({ ...layout, background })
   }
 
-  const placeTextEntry = (entry: ProjectEntry): void => {
-    const existing = layout.placements.find((placement) => placement.entryId === entry.id)
-    if (existing) {
-      setSelectedPlacementId(existing.id)
-      setPage(existing.pageNumber ?? 1)
-      return
-    }
-    const placementsOnPage = layout.placements.filter(
-      (placement) => (placement.pageNumber ?? 1) === currentPage
-    )
-    const placement = {
-      ...createKeptEntryPlacement(entry, placementsOnPage.length),
-      pageNumber: currentPage
-    }
-    onLayoutChange({ ...layout, placements: [...layout.placements, placement] })
-    setSelectedPlacementId(placement.id)
-  }
-
-  /** Canvas is the single source of truth: selecting on it highlights + reveals the list tab. */
-  const selectPlacementFromCanvas = (placementId: string): void => {
-    setSelectedPlacementId(placementId)
-    setToolPanel('place')
-  }
   const selectImageFromCanvas = (placementId: string): void => {
     setSelectedImagePlacementId(placementId)
     setToolPanel('place')
@@ -175,26 +163,17 @@ export function KeptCanvasStudioBody({
     studioMode === 'text'
       ? (onOpenTextConfiguration ?? onOpenConfiguration)
       : (onOpenPngConfiguration ?? onOpenConfiguration)
-  const templatePage = textRenderPlan?.pages.find((page) => page.pageNumber === currentPage)
   const textCanvasLayout =
     studioMode === 'text' && templatePage
       ? {
           ...layout,
           pageSize: templatePage.template.pageSize,
           orientation: templatePage.template.orientation,
-          background: templatePage.template.background ?? layout.background
+          // Text templates and PNG boards have independent backgrounds.
+          background: templatePage.template.background
         }
       : layout
-  const templateTextStyle: KeptExportTextStyle | undefined = keptExportTemplate
-    ? (keptExportTemplate.pageOneTemplate.columns.find((column) => column.sourceField === 'payee')
-        ?.textStyle ??
-      keptExportTemplate.pageOneTemplate.columns.find((column) => column.sourceField === 'text')
-        ?.textStyle ??
-      keptExportTemplate.pageOneTemplate.columns[0]?.textStyle ??
-      keptExportTemplate.pageOneTemplate.defaultTextStyle)
-    : undefined
-
-  const tools = [
+  const availableTools = [
     { id: 'setup' as const, label: 'Setup', icon: Settings2 },
     { id: 'pages' as const, label: 'Pages', icon: Layers },
     { id: 'zoom' as const, label: 'Zoom', icon: ZoomIn },
@@ -202,6 +181,21 @@ export function KeptCanvasStudioBody({
     { id: 'selection' as const, label: 'Select', icon: MousePointer2 },
     { id: 'background' as const, label: 'Background', icon: Images }
   ]
+  const tools =
+    studioMode === 'text'
+      ? availableTools.filter((tool) =>
+          (['setup', 'pages', 'zoom'] as ToolPanel[]).includes(tool.id)
+        )
+      : availableTools
+  // Switching modes can leave a tab selected that the new mode does not offer.
+  const activeToolPanel = tools.some((tool) => tool.id === toolPanel) ? toolPanel : 'setup'
+  const textTemplateDraft = createKeptExportTemplateDraft(keptExportTemplate)
+  const updateTextTemplate = useCallback(
+    (draft: ReturnType<typeof createKeptExportTemplateDraft>): void => {
+      onTextTemplateChange?.(toKeptExportTemplate(draft))
+    },
+    [onTextTemplateChange]
+  )
 
   return (
     <KeptEntriesExportPreview
@@ -217,7 +211,7 @@ export function KeptCanvasStudioBody({
       isExporting={isExporting}
       onClose={onClose}
       onExport={onExport}
-      onReset={onReset}
+      onReset={studioMode === 'png' ? onReset : undefined}
       canvas={
         studioMode === 'text' ? (
           <ExportCanvas
@@ -227,17 +221,29 @@ export function KeptCanvasStudioBody({
             zoom={zoom}
             showImages={false}
             templatePage={templatePage}
-            textStyleOverride={templatePage ? undefined : templateTextStyle}
-            selectedPlacementId={selectedPlacementId}
-            onSelectPlacement={templatePage ? undefined : selectPlacementFromCanvas}
-            onPlacementChange={templatePage ? undefined : replacePlacement}
-            onBackgroundChange={changeBackground}
+            templatePageNumbers={keptExportTemplate?.pageNumbers}
+            templatePageCount={pageCount}
           />
         ) : (
           <>
             {resolutionMessage && (
               <p className="kept-canvas-image-error" role="status">
                 {resolutionMessage}
+              </p>
+            )}
+            {balancesEnabledButMissing && (
+              <p className="kept-canvas-image-error" role="status">
+                The balance column is on, but no placed image has a balance value yet. Open
+                Configure PNG Snippet Board and run Place images to refresh them.
+              </p>
+            )}
+            {clippedBalanceCount > 0 && (
+              <p className="kept-canvas-image-error" role="status">
+                {clippedBalanceCount} balance label
+                {clippedBalanceCount === 1 ? '' : 's'} on this page start past the{' '}
+                {Math.round(pageWidth)}pt page edge, so{' '}
+                {clippedBalanceCount === 1 ? 'it is' : 'they are'} clipped. Reduce the image width,
+                Start X, or the balance gap.
               </p>
             )}
             <ExportCanvas
@@ -261,9 +267,9 @@ export function KeptCanvasStudioBody({
             {tools.map(({ id, label, icon: ToolIcon }) => (
               <button
                 key={id}
-                className={toolPanel === id ? 'is-active' : ''}
+                className={activeToolPanel === id ? 'is-active' : ''}
                 type="button"
-                aria-pressed={toolPanel === id}
+                aria-pressed={activeToolPanel === id}
                 onClick={() => setToolPanel(id)}
                 title={label}
               >
@@ -274,29 +280,47 @@ export function KeptCanvasStudioBody({
           </div>
           <div
             className="kept-preview-tool-options"
-            aria-label={`${tools.find((tool) => tool.id === toolPanel)?.label ?? 'Tool'} options`}
+            aria-label={`${tools.find((tool) => tool.id === activeToolPanel)?.label ?? 'Tool'} options`}
           >
-            {toolPanel === 'setup' && (
-              <>
-                {openConfiguration && (
+            {activeToolPanel === 'setup' &&
+              (studioMode === 'text' ? (
+                <KeptExportTemplateEditor
+                  embedded
+                  initialDraft={textTemplateDraft}
+                  onDraftChange={updateTextTemplate}
+                  onApply={updateTextTemplate}
+                  onExport={updateTextTemplate}
+                />
+              ) : onPlaceKeptImages ? (
+                <KeptImagePlacementSection
+                  pageSize={layout.pageSize}
+                  orientation={layout.orientation}
+                  sessionSources={sessionImageSources}
+                  keptEntries={entries}
+                  documents={documents}
+                  runningBalance={keptExportTemplate?.runningBalance}
+                  onPlaceImages={onPlaceKeptImages}
+                  onUploadPngs={uploadProjectPngs}
+                  placedImageCount={images.length}
+                  initialOptions={layout.imagePlacementOptions}
+                  initialUploadedSources={layout.uploadedImageSources}
+                  onConfigurationChange={onImagePlacementConfigurationChange}
+                  initialPageNumbers={layout.pageNumbers}
+                  onPageNumbersChange={(pageNumbers) => onLayoutChange({ ...layout, pageNumbers })}
+                  onDetectPageNumbers={onDetectPageNumbers}
+                />
+              ) : (
+                openConfiguration && (
                   <button
                     className="secondary-button preview-tool-button"
                     type="button"
                     onClick={openConfiguration}
                   >
-                    <Settings2 size={14} aria-hidden="true" />{' '}
-                    {studioMode === 'text'
-                      ? 'Configure Formatted Text Statement'
-                      : 'Configure PNG Snippet Board'}
+                    <Settings2 size={14} aria-hidden="true" /> Configure PNG Snippet Board
                   </button>
-                )}
-                <p className="context-help">
-                  Open the current preview mode setup, or switch tools above for page, zoom, place,
-                  selection, and background controls.
-                </p>
-              </>
-            )}
-            {toolPanel === 'pages' && (
+                )
+              ))}
+            {activeToolPanel === 'pages' && (
               <>
                 <CanvasPagerControls
                   currentPage={currentPage}
@@ -305,129 +329,79 @@ export function KeptCanvasStudioBody({
                 />
                 <p className="context-help" role="status">
                   {studioMode === 'text'
-                    ? `${textOnPage} text box${textOnPage === 1 ? '' : 'es'} on this page.`
+                    ? `${textOnPage} text placement${textOnPage === 1 ? '' : 's'} on this page.`
                     : `${imagesOnPage} image${imagesOnPage === 1 ? '' : 's'} on this page.`}
                 </p>
               </>
             )}
-            {toolPanel === 'zoom' && <CanvasZoomControls zoom={zoom} onChange={setZoom} />}
-            {toolPanel === 'place' &&
-              (studioMode === 'text' ? (
-                <section className="studio-place-panel" aria-label="Place kept entries">
+            {activeToolPanel === 'zoom' && <CanvasZoomControls zoom={zoom} onChange={setZoom} />}
+            {activeToolPanel === 'place' && (
+              <section className="studio-place-panel" aria-label="Placed images">
+                {images.length === 0 ? (
                   <p className="context-help">
-                    Template rows flow automatically, so kept entries are always rendered. Click an
-                    entry to jump to it on the canvas.
+                    Place PNG snapshots from the setup panel, then select one here to edit it.
                   </p>
-                  <ul className="export-entries-list">
-                    {keptEntries.map((entry) => {
-                      const placement = layout.placements.find(
-                        (candidate) => candidate.entryId === entry.id
-                      )
-                      const onCanvas = placement !== undefined || placedEntryIds.has(entry.id)
+                ) : (
+                  <ul className="studio-image-list">
+                    {images.map((placement) => {
+                      const src = resolveImageSource?.(placement.source)
+                      const label = placement.entryId ?? placement.source.ref
                       return (
-                        <li
-                          className={`export-entry-item ${onCanvas ? 'is-placed' : ''} ${
-                            placement && placement.id === selectedPlacementId ? 'is-selected' : ''
-                          }`}
-                          key={entry.id}
-                        >
+                        <li key={placement.id}>
                           <button
                             type="button"
+                            className={`studio-image-thumb ${
+                              placement.id === selectedImagePlacementId ? 'is-selected' : ''
+                            }`}
+                            aria-pressed={placement.id === selectedImagePlacementId}
                             onClick={() => {
-                              if (placement) {
-                                setSelectedPlacementId(placement.id)
-                                setPage(placement.pageNumber ?? 1)
-                              } else {
-                                placeTextEntry(entry)
-                              }
+                              setSelectedImagePlacementId(placement.id)
+                              setPage(placement.pageNumber)
                             }}
                           >
-                            <span className="export-entry-text">{entry.normalizedText}</span>
-                            <span className="export-entry-status">
-                              {onCanvas ? 'On canvas' : 'Not placed'}
+                            {src ? (
+                              <img src={src} alt={label} />
+                            ) : (
+                              <span className="studio-image-thumb-fallback">{label}</span>
+                            )}
+                            <span className="studio-image-thumb-label">
+                              {label} · page {placement.pageNumber}
                             </span>
                           </button>
                         </li>
                       )
                     })}
-                    {keptEntries.length === 0 && (
-                      <li className="export-entries-empty">No kept entries to place yet.</li>
-                    )}
                   </ul>
-                </section>
-              ) : (
-                <section className="studio-place-panel" aria-label="Placed images">
-                  {images.length === 0 ? (
-                    <p className="context-help">
-                      Place PNG snapshots from the setup panel, then select one here to edit it.
-                    </p>
-                  ) : (
-                    <ul className="studio-image-list">
-                      {images.map((placement) => {
-                        const src = resolveImageSource?.(placement.source)
-                        const label = placement.entryId ?? placement.source.ref
-                        return (
-                          <li key={placement.id}>
-                            <button
-                              type="button"
-                              className={`studio-image-thumb ${
-                                placement.id === selectedImagePlacementId ? 'is-selected' : ''
-                              }`}
-                              aria-pressed={placement.id === selectedImagePlacementId}
-                              onClick={() => {
-                                setSelectedImagePlacementId(placement.id)
-                                setPage(placement.pageNumber)
-                              }}
-                            >
-                              {src ? (
-                                <img src={src} alt={label} />
-                              ) : (
-                                <span className="studio-image-thumb-fallback">{label}</span>
-                              )}
-                              <span className="studio-image-thumb-label">
-                                {label} · page {placement.pageNumber}
-                              </span>
-                            </button>
-                          </li>
-                        )
-                      })}
-                    </ul>
-                  )}
-                </section>
-              ))}
-            {toolPanel === 'selection' && (
-              <>
-                {studioMode === 'png' && (
-                  <button
-                    className="secondary-button preview-tool-button"
-                    type="button"
-                    disabled={!onRefreshImages || isRefreshingImages}
-                    onClick={onRefreshImages}
-                  >
-                    <RefreshCw size={14} aria-hidden="true" />{' '}
-                    {isRefreshingImages ? 'Refreshing images…' : 'Refresh PNG snapshots'}
-                  </button>
                 )}
+              </section>
+            )}
+            {activeToolPanel === 'selection' && (
+              <>
                 <button
                   className="secondary-button preview-tool-button"
                   type="button"
-                  disabled={studioMode === 'text' ? !selectedPlacement : !selectedImage}
+                  disabled={!onRefreshImages || isRefreshingImages}
+                  onClick={onRefreshImages}
+                >
+                  <RefreshCw size={14} aria-hidden="true" />{' '}
+                  {isRefreshingImages ? 'Refreshing images…' : 'Refresh PNG snapshots'}
+                </button>
+                <button
+                  className="secondary-button preview-tool-button"
+                  type="button"
+                  disabled={!selectedImage}
                   onClick={deleteSelected}
                 >
                   <Trash2 size={14} aria-hidden="true" /> Delete selected
                 </button>
-                {studioMode === 'text' ? (
-                  <PlacementFontToolbar placement={selectedPlacement} onChange={replacePlacement} />
-                ) : (
-                  <p className="context-help">
-                    {selectedImage
-                      ? `${selectedImage.entryId ?? selectedImage.source.ref} is selected. Drag it on the canvas or use its corner handle to resize.`
-                      : 'Select a PNG to move or resize it.'}
-                  </p>
-                )}
+                <p className="context-help">
+                  {selectedImage
+                    ? `${selectedImage.entryId ?? selectedImage.source.ref} is selected. Drag it on the canvas or use its corner handle to resize.`
+                    : 'Select a PNG to move or resize it.'}
+                </p>
               </>
             )}
-            {toolPanel === 'background' && (
+            {activeToolPanel === 'background' && (
               <CanvasBackgroundControls
                 background={layout.background}
                 defaultWidth={612}

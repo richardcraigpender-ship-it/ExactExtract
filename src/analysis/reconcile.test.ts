@@ -89,6 +89,52 @@ test('ignores card and reference digits in transaction detail lines', () => {
   })
 })
 
+test('handles ordinal dates without truncating the description', () => {
+  const row = mapFinancialEntry(
+    entry('ordinal-date', '28th March 2026 Payment from MRS A. R. Smith money in £1,523.40'),
+    {
+      ...mapping,
+      amountColumns: ['money-in'] as const
+    }
+  )
+
+  assert.equal(row?.date, '28th March 2026')
+  assert.equal(row?.payee, 'Payment from MRS A. R. Smith')
+  assert.equal(row?.description, 'Payment from MRS A. R. Smith')
+  assert.equal(row?.moneyIn, 1523.4)
+})
+
+test('normalizes existing entry payees with trailing direction labels', () => {
+  const source = {
+    ...entry('stale-payee', '28th March 2026 Payment from MRS A. R. Smith money in £1,523.40'),
+    payee: 'Payment from MRS A. R. Smith money in'
+  }
+  const row = mapFinancialEntry(source, {
+    ...mapping,
+    amountColumns: ['money-in'] as const
+  })
+
+  assert.equal(row?.payee, 'Payment from MRS A. R. Smith')
+  assert.equal(row?.description, 'Payment from MRS A. R. Smith')
+})
+
+test('completes stale payment-from payees from non-reference notes', () => {
+  const source = {
+    ...entry('stale-split-payee', '28th March 2026 Payment from £1,523.40'),
+    payee: 'Payment from',
+    notes: 'MRS A. R. Smith\nCard 4165'
+  }
+  const row = mapFinancialEntry(source, {
+    ...mapping,
+    amountColumns: ['money-in'] as const,
+    referenceSource: 'entry-notes' as const
+  })
+
+  assert.equal(row?.payee, 'Payment from MRS A. R. Smith')
+  assert.equal(row?.description, 'Payment from MRS A. R. Smith')
+  assert.equal(row?.reference, 'Card 4165')
+})
+
 test('does not map undated reference-only detail as a financial row', () => {
   assert.equal(
     mapFinancialEntry(entry('detail', 'Card: 4165499354 Reference: RICHARD 28429591'), mapping),

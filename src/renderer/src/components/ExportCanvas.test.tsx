@@ -64,6 +64,8 @@ test('renders a layered responsive page from PDF-point placement data', () => {
   assert.match(markup, /opacity:0.4/)
   assert.match(markup, /data-placement-id="placement-1"/)
   assert.match(markup, /data-entry-id="entry-1"/)
+  assert.match(markup, /data-render-branch="legacy"/)
+  assert.match(markup, /Text renderer: legacy \(1 placements\)/)
   assert.match(markup, /left:7.8431372549019605%/)
   assert.match(markup, /top:9.090909090909092%/)
   assert.match(markup, /font-weight:700/)
@@ -125,6 +127,8 @@ test('renders the template render plan instead of static placements when provide
 
   assert.match(markup, /TEMPLATE PAYEE ROW/)
   assert.match(markup, /data-column-id="payee"/)
+  assert.match(markup, /data-render-branch="template"/)
+  assert.match(markup, /Text renderer: template \(1 placements, 0 references\)/)
   assert.match(markup, /color:#112233/)
   assert.match(markup, /export-canvas-image-divider/)
   assert.match(markup, /border-top:2px solid #336699/)

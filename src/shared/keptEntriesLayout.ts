@@ -113,6 +113,8 @@ export interface KeptEntriesBackground {
   width: number
   height: number
   opacity: number
+  /** 0 is fully blurred and 100 is unchanged. Older layouts default to 100. */
+  sharpness?: number
 }
 
 export interface KeptEntriesCanvasLayout {

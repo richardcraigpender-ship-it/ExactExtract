@@ -73,9 +73,13 @@ export function clearScannedReferenceNotes(
   let updatedEntryCount = 0
   let removedReferenceCount = 0
   const nextEntries = entries.map((entry) => {
+    const captured = entry.reference?.trim()
+    // Verbatim blocks are not token-shaped, so they are matched against the captured text itself.
+    const capturedLines = new Set(
+      (captured?.split('\n') ?? []).map((line) => line.trim()).filter(Boolean)
+    )
     const notes = entry.notes
-    if (!notes) return entry
-    const lines = notes.split('\n')
+    const lines = notes ? notes.split('\n') : []
     const kept: string[] = []
     let removed = 0
     for (const line of lines) {
@@ -83,8 +87,13 @@ export function clearScannedReferenceNotes(
         removed += line.split(',').filter((part) => part.trim()).length
         continue
       }
+      if (capturedLines.has(line.trim())) {
+        removed += 1
+        continue
+      }
       kept.push(line)
     }
+    if (captured) removed += capturedLines.size
     if (removed === 0) return entry
     updatedEntryCount += 1
     removedReferenceCount += removed
@@ -92,6 +101,7 @@ export function clearScannedReferenceNotes(
     const next: ProjectEntry = { ...entry, updatedAt }
     if (nextNotes) next.notes = nextNotes
     else delete next.notes
+    delete next.reference
     return next
   })
 
@@ -121,6 +131,8 @@ export interface SourceReferenceCandidate {
   confidence?: number
   source?: 'pdf-text-reference-scan' | 'ocr-reference-scan'
   references?: readonly string[]
+  /** Verbatim block text; when present it is copied instead of a parsed reference token. */
+  detailText?: string
 }
 
 export interface SourceReferenceCopyOptions {
@@ -128,6 +140,10 @@ export interface SourceReferenceCopyOptions {
   maxParentScore?: number
 }
 
+/**
+ * Copies the verbatim reference captured at extraction into the notes field. Parsed tokens are
+ * never synthesised here, so an entry without captured reference text is left untouched.
+ */
 export function copyKeptEntryReferencesToNotes(
   entries: readonly ProjectEntry[],
   updatedAt: string
@@ -136,16 +152,15 @@ export function copyKeptEntryReferencesToNotes(
   let copiedReferenceCount = 0
   const nextEntries = entries.map((entry) => {
     if (entry.status !== 'keep') return entry
-    const references = extractEntryReferences(entry)
-    if (references.length === 0) return entry
+    const reference = entry.reference?.trim()
+    if (!reference) return entry
     const existingNotes = entry.notes?.trim() ?? ''
-    const missing = missingReferences(references, existingNotes)
-    if (missing.length === 0) return entry
+    if (existingNotes.includes(reference)) return entry
     updatedEntryCount += 1
-    copiedReferenceCount += missing.length
+    copiedReferenceCount += 1
     return {
       ...entry,
-      notes: existingNotes ? `${existingNotes}\n${missing.join(', ')}` : missing.join(', '),
+      notes: existingNotes ? `${existingNotes}\n${reference}` : reference,
       updatedAt
     }
   })
@@ -164,7 +179,32 @@ function xOverlap(left: BoundingBox, right: BoundingBox): number {
   )
 }
 
+function yOverlap(left: BoundingBox, right: BoundingBox): number {
+  return Math.max(
+    0,
+    Math.min(left.y + left.height, right.y + right.height) - Math.max(left.y, right.y)
+  )
+}
+
+/**
+ * A verbatim block that sits on the parent row is that row, not a detail line beneath it.
+ * Works regardless of whether page coordinates run top-down or bottom-up.
+ */
+function overlapsParentRow(candidate: SourceReferenceCandidate, entry: ProjectEntry): boolean {
+  const region = entry.regions.find(
+    (region) =>
+      region.documentId === candidate.documentId &&
+      region.pageNumber === candidate.pageNumber &&
+      region.bbox?.coordinateSpace === 'pdf-points'
+  )
+  const bbox = region?.bbox
+  if (!bbox) return false
+  return yOverlap(bbox, candidate.bbox) > Math.min(bbox.height, candidate.bbox.height) * 0.5
+}
+
 function referenceValues(candidate: SourceReferenceCandidate): string[] {
+  const detail = candidate.detailText?.trim()
+  if (detail) return [detail]
   return uniqueReferences(candidate.references ?? extractReferencesFromText(candidate.text))
 }
 
@@ -234,6 +274,10 @@ export function copySourceReferencesToKeptEntryNotes(
       }
       continue
     }
+    if (candidate.detailText && overlapsParentRow(candidate, parentMatch.entry)) {
+      unmatchedCandidateCount += 1
+      continue
+    }
     matchedCandidateCount += 1
     const current = additions.get(parentMatch.entry.id) ?? []
     additions.set(parentMatch.entry.id, uniqueReferences([...current, ...values]))
@@ -251,9 +295,12 @@ export function copySourceReferencesToKeptEntryNotes(
     if (missing.length === 0) return entry
     updatedEntryCount += 1
     copiedReferenceCount += missing.length
+    const captured = missing.join('\n')
+    const existingReference = entry.reference?.trim() ?? ''
     return {
       ...entry,
       notes: existingNotes ? `${existingNotes}\n${missing.join(', ')}` : missing.join(', '),
+      reference: existingReference ? `${existingReference}\n${captured}` : captured,
       updatedAt
     }
   })

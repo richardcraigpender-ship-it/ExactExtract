@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useMemo, useRef, useState } from 'react'
+import React, { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react'
 import { Download, Eye, FileJson, FileOutput, Images, Table } from 'lucide-react'
 import {
   buildSessionKeptImageSources,
@@ -136,6 +136,14 @@ export const ExportPanel = React.memo(function ExportPanel({
     onTemplateApply?.(toKeptExportTemplate(savedDraft))
     setTemplateStatus('Kept text export template applied.')
   }
+  const syncTemplateDraft = useCallback(
+    (draft: KeptExportTemplateDraft): void => {
+      const savedDraft = cloneKeptExportTemplateDraft(draft)
+      latestTemplateDraftRef.current = savedDraft
+      onTemplateApply?.(toKeptExportTemplate(savedDraft))
+    },
+    [onTemplateApply]
+  )
   const changeAutoCloseTemplateEditor = (value: boolean): void => {
     setAutoCloseTemplateEditor(value)
     if (typeof localStorage !== 'undefined') {
@@ -292,9 +300,7 @@ export const ExportPanel = React.memo(function ExportPanel({
         >
           <KeptExportTemplateEditor
             initialDraft={templateDraft}
-            onDraftChange={(draft) => {
-              latestTemplateDraftRef.current = draft
-            }}
+            onDraftChange={syncTemplateDraft}
             onDetectPageNumbers={onDetectPageNumbers}
             canvasBackground={canvasBackground}
             onCancel={() => {
@@ -337,11 +343,11 @@ export const ExportPanel = React.memo(function ExportPanel({
           onClose={() => setShowImageLayoutEditor(false)}
         >
           <KeptImageLayoutEditor
-            pageSize={templateDraft.pageOneTemplate.pageSize}
-            orientation={templateDraft.pageOneTemplate.orientation}
+            pageSize={keptExportTemplate?.pageOneTemplate.pageSize ?? templateDraft.pageOneTemplate.pageSize}
+            orientation={keptExportTemplate?.pageOneTemplate.orientation ?? templateDraft.pageOneTemplate.orientation}
             sessionImageSources={sessionImageSources}
             keptEntries={keptEntries}
-            runningBalance={templateDraft.runningBalance}
+            runningBalance={keptExportTemplate?.runningBalance ?? templateDraft.runningBalance}
             placedImageCount={placedImageCount ?? 0}
             onPlaceImages={onPlaceKeptImages}
             onUploadPngs={uploadProjectPngs}

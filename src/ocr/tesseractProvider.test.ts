@@ -16,7 +16,7 @@ test('configures worker, core, and trained data from bundled offline assets', ()
   const options = getOfflineTesseractWorkerOptions()
 
   assert.equal(options?.workerPath, 'exact-extract-ocr://assets/worker.min.js')
-  assert.equal(options?.corePath, 'exact-extract-ocr://assets/core')
+  assert.equal(options?.corePath, 'exact-extract-ocr://assets/core/tesseract-core-lstm.wasm.js')
   assert.equal(options?.langPath, 'exact-extract-ocr://assets/tessdata')
   assert.equal(options?.gzip, true)
   assert.equal(options?.cacheMethod, 'none')

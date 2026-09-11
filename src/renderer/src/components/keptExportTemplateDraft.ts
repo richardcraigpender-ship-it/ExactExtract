@@ -7,11 +7,14 @@ import type {
 import { getCanvasPageDimensions } from '../lib/canvasScale'
 import {
   DEFAULT_KEPT_EXPORT_PAGE_NUMBERS,
+  type KeptExportAlignment,
   type KeptExportDivider,
   type KeptExportPageNumbers,
   type KeptExportRunningBalance,
   KeptExportTemplate
 } from '../../../shared/keptExportTemplate'
+
+export type { KeptExportAlignment } from '../../../shared/keptExportTemplate'
 
 export type KeptExportLayoutMode = 'column-fill' | 'table-row'
 export type KeptExportTemplateTarget = 'page-one' | 'later-pages'
@@ -55,6 +58,7 @@ export interface KeptExportColumnDraft {
   height: number
   spacing: number
   overflow: KeptExportOverflowBehavior
+  align?: KeptExportAlignment
   textStyle?: KeptExportTextStyle
 }
 
@@ -68,6 +72,7 @@ export interface KeptExportPageTemplateDraft {
   endY?: number
   showReferenceUnderMainText?: boolean
   defaultTextStyle: KeptExportTextStyle
+  referenceTextStyle?: KeptExportTextStyle
   columns: KeptExportColumnDraft[]
   divider?: KeptExportDivider
   background?: KeptEntriesBackground
@@ -99,12 +104,19 @@ const DEFAULT_HORIZONTAL_MARGIN = 48
 const DEFAULT_VERTICAL_MARGIN = 72
 
 const DEFAULT_COLUMN_SPECS: Array<
-  Pick<KeptExportColumnDraft, 'id' | 'name' | 'sourceField' | 'x' | 'width'>
+  Pick<KeptExportColumnDraft, 'id' | 'name' | 'sourceField' | 'x' | 'width' | 'align'>
 > = [
   { id: 'payee', name: 'Payee', sourceField: 'payee', x: 48, width: 270 },
-  { id: 'money-out', name: 'Money out', sourceField: 'money-out', x: 326, width: 72 },
-  { id: 'money-in', name: 'Money in', sourceField: 'money-in', x: 406, width: 72 },
-  { id: 'balance', name: 'Balance', sourceField: 'balance', x: 486, width: 78 }
+  {
+    id: 'money-out',
+    name: 'Money out',
+    sourceField: 'money-out',
+    x: 326,
+    width: 72,
+    align: 'right'
+  },
+  { id: 'money-in', name: 'Money in', sourceField: 'money-in', x: 406, width: 72, align: 'right' },
+  { id: 'balance', name: 'Balance', sourceField: 'balance', x: 486, width: 78, align: 'right' }
 ]
 
 function createDefaultDivider(pageWidth: number): KeptExportDivider {
@@ -132,6 +144,9 @@ export function cloneKeptExportPageTemplate(
   return {
     ...template,
     defaultTextStyle: cloneKeptExportTextStyle(template.defaultTextStyle),
+    referenceTextStyle: template.referenceTextStyle
+      ? cloneKeptExportTextStyle(template.referenceTextStyle)
+      : undefined,
     columns: template.columns.map((column) => ({
       ...column,
       textStyle: column.textStyle ? cloneKeptExportTextStyle(column.textStyle) : undefined

@@ -105,6 +105,8 @@ export const DEFAULT_KEPT_EXPORT_PAGE_NUMBERS: KeptExportPageNumbers = {
   scale: 1
 }
 
+export type KeptExportAlignment = 'left' | 'center' | 'right'
+
 export interface KeptExportColumn {
   id: string
   name: string
@@ -115,6 +117,8 @@ export interface KeptExportColumn {
   height: number
   spacing: number
   overflow: KeptExportOverflowBehavior
+  /** Horizontal alignment inside the column box. Defaults to left. */
+  align?: KeptExportAlignment
   textStyle?: KeptExportTextStyle
 }
 
@@ -129,6 +133,8 @@ export interface KeptExportPageTemplate {
   endY?: number
   showReferenceUnderMainText?: boolean
   defaultTextStyle: KeptExportTextStyle
+  /** Styles the reference line on its own; falls back to a smaller payee style when unset. */
+  referenceTextStyle?: KeptExportTextStyle
   columns: KeptExportColumn[]
   divider?: KeptExportDivider
   background?: KeptEntriesBackground
@@ -157,6 +163,7 @@ export interface KeptExportPlacement {
   y: number
   width: number
   height: number
+  align?: KeptExportAlignment
   style: KeptExportTextStyle
 }
 

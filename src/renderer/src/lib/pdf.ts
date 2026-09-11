@@ -167,14 +167,18 @@ export async function scanPdfReferenceCandidates(
           languages: options.languages ?? ['eng'],
           pageNumbers,
           signal: options.signal,
-          onProgress: options.onProgress
+          onProgress: options.onProgress,
+          // Match the initial extraction, which stores the printed detail block verbatim.
+          mode: 'verbatim-detail'
         }
       )
       return result.candidates.map((candidate) => ({
         documentId: candidate.documentId,
         pageNumber: candidate.pageNumber,
         text: candidate.text,
-        bbox: candidate.bbox
+        bbox: candidate.bbox,
+        source: candidate.source,
+        ...(candidate.detailText ? { detailText: candidate.detailText } : {})
       }))
     }
   )

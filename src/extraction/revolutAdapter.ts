@@ -1,5 +1,5 @@
 const DATE_PREFIX =
-  /^(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+/i
+  /^(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}(?:st|nd|rd|th)?[/-]\d{1,2}[/-]\d{2,4})\s+/i
 const CURRENCY_AMOUNT = /[$€£¥₹]\s*\(?[+-]?(?:\d{1,3}(?:[,\s]\d{3})+|\d+)(?:\.\d{1,2})?\)?/gi
 
 export function isRevolutStatement(lines: readonly string[]): boolean {

@@ -38,11 +38,16 @@ export interface ReconciliationResult {
 }
 
 const DATE_PREFIX =
-  /^(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+/
+  /^(\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}(?:st|nd|rd|th)?[/-]\d{1,2}[/-]\d{2,4})\s+/
 const AMOUNT =
   /(?:[$€£¥₹]\s*)?\(?[+-]?(?:\d{1,3}(?:[,\s]\d{3})+|\d+)(?:\.\d{1,2})?\)?(?:\s*(?:CR|DR))?/gi
 const CURRENCY_AMOUNT =
   /(?:[$€£¥₹]\s*)\(?[+-]?(?:\d{1,3}(?:[,\s]\d{3})+|\d+)(?:\.\d{1,2})?\)?(?:\s*(?:CR|DR))?/gi
+const TRAILING_DIRECTION_WORDS = /\s+(?:money\s+(?:in|out)|debit|credit|in|out)\s*$/i
+const INCOMPLETE_TRANSACTION_DESCRIPTION =
+  /^(?:payment\s+(?:from|to)|transfer\s+(?:from|to)|from|to)$/i
+const REFERENCE_DETAIL_LINE =
+  /\b(?:ref(?:erence)?|card|invoice|inv|order|po|receipt|transaction|txn|id)\b/i
 
 function money(value: number): number {
   return Math.round((value + Number.EPSILON) * 100) / 100
@@ -56,9 +61,54 @@ function amountValue(value: string): number | null {
 }
 
 function inferTransactionAmountRole(description: string): AmountColumnRole | undefined {
-  if (/^(?:payment from|transfer from|top-up by|from)\b/i.test(description)) return 'money-in'
-  if (/^(?:to|payment to|plus|fee|cash withdrawal)\b/i.test(description)) return 'money-out'
+  const normalized = description.replace(TRAILING_DIRECTION_WORDS, '')
+  if (/^(?:payment from|transfer from|top-up by|from)\b/i.test(normalized)) return 'money-in'
+  if (/^(?:to|payment to|plus|fee|cash withdrawal)\b/i.test(normalized)) return 'money-out'
   return undefined
+}
+
+function normalizeDetectedDescription(value: string): string {
+  return value.replace(TRAILING_DIRECTION_WORDS, '').trim()
+}
+
+function splitEntryNoteContinuations(notes?: string): {
+  descriptionLines: string[]
+  reference: string
+} {
+  const lines = (notes ?? '')
+    .split(/\r?\n/)
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean)
+  const descriptionLines: string[] = []
+  let referenceStart = lines.length
+
+  for (const [index, line] of lines.entries()) {
+    if (REFERENCE_DETAIL_LINE.test(line)) {
+      referenceStart = index
+      break
+    }
+    descriptionLines.push(line)
+  }
+
+  return { descriptionLines, reference: lines.slice(referenceStart).join('\n') }
+}
+
+function completeDescription(
+  value: string,
+  notes?: string
+): { description: string; reference: string } {
+  const description = normalizeDetectedDescription(value)
+  const continuations = splitEntryNoteContinuations(notes)
+  if (
+    !INCOMPLETE_TRANSACTION_DESCRIPTION.test(description) ||
+    continuations.descriptionLines.length === 0
+  ) {
+    return { description, reference: notes?.trim() ?? '' }
+  }
+  return {
+    description: `${description} ${continuations.descriptionLines.join(' ')}`,
+    reference: continuations.reference
+  }
 }
 
 export function mapFinancialEntry(
@@ -83,7 +133,14 @@ export function mapFinancialEntry(
   if (matches.length === 0) return null
   const values = matches.map((match) => amountValue(match[0]))
   const firstAmountIndex = matches[0]?.index ?? withoutDate.length
-  const detectedDescription = withoutDate.slice(0, firstAmountIndex).trim()
+  const completedDescription = completeDescription(
+    withoutDate.slice(0, firstAmountIndex),
+    entry.notes
+  )
+  const detectedDescription = completedDescription.description
+  const detectedPayee = entry.payee
+    ? completeDescription(entry.payee, entry.notes).description
+    : detectedDescription
   const inferredRole = inferTransactionAmountRole(detectedDescription)
   const date =
     mapping.dateSource === 'entry-date'
@@ -102,9 +159,11 @@ export function mapFinancialEntry(
   const row: MappedFinancialRow = {
     entryId: entry.id,
     ...(date ? { date } : {}),
-    ...((entry.payee ?? detectedDescription) ? { payee: entry.payee ?? detectedDescription } : {}),
+    ...(detectedPayee ? { payee: detectedPayee } : {}),
     description,
-    ...(mapping.referenceSource === 'entry-notes' && entry.notes ? { reference: entry.notes } : {}),
+    ...(mapping.referenceSource === 'entry-notes' && completedDescription.reference
+      ? { reference: completedDescription.reference }
+      : {}),
     ...(mapping.categorySource === 'entry-category' && entry.category
       ? { category: entry.category }
       : {}),

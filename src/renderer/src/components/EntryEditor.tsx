@@ -25,6 +25,7 @@ export function EntryEditor({ entry, onCancel, onSave }: EntryEditorProps): Reac
   )
   const [date, setDate] = useState(entry.date ?? '')
   const [notes, setNotes] = useState(entry.notes ?? '')
+  const [reference, setReference] = useState(entry.reference ?? '')
   const [tags, setTags] = useState(entry.tags.join(', '))
 
   const save = (): void => {
@@ -42,6 +43,7 @@ export function EntryEditor({ entry, onCancel, onSave }: EntryEditorProps): Reac
       numericValue: numericValue.trim() === '' ? undefined : Number(numericValue),
       date: date || undefined,
       notes: notes.trim() || undefined,
+      reference: reference.trim() || undefined,
       tags: cleanTags
     })
   }
@@ -93,6 +95,15 @@ export function EntryEditor({ entry, onCancel, onSave }: EntryEditorProps): Reac
             value={tags}
             onChange={(event) => setTags(event.target.value)}
             placeholder="invoice, total, needs-review"
+          />
+        </label>
+        <label>
+          <span>Reference</span>
+          <textarea
+            value={reference}
+            onChange={(event) => setReference(event.target.value)}
+            rows={2}
+            placeholder="Verbatim reference text captured from the source"
           />
         </label>
         <label>

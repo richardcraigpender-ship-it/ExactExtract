@@ -5,7 +5,10 @@ import { PDFDocument } from 'pdf-lib'
 
 import { PROJECT_SCHEMA_VERSION, type ProjectEntry, type ProjectState } from '../shared/contracts'
 import type { KeptExportTemplate, KeptExportPageTemplate } from '../shared/keptExportTemplate'
-import { exportProjectKeptEntriesTemplatePdf } from './keptExportTemplatePdf'
+import {
+  buildKeptExportSourceRows,
+  exportProjectKeptEntriesTemplatePdf
+} from './keptExportTemplatePdf'
 
 function entry(id: string, text: string): ProjectEntry {
   return {
@@ -185,6 +188,26 @@ test('still renders financial values for statement-shaped entries', async () => 
   assert.match(decodePdfText(bytes), /Acme Water Bill/)
 })
 
+test('exports normalized financial payee over stale projected payee text', () => {
+  const source = entry('entry-1', '28th March 2026 Payment from MRS A. R. Smith money in £1,523.40')
+  source.payee = 'Payment from MRS A. R. Smith money in'
+
+  const rows = buildKeptExportSourceRows(project([source]), template())
+
+  assert.equal(rows[0]?.values.payee, 'Payment from MRS A. R. Smith')
+})
+
+test('exports stale split payment-from payees from note continuations', () => {
+  const source = entry('entry-1', '28th March 2026 Payment from £1,523.40')
+  source.payee = 'Payment from'
+  source.notes = 'MRS A. R. Smith\nCard 4165'
+
+  const rows = buildKeptExportSourceRows(project([source]), template())
+
+  assert.equal(rows[0]?.values.payee, 'Payment from MRS A. R. Smith')
+  assert.equal(rows[0]?.values.reference, 'Card 4165')
+})
+
 test('renders a calculated balance column from the manual opening balance', async () => {
   const withBalance = balanceColumnTemplate('calculated-balance')
   withBalance.runningBalance = {
@@ -308,7 +331,7 @@ test('renders a kept entry reference under the main text when configured', async
   assert.match(text, /Ref: CARD-100/)
 })
 
-test('renders an inferred entry reference under the main text when notes are empty', async () => {
+test('does not invent a reference from the entry text when notes are empty', async () => {
   const withReference = template()
   withReference.pageOneTemplate.showReferenceUnderMainText = true
 
@@ -319,7 +342,8 @@ test('renders an inferred entry reference under the main text when notes are emp
 
   const text = decodePdfText(bytes)
   assert.match(text, /Consulting summary note Ref CARD-100/)
-  assert.match(text, /Ref: CARD-100/)
+  // The reference line only renders captured or user-entered text, never a parsed guess.
+  assert.doesNotMatch(text, /Ref: CARD-100/)
 })
 
 test('renders a kept entry reference column when configured', async () => {

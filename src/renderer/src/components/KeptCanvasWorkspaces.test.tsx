@@ -145,32 +145,42 @@ test('the text mode renders text boxes on the canvas and omits the image layer e
 
   assert.match(markup, /Canvas &amp; layout studio/)
   assert.match(markup, /data-placement-id="text-1"/)
-  assert.match(markup, /color:#336699/)
-  assert.match(markup, /font-family:&quot;Times New Roman&quot;, Times, serif/)
-  assert.match(markup, /font-size:16px/)
-  assert.match(markup, /font-style:italic/)
-  assert.match(markup, /font-weight:700/)
+  assert.match(markup, /Formatted statement settings/)
+  assert.match(markup, /color:#17231c/)
   assert.doesNotMatch(markup, /data-image-placement-id/)
 })
 
-test('both modes expose the sidebar toolbar including the place tab', () => {
-  for (const markup of [renderPng(), renderText()]) {
+test('text mode embeds all formatted statement settings while PNG mode retains layout tools', () => {
+  const png = renderPng()
+  const text = renderText()
+
+  // Both modes now share the same tool navigation at the top of the left panel.
+  for (const markup of [png, text]) {
     assert.match(markup, /role="toolbar" aria-label="Preview tools"/)
     assert.match(markup, />Setup<\/span>/)
     assert.match(markup, />Pages<\/span>/)
     assert.match(markup, />Zoom<\/span>/)
-    assert.match(markup, />Place<\/span>/)
-    assert.match(markup, />Background<\/span>/)
     assert.match(markup, /aria-label="Setup options"/)
   }
+
+  for (const markup of [png]) {
+    assert.match(markup, />Place<\/span>/)
+    assert.match(markup, />Select<\/span>/)
+    assert.match(markup, />Background<\/span>/)
+  }
+
+  assert.match(text, /Formatted statement settings/)
+  assert.match(text, /Show references under main text/)
+  assert.match(text, /Maximum entries per page/)
+  assert.match(text, /Page numbers/)
+  assert.doesNotMatch(text, />Place<\/span>/)
 })
 
-test('the place tab is available for placing and locating entries', () => {
-  for (const markup of [renderPng(), renderText()]) {
-    const index = markup.indexOf('>Place</span>')
-    const start = markup.lastIndexOf('<button', index)
-    assert.match(markup.slice(start, index), /aria-pressed="false"/)
-  }
+test('the place tab is available for PNG layout editing only', () => {
+  const markup = renderPng()
+  const index = markup.indexOf('>Place</span>')
+  const start = markup.lastIndexOf('<button', index)
+  assert.match(markup.slice(start, index), /aria-pressed="false"/)
 })
 
 test('both previewers share one studio window with an in-place mode switch', () => {
@@ -193,14 +203,33 @@ test('both previewers share one studio window with an in-place mode switch', () 
   )
 })
 
-test('the studio window has no duplicate configuration buttons', () => {
+test('the text studio embeds configuration and PNG mode retains its configuration button', () => {
   const png = renderPng()
   const text = renderText()
 
   assert.match(png, /Configure PNG Snippet Board/)
   assert.doesNotMatch(png, /Configure Formatted Text Statement/)
-  assert.match(text, /Configure Formatted Text Statement/)
+  assert.match(text, /Formatted statement settings/)
+  assert.match(text, /Show references under main text/)
   assert.doesNotMatch(text, /Configure PNG Snippet Board/)
+})
+
+test('PNG mode embeds its placement settings when the studio can place images', () => {
+  const markup = renderToStaticMarkup(
+    <KeptPngCanvasWorkspace
+      entries={[entry('first')]}
+      layout={layout}
+      onLayoutChange={() => {}}
+      onClose={() => {}}
+      onExport={() => {}}
+      onPlaceKeptImages={() => {}}
+      onSwitchMode={() => {}}
+    />
+  )
+
+  assert.match(markup, /Place entry images/)
+  assert.match(markup, /Balance column/)
+  assert.doesNotMatch(markup, /Configure PNG Snippet Board/)
 })
 
 test('each mode keeps the tool sidebar to the left of the canvas', () => {

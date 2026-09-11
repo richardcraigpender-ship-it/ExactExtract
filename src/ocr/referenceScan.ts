@@ -16,6 +16,8 @@ export interface OcrReferenceCandidate {
   confidence: number
   source: 'ocr-reference-scan'
   references: string[]
+  /** The block text kept verbatim, so notes can match the source instead of parsed tokens. */
+  detailText?: string
 }
 
 export interface OcrReferenceScanSummary {
@@ -32,6 +34,12 @@ export interface OcrReferenceScanResult {
 
 export interface OcrReferenceScanOptions {
   minConfidence?: number
+  /**
+   * 'reference-tokens' keeps only blocks holding a reference marker and reports the parsed token.
+   * 'verbatim-detail' keeps every confident block and reports its text unchanged, so the rescan
+   * captures the same detail lines the initial extraction attaches under a payee row.
+   */
+  mode?: 'reference-tokens' | 'verbatim-detail'
 }
 
 export interface OcrReferenceRescanProgress {
@@ -71,14 +79,16 @@ export function extractOcrReferenceCandidates(
   options: OcrReferenceScanOptions = {}
 ): OcrReferenceScanResult {
   const minConfidence = Math.max(0, Math.min(1, options.minConfidence ?? 0.45))
+  const verbatim = options.mode === 'verbatim-detail'
   const scannedPages = new Set<number>()
   const candidates: OcrReferenceCandidate[] = []
   let skippedLowConfidenceCount = 0
 
   for (const block of blocks) {
     scannedPages.add(block.pageNumber)
+    const detailText = block.text.replace(/\s+/g, ' ').trim()
     const references = extractReferencesFromText(block.text)
-    if (references.length === 0) continue
+    if (verbatim ? detailText.length === 0 : references.length === 0) continue
     if (block.confidence < minConfidence) {
       skippedLowConfidenceCount += 1
       continue
@@ -90,7 +100,8 @@ export function extractOcrReferenceCandidates(
       bbox: { ...block.bbox },
       confidence: block.confidence,
       source: 'ocr-reference-scan',
-      references
+      references,
+      ...(verbatim ? { detailText } : {})
     })
   }
 

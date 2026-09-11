@@ -9,13 +9,13 @@ export interface AccountingLineDetails {
 }
 
 const DATE_PATTERN =
-  /\b(?:\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\b/g
+  /\b(?:\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}(?:st|nd|rd|th)?[/-]\d{1,2}[/-]\d{2,4})\b/g
 const AMOUNT_PATTERN =
   /(?:[$€£¥₹]\s*)?\(?[+-]?(?:\d{1,3}(?:[,.\s]\d{3})+|\d+)(?:[.,]\d{1,2})?\)?(?:\s*(?:CR|DR))?/gi
 const ACCOUNT_CODE_PATTERN = /^\s*([A-Za-z]{0,3}-?\d{3,10})\b(?=\s+[A-Za-z])/i
 
 function normalizeDate(value: string): string | undefined {
-  const monthDate = value.match(/^(\d{1,2})\s+([A-Za-z]{3,9})\s+(\d{4})$/)
+  const monthDate = value.match(/^(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]{3,9})\s+(\d{4})$/i)
   if (monthDate) {
     const month = new Date(`${monthDate[2]} 1, 2000`).getMonth() + 1
     const day = Number(monthDate[1])

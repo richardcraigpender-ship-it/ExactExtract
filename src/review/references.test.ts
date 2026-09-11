@@ -13,7 +13,8 @@ function entry(
   id: string,
   normalizedText: string,
   status: ProjectEntry['status'] = 'keep',
-  notes?: string
+  notes?: string,
+  reference?: string
 ): ProjectEntry {
   return {
     id,
@@ -25,6 +26,7 @@ function entry(
     regions: [{ documentId: 'document-1', pageNumber: 1 }],
     tags: [],
     ...(notes ? { notes } : {}),
+    ...(reference ? { reference } : {}),
     createdAt: '2026-09-01T10:00:00.000Z',
     updatedAt: '2026-09-01T10:00:00.000Z'
   }
@@ -37,32 +39,40 @@ test('extracts distinct reference markers from entry text', () => {
   )
 })
 
-test('copies detected references into kept entry notes only', () => {
+test('copies captured verbatim references into kept entry notes only', () => {
   const result = copyKeptEntryReferencesToNotes(
     [
-      entry('keep', 'Shop card CARD-100'),
-      entry('maybe', 'Maybe ref MAY-200', 'maybe'),
-      entry('exclude', 'Excluded invoice INV-300', 'exclude')
+      entry('keep', 'Shop card CARD-100', 'keep', undefined, 'Card 1112'),
+      entry('maybe', 'Maybe ref MAY-200', 'maybe', undefined, 'Card 2223'),
+      entry('exclude', 'Excluded invoice INV-300', 'exclude', undefined, 'Card 3334')
     ],
     '2026-09-01T12:00:00.000Z'
   )
 
   assert.equal(result.updatedEntryCount, 1)
   assert.equal(result.copiedReferenceCount, 1)
-  assert.equal(result.entries.find((item) => item.id === 'keep')?.notes, 'CARD-100')
+  assert.equal(result.entries.find((item) => item.id === 'keep')?.notes, 'Card 1112')
   assert.equal(result.entries.find((item) => item.id === 'maybe')?.notes, undefined)
   assert.equal(result.entries.find((item) => item.id === 'exclude')?.notes, undefined)
 })
 
-test('appends missing references without duplicating existing notes', () => {
+test('never synthesises reference tokens for an entry without captured text', () => {
+  const source = [entry('keep', 'Order PO-123 receipt RCPT-456')]
+  const result = copyKeptEntryReferencesToNotes(source, '2026-09-01T12:00:00.000Z')
+
+  assert.equal(result.updatedEntryCount, 0)
+  assert.equal(result.entries[0]?.notes, undefined)
+})
+
+test('appends the captured reference without duplicating existing notes', () => {
   const result = copyKeptEntryReferencesToNotes(
-    [entry('keep', 'Order PO-123 receipt RCPT-456', 'keep', 'Already checked PO-123')],
+    [entry('keep', 'Order PO-123', 'keep', 'Already checked', 'To Forest, London, GBR')],
     '2026-09-01T12:00:00.000Z'
   )
 
   assert.equal(result.updatedEntryCount, 1)
   assert.equal(result.copiedReferenceCount, 1)
-  assert.equal(result.entries[0]?.notes, 'Already checked PO-123\nRCPT-456')
+  assert.equal(result.entries[0]?.notes, 'Already checked\nTo Forest, London, GBR')
 })
 
 test('returns original entry objects when no notes need changing', () => {
@@ -72,6 +82,66 @@ test('returns original entry objects when no notes need changing', () => {
   assert.equal(result.updatedEntryCount, 0)
   assert.equal(result.copiedReferenceCount, 0)
   assert.equal(result.entries[0], source[0])
+})
+
+test('copies a verbatim detail block into notes without parsing it into tokens', () => {
+  const kept = {
+    ...entry('keep', 'Forest', 'keep'),
+    regions: [
+      {
+        documentId: 'document-1',
+        pageNumber: 1,
+        bbox: { x: 50, y: 500, width: 300, height: 20, coordinateSpace: 'pdf-points' as const }
+      }
+    ]
+  }
+
+  const result = copySourceReferencesToKeptEntryNotes(
+    [kept],
+    [
+      {
+        documentId: 'document-1',
+        pageNumber: 1,
+        text: 'To Forest, London, GBR',
+        detailText: 'To Forest, London, GBR',
+        bbox: { x: 54, y: 523, width: 200, height: 8, coordinateSpace: 'pdf-points' }
+      }
+    ],
+    '2026-09-01T12:00:00.000Z'
+  )
+
+  // The address line carries no reference marker, so token mode would have produced nothing.
+  assert.equal(result.entries[0]?.notes, 'To Forest, London, GBR')
+})
+
+test('does not copy a verbatim block that sits on the parent row itself', () => {
+  const kept = {
+    ...entry('keep', 'Forest', 'keep'),
+    regions: [
+      {
+        documentId: 'document-1',
+        pageNumber: 1,
+        bbox: { x: 50, y: 500, width: 300, height: 20, coordinateSpace: 'pdf-points' as const }
+      }
+    ]
+  }
+
+  const result = copySourceReferencesToKeptEntryNotes(
+    [kept],
+    [
+      {
+        documentId: 'document-1',
+        pageNumber: 1,
+        text: '19 Mar 2026 Forest 2.99',
+        detailText: '19 Mar 2026 Forest 2.99',
+        bbox: { x: 50, y: 502, width: 300, height: 16, coordinateSpace: 'pdf-points' }
+      }
+    ],
+    '2026-09-01T12:00:00.000Z'
+  )
+
+  assert.equal(result.entries[0]?.notes, undefined)
+  assert.equal(result.updatedEntryCount, 0)
 })
 
 test('copies source-level references to the nearest kept parent entry on the same page', () => {

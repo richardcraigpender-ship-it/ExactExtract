@@ -2,7 +2,64 @@ import type { ProjectEntry } from '../shared/contracts'
 import { extractAccountingLineDetails } from './accounting'
 import { classifySemanticLines } from './semantics'
 import { adaptRevolutTransaction, isRevolutStatement } from './revolutAdapter'
-import type { ParserExtractionResult } from './types'
+import type { ExtractedLine, ParserExtractionResult } from './types'
+
+/**
+ * Detail lines sit directly beneath their transaction row, so a continuation is only claimed
+ * while it stays vertically adjacent to the previous line of the same row. Reference text is
+ * often set in a smaller face than the row, so a smaller line is allowed a wider gap before the
+ * chain is broken.
+ */
+function verticallyAdjacent(
+  anchor: ExtractedLine,
+  previous: ExtractedLine,
+  candidate: ExtractedLine
+): boolean {
+  const gap = Math.abs(candidate.bbox.y - previous.bbox.y)
+  const smallerThanRow =
+    anchor.bbox.height > 0 &&
+    candidate.bbox.height > 0 &&
+    candidate.bbox.height <= anchor.bbox.height * 0.95
+  const allowance = smallerThanRow ? 3.5 : 2.5
+  return gap <= Math.max(previous.bbox.height, candidate.bbox.height) * allowance
+}
+
+/**
+ * Groups the untabulated lines under the transaction row they belong to, so the reference and
+ * address text printed beneath a payee survives instead of being dropped with the row filter.
+ */
+export function collectTransactionContinuationLines(
+  lines: readonly ExtractedLine[],
+  transactionLineIds: ReadonlySet<string>
+): Map<string, ExtractedLine[]> {
+  const continuations = new Map<string, ExtractedLine[]>()
+  let anchor: ExtractedLine | undefined
+  let previous: ExtractedLine | undefined
+
+  for (const line of lines) {
+    if (transactionLineIds.has(line.id)) {
+      anchor = line
+      previous = line
+      continue
+    }
+    if (!anchor || !previous) continue
+    if (line.documentId !== anchor.documentId || line.pageNumber !== anchor.pageNumber) {
+      anchor = undefined
+      previous = undefined
+      continue
+    }
+    if (!verticallyAdjacent(anchor, previous, line)) {
+      // A large gap means the page has moved on to totals or footer text.
+      anchor = undefined
+      previous = undefined
+      continue
+    }
+    continuations.set(anchor.id, [...(continuations.get(anchor.id) ?? []), line])
+    previous = line
+  }
+
+  return continuations
+}
 
 function parseTotalValue(text: string): number | undefined {
   const normalized = text.replace(/\s/g, '').replace(/,/g, '')
@@ -14,9 +71,51 @@ function parseTotalValue(text: string): number | undefined {
 }
 
 const DATE_PREFIX =
-  /^(?:\d{1,2}\s+[A-Za-z]{3,9}\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}[/-]\d{1,2}[/-]\d{2,4})\s+/i
+  /^(?:\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}(?:st|nd|rd|th)?[/-]\d{1,2}[/-]\d{2,4})\s+/i
 const FIRST_AMOUNT = /(?:[$€£¥₹]\s*)?\(?[+-]?\d/
 const PERSONAL_HONORIFIC = /^(?:mr|mrs|ms|miss|dr|prof)\.?\s+/i
+const TRAILING_DIRECTION_WORDS = /\s+(?:money\s+(?:in|out)|debit|credit|in|out)\s*$/i
+const INCOMPLETE_TRANSACTION_DESCRIPTION =
+  /^(?:payment\s+(?:from|to)|transfer\s+(?:from|to)|from|to)$/i
+const REFERENCE_DETAIL_LINE =
+  /\b(?:ref(?:erence)?|card|invoice|inv|order|po|receipt|transaction|txn|id)\b/i
+
+function cleanDescriptionText(value: string): string {
+  return value.replace(TRAILING_DIRECTION_WORDS, '').replace(/\s+/g, ' ').trim()
+}
+
+function completeFinancialText(
+  text: string,
+  continuation: readonly ExtractedLine[]
+): { text: string; consumedContinuationCount: number } {
+  const dateMatch = text.match(DATE_PREFIX)
+  const descriptionStart = dateMatch ? dateMatch[0].length : 0
+  const withoutDate = text.slice(descriptionStart)
+  const firstAmountIndex = withoutDate.search(FIRST_AMOUNT)
+  if (firstAmountIndex <= 0) return { text, consumedContinuationCount: 0 }
+
+  const description = cleanDescriptionText(withoutDate.slice(0, firstAmountIndex))
+  if (!INCOMPLETE_TRANSACTION_DESCRIPTION.test(description)) {
+    return { text, consumedContinuationCount: 0 }
+  }
+
+  const descriptionLines: string[] = []
+  for (const line of continuation) {
+    const normalized = line.text.replace(/\s+/g, ' ').trim()
+    if (!normalized) continue
+    if (REFERENCE_DETAIL_LINE.test(normalized)) break
+    descriptionLines.push(normalized)
+  }
+  if (descriptionLines.length === 0) return { text, consumedContinuationCount: 0 }
+
+  const amountStart = descriptionStart + firstAmountIndex
+  return {
+    text: `${text.slice(0, amountStart).trimEnd()} ${descriptionLines.join(' ')} ${text
+      .slice(amountStart)
+      .trimStart()}`,
+    consumedContinuationCount: descriptionLines.length
+  }
+}
 
 export function extractFinancialPayee(
   text: string,
@@ -26,7 +125,7 @@ export function extractFinancialPayee(
   const withoutDate = text.replace(DATE_PREFIX, '')
   const firstAmountIndex = withoutDate.search(FIRST_AMOUNT)
   if (firstAmountIndex <= 0) return undefined
-  const payee = withoutDate.slice(0, firstAmountIndex).replace(/\s+/g, ' ').trim()
+  const payee = cleanDescriptionText(withoutDate.slice(0, firstAmountIndex))
   if (!payee || PERSONAL_HONORIFIC.test(payee)) return undefined
   return payee
 }
@@ -54,10 +153,16 @@ export function projectParserEntries(
     return withoutDate.search(FIRST_AMOUNT) > 0
   })
   DATE_PREFIX.lastIndex = 0
-  const lines =
+  const useTransactionLines =
     result.classification.kind === 'tabular' && transactionLines.length >= 2
-      ? transactionLines
-      : result.lines
+  const lines = useTransactionLines ? transactionLines : result.lines
+  // Only the filtered path drops lines, so it is the only path that needs them reattached.
+  const continuationLines = useTransactionLines
+    ? collectTransactionContinuationLines(
+        result.lines,
+        new Set(transactionLines.map((line) => line.id))
+      )
+    : new Map<string, ExtractedLine[]>()
   let previousRevolutBalance: number | undefined
   return lines.map((line) => {
     const blocks = line.blockIds
@@ -69,10 +174,12 @@ export function projectParserEntries(
         : blocks.reduce((total, block) => total + block.confidence, 0) / blocks.length
     const table = result.tables.find((candidate) => candidate.rowLineIds.includes(line.id))
     const semantic = semanticsByLineId.get(line.id)
+    const continuation = continuationLines.get(line.id) ?? []
+    const completed = completeFinancialText(line.text, continuation)
     const adaptedText = revolutStatement
-      ? adaptRevolutTransaction(line.text, previousRevolutBalance)
+      ? adaptRevolutTransaction(completed.text, previousRevolutBalance)
       : undefined
-    const financialText = adaptedText ?? line.text
+    const financialText = adaptedText ?? completed.text
     if (revolutStatement && adaptedText) {
       const balanceMatch = [...financialText.matchAll(/£\s*([\d,]+\.\d{2})/g)].at(-1)
       previousRevolutBalance = balanceMatch ? Number(balanceMatch[1]!.replace(',', '')) : undefined
@@ -94,6 +201,12 @@ export function projectParserEntries(
       : ''
     const parsedTotal = totalColumn ? parseTotalValue(totalBlockText) : undefined
     const payee = extractFinancialPayee(financialText, accountingDocument || revolutStatement)
+    // Captured verbatim so the exported reference matches the source instead of a parsed token.
+    const referenceText = continuation
+      .slice(completed.consumedContinuationCount)
+      .map((detail) => detail.text.replace(/\s+/g, ' ').trim())
+      .filter(Boolean)
+      .join('\n')
     const totalKey = table ? `${line.documentId}:${table.templateName ?? table.id}` : undefined
     const contribution =
       parsedTotal === undefined || !totalColumn
@@ -113,6 +226,7 @@ export function projectParserEntries(
       rawText: line.text,
       normalizedText: financialText.replace(/\s+/g, ' ').trim(),
       ...(payee ? { payee } : {}),
+      ...(referenceText ? { reference: referenceText } : {}),
       source: 'parser',
       status: 'maybe',
       confidence,

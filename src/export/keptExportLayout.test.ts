@@ -116,6 +116,46 @@ test('fills between Start Y and End Y before continuing to the next page', () =>
   )
 })
 
+test('keeps every table-row column aligned to the payee row geometry', () => {
+  const current = template()
+  current.useSeparateLaterPages = false
+  current.pageOneTemplate.columns = [
+    current.pageOneTemplate.columns[0]!,
+    {
+      id: 'date',
+      name: 'Date',
+      sourceField: 'date',
+      x: 300,
+      y: 12,
+      width: 80,
+      height: 20,
+      spacing: 1,
+      overflow: 'next-page'
+    }
+  ]
+  const plan = buildKeptExportRenderPlan(
+    [
+      { entryId: 'one', values: { payee: 'One', date: '1 Jan 2026' } },
+      { entryId: 'two', values: { payee: 'Two', date: '2 Jan 2026' } }
+    ],
+    current
+  )
+
+  assert.deepEqual(
+    plan.pages[0]?.placements.map((placement) => [
+      placement.entryId,
+      placement.columnId,
+      placement.y
+    ]),
+    [
+      ['one', 'payee', 72],
+      ['one', 'date', 72],
+      ['two', 'payee', 102],
+      ['two', 'date', 102]
+    ]
+  )
+})
+
 test('adds a configured divider after every rendered entry', () => {
   const current = template()
   current.useSeparateLaterPages = false
@@ -204,6 +244,126 @@ test('renders references under the main text column when configured', () => {
   )
   assert.equal(reference?.y, (payee?.y ?? 0) + (payee?.style.fontSize ?? 0) + 3)
   assert.equal(reference?.height, (reference?.style.fontSize ?? 0) + 3)
+})
+
+test('styles the reference line separately when a reference text style is set', () => {
+  const current = template()
+  current.useSeparateLaterPages = false
+  current.pageOneTemplate.showReferenceUnderMainText = true
+  current.pageOneTemplate.referenceTextStyle = {
+    fontRef: { kind: 'standard-14', family: 'Courier' },
+    fontSize: 7,
+    color: '#994400',
+    fontWeight: 'bold',
+    fontStyle: 'italic'
+  }
+
+  const plan = buildKeptExportRenderPlan(
+    [{ entryId: 'one', values: { payee: 'One', reference: 'CARD-100' } }],
+    current
+  )
+
+  const payee = plan.pages[0]?.placements.find((placement) => placement.columnId === 'payee')
+  const reference = plan.pages[0]?.placements.find(
+    (placement) => placement.columnId === 'payee:reference'
+  )
+
+  assert.deepEqual(reference?.style, current.pageOneTemplate.referenceTextStyle)
+  // The payee keeps its own style, so the two lines are independently configurable.
+  assert.equal(payee?.style.color, '#000000')
+  assert.equal(payee?.style.fontWeight, 'normal')
+})
+
+test('falls back to a smaller payee style when no reference style is configured', () => {
+  const current = template()
+  current.useSeparateLaterPages = false
+  current.pageOneTemplate.showReferenceUnderMainText = true
+
+  const plan = buildKeptExportRenderPlan(
+    [{ entryId: 'one', values: { payee: 'One', reference: 'CARD-100' } }],
+    current
+  )
+
+  const reference = plan.pages[0]?.placements.find(
+    (placement) => placement.columnId === 'payee:reference'
+  )
+
+  assert.equal(reference?.style.fontSize, style.fontSize - 2)
+  assert.equal(reference?.style.fontWeight, 'normal')
+})
+
+test('carries column alignment onto placements and leaves it unset for left', () => {
+  const current = template()
+  current.useSeparateLaterPages = false
+  current.pageOneTemplate.columns = [
+    { ...current.pageOneTemplate.columns[0]!, align: 'left' },
+    {
+      id: 'balance',
+      name: 'Balance',
+      sourceField: 'balance',
+      x: 400,
+      y: 72,
+      width: 90,
+      height: 80,
+      spacing: 30,
+      overflow: 'next-page',
+      align: 'right'
+    }
+  ]
+
+  const plan = buildKeptExportRenderPlan(
+    [{ entryId: 'one', values: { payee: 'One', balance: '£1,200.00' } }],
+    current
+  )
+
+  const payee = plan.pages[0]?.placements.find((placement) => placement.columnId === 'payee')
+  const balance = plan.pages[0]?.placements.find((placement) => placement.columnId === 'balance')
+
+  assert.equal(balance?.align, 'right')
+  assert.equal(payee?.align, 'left')
+})
+
+test('snips long payee text instead of wrapping over its reference', () => {
+  const current = template()
+  current.useSeparateLaterPages = false
+  current.pageOneTemplate.columns[0]!.width = 30
+  current.pageOneTemplate.columns[0]!.spacing = 12
+  current.pageOneTemplate.showReferenceUnderMainText = true
+  const plan = buildKeptExportRenderPlan(
+    [
+      { entryId: 'one', values: { payee: 'A long payee description', reference: 'CARD-100' } },
+      { entryId: 'two', values: { payee: 'Two' } }
+    ],
+    current
+  )
+
+  const payee = plan.pages[0]?.placements.find(
+    (placement) => placement.entryId === 'one' && placement.columnId === 'payee'
+  )
+  const reference = plan.pages[0]?.placements.find(
+    (placement) => placement.columnId === 'payee:reference'
+  )
+  const nextPayee = plan.pages[0]?.placements.find(
+    (placement) => placement.entryId === 'two' && placement.columnId === 'payee'
+  )
+  assert.equal(payee?.text, 'A...')
+  assert.ok((reference?.y ?? 0) > (payee?.y ?? 0))
+  assert.ok((nextPayee?.y ?? 0) > (reference?.y ?? 0) + (reference?.height ?? 0))
+})
+
+test('keeps long payee text unsnipped when no reference sits underneath', () => {
+  const current = template()
+  current.useSeparateLaterPages = false
+  current.pageOneTemplate.columns[0]!.width = 30
+  current.pageOneTemplate.showReferenceUnderMainText = true
+
+  const plan = buildKeptExportRenderPlan(
+    [{ entryId: 'one', values: { payee: 'A long payee description' } }],
+    current
+  )
+
+  const payee = plan.pages[0]?.placements.find((placement) => placement.columnId === 'payee')
+  assert.equal(payee?.text, 'A long payee description')
 })
 
 test('keeps a divider clear of the reference line beneath the payee', () => {

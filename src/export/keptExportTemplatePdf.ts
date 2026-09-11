@@ -4,7 +4,6 @@ import type { ProjectState } from '../shared/contracts'
 import { mapFinancialEntry, type FinancialColumnMapping } from '../analysis'
 import { resolveCurrencyCode } from '../shared/currencies'
 import { formatCurrencyAmount } from '../shared/currencyFormat'
-import { extractEntryReferences } from '../review'
 import {
   DEFAULT_KEPT_EXPORT_RUNNING_BALANCE,
   type KeptExportSourceRow,
@@ -78,13 +77,28 @@ function fontName(style: {
   fontStyle?: 'normal' | 'italic'
 }): string {
   if (style.fontRef.kind !== 'standard-14') return StandardFonts.Helvetica
-  if (style.fontRef.family === 'Helvetica' && style.fontWeight === 'bold') {
-    return StandardFonts.HelveticaBold
+  if (style.fontRef.family === 'Helvetica') {
+    if (style.fontWeight === 'bold' && style.fontStyle === 'italic')
+      return StandardFonts.HelveticaBoldOblique
+    if (style.fontWeight === 'bold') return StandardFonts.HelveticaBold
+    if (style.fontStyle === 'italic') return StandardFonts.HelveticaOblique
+    return StandardFonts.Helvetica
   }
-  if (style.fontRef.family === 'Times-Roman' && style.fontStyle === 'italic') {
-    return StandardFonts.TimesRomanItalic
+  if (style.fontRef.family === 'Times-Roman') {
+    if (style.fontWeight === 'bold' && style.fontStyle === 'italic')
+      return StandardFonts.TimesRomanBoldItalic
+    if (style.fontWeight === 'bold') return StandardFonts.TimesRomanBold
+    if (style.fontStyle === 'italic') return StandardFonts.TimesRomanItalic
+    return StandardFonts.TimesRoman
   }
-  return style.fontRef.family
+  if (style.fontRef.family === 'Courier') {
+    if (style.fontWeight === 'bold' && style.fontStyle === 'italic')
+      return StandardFonts.CourierBoldOblique
+    if (style.fontWeight === 'bold') return StandardFonts.CourierBold
+    if (style.fontStyle === 'italic') return StandardFonts.CourierOblique
+    return StandardFonts.Courier
+  }
+  return StandardFonts.Helvetica
 }
 
 function summaryLabel(field: SummaryField): string {
@@ -110,10 +124,9 @@ function mappingForStats(): FinancialColumnMapping {
   }
 }
 
+/** Only captured or user-entered text is exported; a row with no reference stays blank. */
 function referenceForEntry(entry: ProjectState['entries'][number], rowReference?: string): string {
-  const explicit = rowReference?.trim() || entry.notes?.trim()
-  if (explicit) return explicit
-  return extractEntryReferences(entry).join(', ')
+  return rowReference?.trim() || entry.reference?.trim() || entry.notes?.trim() || ''
 }
 
 export function buildKeptExportSourceRows(
@@ -153,7 +166,7 @@ export function buildKeptExportSourceRows(
       entryId: entry.id,
       values: {
         text: entry.normalizedText,
-        payee: entry.payee ?? row?.payee ?? row?.description ?? '',
+        payee: row?.payee ?? entry.payee ?? row?.description ?? '',
         date: row?.date ?? entry.date ?? '',
         'money-out': row?.moneyOut ? formatCurrencyAmount(row.moneyOut, currencyCode) : '',
         'money-in': row?.moneyIn ? formatCurrencyAmount(row.moneyIn, currencyCode) : '',
@@ -206,8 +219,17 @@ export async function exportProjectKeptEntriesTemplatePdf(
     for (const placement of renderedPage.placements) {
       const font = await pdf.embedFont(fontName(placement.style))
       const y = pageSize.height - placement.y - placement.height + placement.style.fontSize
-      page.drawText(safeText(placement.text, font), {
-        x: placement.x,
+      const text = safeText(placement.text, font)
+      const textWidth = font.widthOfTextAtSize(text, placement.style.fontSize)
+      const freeSpace = Math.max(0, placement.width - textWidth)
+      const x =
+        placement.align === 'right'
+          ? placement.x + freeSpace
+          : placement.align === 'center'
+            ? placement.x + freeSpace / 2
+            : placement.x
+      page.drawText(text, {
+        x,
         y,
         size: placement.style.fontSize,
         font,
