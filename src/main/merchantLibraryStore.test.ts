@@ -17,7 +17,7 @@ async function withStore(run: (store: MerchantStore) => Promise<void>): Promise<
   }
 }
 
-function entry(id: string, payee: string): ProjectEntry {
+function entry(id: string, payee: string, date?: string): ProjectEntry {
   return {
     id,
     rawText: payee,
@@ -28,6 +28,7 @@ function entry(id: string, payee: string): ProjectEntry {
     confidence: 1,
     regions: [{ documentId: 'document-1', pageNumber: 2, id: 'region-1' }],
     tags: [],
+    ...(date ? { date } : {}),
     createdAt: '2026-09-04T00:00:00.000Z',
     updatedAt: '2026-09-04T00:00:00.000Z'
   }
@@ -59,6 +60,19 @@ test('keeps likely-personal transfers out of automatic merchant storage', async 
     assert.equal(records[0]?.occurrenceCount, 1)
     assert.equal(records[0]?.provenance[0]?.documentId, 'document-1')
     assert.equal(records[0]?.provenance[0]?.pageNumber, 2)
+  })
+})
+
+test('tracks first/last seen from the transaction date, not the import timestamp', async () => {
+  await withStore(async (store) => {
+    await store.upsertEntries('project-1', [
+      entry('entry-1', 'Northwind Utilities', '2026-01-05'),
+      entry('entry-2', 'Northwind Utilities', '2026-03-20')
+    ])
+
+    const records = await store.list()
+    assert.equal(records[0]?.firstSeenAt, '2026-01-05')
+    assert.equal(records[0]?.lastSeenAt, '2026-03-20')
   })
 })
 

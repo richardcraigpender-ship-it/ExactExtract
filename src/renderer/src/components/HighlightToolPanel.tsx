@@ -1,6 +1,6 @@
 import React, { useState } from 'react'
+import { Redo2, Undo2 } from 'lucide-react'
 
-import type { ReviewStatus } from '../../../shared/contracts'
 import {
   describeHighlightScope,
   type HighlightGeometryField,
@@ -40,7 +40,10 @@ export interface HighlightToolPanelProps {
   onChangeEditMode: (editMode: boolean) => void
   onChangeStyleMode: (styleMode: HighlightStyleMode) => void
   onChangeScope: (scope: HighlightScope) => void
-  onSetStatus?: (status: ReviewStatus) => void
+  canUndo?: boolean
+  canRedo?: boolean
+  onUndo?: () => void
+  onRedo?: () => void
   onApply: (
     field: HighlightGeometryField,
     mode: 'absolute' | 'delta',
@@ -68,7 +71,10 @@ export function HighlightToolPanel({
   onChangeEditMode,
   onChangeStyleMode,
   onChangeScope,
-  onSetStatus,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo,
   onApply
 }: HighlightToolPanelProps): React.JSX.Element {
   const [field, setField] = useState<HighlightGeometryField>('x')
@@ -98,6 +104,37 @@ export function HighlightToolPanel({
 
   return (
     <div className="highlight-tool-panel">
+      {(onUndo || onRedo) && (
+        <fieldset className="highlight-tool-group">
+          <legend>Highlight history</legend>
+          <div className="review-history-actions" aria-label="Highlight history">
+            {onUndo && (
+              <button
+                className="secondary-button"
+                type="button"
+                title="Undo highlight change"
+                aria-label="Undo highlight change"
+                disabled={!canUndo}
+                onClick={onUndo}
+              >
+                <Undo2 size={16} aria-hidden="true" /> Undo
+              </button>
+            )}
+            {onRedo && (
+              <button
+                className="secondary-button"
+                type="button"
+                title="Redo highlight change"
+                aria-label="Redo highlight change"
+                disabled={!canRedo}
+                onClick={onRedo}
+              >
+                <Redo2 size={16} aria-hidden="true" /> Redo
+              </button>
+            )}
+          </div>
+        </fieldset>
+      )}
       <fieldset className="highlight-tool-group">
         <legend>Display</legend>
         <label className="highlight-tool-check">
@@ -162,28 +199,6 @@ export function HighlightToolPanel({
           </button>
         )}
       </fieldset>
-
-      {onSetStatus && (
-        <fieldset className="highlight-tool-group">
-          <legend>Mark entries</legend>
-          <p className="highlight-tool-hint">
-            Applies to the entries matched by the current highlight scope.
-          </p>
-          <div className="highlight-tool-decisions" aria-label="Mark scoped entries">
-            {(['keep', 'maybe', 'exclude'] as const).map((status) => (
-              <button
-                className="secondary-button"
-                type="button"
-                key={status}
-                disabled={affectedCount === 0}
-                onClick={() => onSetStatus(status)}
-              >
-                {status === 'keep' ? 'Keep' : status === 'maybe' ? 'Maybe' : 'Exclude'}
-              </button>
-            ))}
-          </div>
-        </fieldset>
-      )}
 
       <fieldset className="highlight-tool-group">
         <legend>Position and size</legend>

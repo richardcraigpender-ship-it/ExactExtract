@@ -448,6 +448,15 @@ export function KeptExportTemplateEditor({
               Show references under main text
             </label>
             <LengthField
+              label="Payee to reference gap"
+              min={0}
+              value={template.referenceGap ?? 3}
+              disabled={!template.showReferenceUnderMainText}
+              onChange={(points) =>
+                setTemplate((current) => ({ ...current, referenceGap: points }))
+              }
+            />
+            <LengthField
               label="Start Y"
               min={0}
               value={template.startY ?? template.columns[0]?.y ?? 0}

@@ -71,6 +71,7 @@ export interface KeptExportPageTemplateDraft {
   startY?: number
   endY?: number
   showReferenceUnderMainText?: boolean
+  referenceGap?: number
   defaultTextStyle: KeptExportTextStyle
   referenceTextStyle?: KeptExportTextStyle
   columns: KeptExportColumnDraft[]
@@ -216,6 +217,7 @@ export function createDefaultKeptExportPageTemplate(): KeptExportPageTemplateDra
     startY,
     endY,
     showReferenceUnderMainText: true,
+    referenceGap: 3,
     defaultTextStyle: cloneKeptExportTextStyle(DEFAULT_TEXT_STYLE),
     divider: createDefaultDivider(width),
     columns: DEFAULT_COLUMN_SPECS.map((column) => ({
@@ -361,6 +363,15 @@ export function validateKeptExportPageTemplate(
     issues.push({
       path: `${label}.yRange`,
       message: `${label} End Y must be greater than Start Y when filling the vertical range.`
+    })
+  }
+  if (
+    template.referenceGap !== undefined &&
+    (!Number.isFinite(template.referenceGap) || template.referenceGap < 0)
+  ) {
+    issues.push({
+      path: `${label}.referenceGap`,
+      message: `${label} payee to reference gap must be zero or greater.`
     })
   }
   if (template.columns.length === 0) {

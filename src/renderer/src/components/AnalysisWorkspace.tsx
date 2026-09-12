@@ -249,6 +249,8 @@ export const AnalysisWorkspace = React.memo(function AnalysisWorkspace({
                 className={dataset === option ? 'is-active' : ''}
                 type="button"
                 role="tab"
+                id={`statement-dataset-tab-${option}`}
+                aria-controls="statement-dataset-panel"
                 aria-selected={dataset === option}
                 onClick={() => setDataset(option)}
               >
@@ -257,157 +259,171 @@ export const AnalysisWorkspace = React.memo(function AnalysisWorkspace({
             ))}
           </div>
         </header>
-        <p className="sr-only">{currencyDescription}</p>
-        <div className="statement-stats-summary">
-          <div>
-            <span>Money in</span>
-            <strong>{currency.format(statementStats.moneyIn)}</strong>
-          </div>
-          <div>
-            <span>Money out</span>
-            <strong>{currency.format(statementStats.moneyOut)}</strong>
-          </div>
-          <div>
-            <span>Net movement</span>
-            <strong>{currency.format(statementStats.netMovement)}</strong>
-          </div>
-          <div>
-            <span>Balance total</span>
-            <strong>{currency.format(statementStats.balanceTotal)}</strong>
-          </div>
-        </div>
-        <p className="statement-stats-note">
-          Balance total is the sum of balance snapshots. Closing balance uses the final
-          chronological snapshot.
-        </p>
-        <div className="statement-month-table-wrap">
-          <table className="statement-month-table">
-            <thead>
-              <tr>
-                <th>Month</th>
-                <th>Rows</th>
-                <th>Money in</th>
-                <th>Money out</th>
-                <th>Net</th>
-                <th>Closing balance</th>
-              </tr>
-            </thead>
-            <tbody>
-              {statementStats.months.map((month) => (
-                <tr key={month.key}>
-                  <th scope="row">{month.label}</th>
-                  <td>{month.rowCount}</td>
-                  <td>{currency.format(month.moneyIn)}</td>
-                  <td>{currency.format(month.moneyOut)}</td>
-                  <td>{currency.format(month.netMovement)}</td>
-                  <td>
-                    {month.closingBalance === null ? '—' : currency.format(month.closingBalance)}
-                  </td>
-                </tr>
-              ))}
-              {statementStats.months.length === 0 && (
-                <tr>
-                  <td colSpan={6}>No mappable financial rows.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-        <dl className="statement-stats-reconciliation">
-          <div>
-            <dt>Rows not mapped</dt>
-            <dd>
-              {statementStats.invalidRowCount} of {statementStats.sourceRowCount}
-            </dd>
-          </div>
-          <div>
-            <dt>Calculated close</dt>
-            <dd>
-              {statementStats.calculatedClosingBalance === null
-                ? '—'
-                : currency.format(statementStats.calculatedClosingBalance)}
-            </dd>
-          </div>
-          <div>
-            <dt>Statement close</dt>
-            <dd>
-              {statementStats.closingBalance === null
-                ? '—'
-                : currency.format(statementStats.closingBalance)}
-            </dd>
-          </div>
-          <div>
-            <dt>Difference</dt>
-            <dd>
-              {statementStats.difference === null
-                ? '—'
-                : currency.format(statementStats.difference)}
-            </dd>
-          </div>
-        </dl>
-        <section className="payee-evidence-panel" aria-labelledby="payee-evidence-title">
-          <header>
+        <div
+          id="statement-dataset-panel"
+          role="tabpanel"
+          aria-labelledby={`statement-dataset-tab-${dataset}`}
+          tabIndex={0}
+        >
+          <p className="sr-only">{currencyDescription}</p>
+          <div className="statement-stats-summary">
             <div>
-              <span>PAYEE EVIDENCE</span>
-              <h4 id="payee-evidence-title">Mapped business descriptions</h4>
+              <span>Money in</span>
+              <strong>{currency.format(statementStats.moneyIn)}</strong>
             </div>
-            <span>{statementStats.rows.length} mapped rows</span>
-          </header>
+            <div>
+              <span>Money out</span>
+              <strong>{currency.format(statementStats.moneyOut)}</strong>
+            </div>
+            <div>
+              <span>Net movement</span>
+              <strong>{currency.format(statementStats.netMovement)}</strong>
+            </div>
+            <div>
+              <span>Balance snapshot sum</span>
+              <strong>{currency.format(statementStats.balanceTotal)}</strong>
+            </div>
+          </div>
           <p className="statement-stats-note">
-            Payee text is derived evidence. It remains separate from the original extracted text.
+            Balance snapshot sum is the sum of balance snapshots. Closing balance uses the final
+            chronological snapshot.
           </p>
-          <div className="payee-evidence-table-wrap">
-            <table className="payee-evidence-table">
+          <div className="statement-month-table-wrap">
+            <table className="statement-month-table">
               <thead>
                 <tr>
-                  <th>Payee</th>
-                  <th>Source entry</th>
-                  <th>Occurrences</th>
+                  <th>Month</th>
+                  <th>Rows</th>
+                  <th>Money in</th>
+                  <th>Money out</th>
+                  <th>Net</th>
+                  <th>Closing balance</th>
                 </tr>
               </thead>
               <tbody>
-                {[
-                  ...new Map(
-                    statementStats.rows.map((row) => [
-                      row.payee?.trim() || '(unmapped description)',
-                      statementStats.rows.filter(
-                        (candidate) =>
-                          (candidate.payee?.trim() || '(unmapped description)') ===
-                          (row.payee?.trim() || '(unmapped description)')
-                      )
-                    ])
-                  )
-                ]
-                  .sort(([left], [right]) => left.localeCompare(right))
-                  .map(([payee, rows]) => (
-                    <tr key={payee}>
-                      <th scope="row">{payee}</th>
-                      <td>
-                        {rows
-                          .slice(0, 3)
-                          .map((row) => row.entryId)
-                          .join(', ')}
-                        {rows.length > 3 ? ` +${rows.length - 3} more` : ''}
-                      </td>
-                      <td>{rows.length}</td>
-                    </tr>
-                  ))}
-                {statementStats.rows.length === 0 && (
+                {statementStats.months.map((month) => (
+                  <tr key={month.key}>
+                    <th scope="row">{month.label}</th>
+                    <td>{month.rowCount}</td>
+                    <td>{currency.format(month.moneyIn)}</td>
+                    <td>{currency.format(month.moneyOut)}</td>
+                    <td>{currency.format(month.netMovement)}</td>
+                    <td>
+                      {month.closingBalance === null ? '—' : currency.format(month.closingBalance)}
+                    </td>
+                  </tr>
+                ))}
+                {statementStats.months.length === 0 && (
                   <tr>
-                    <td colSpan={3}>No mapped payee evidence for this dataset.</td>
+                    <td colSpan={6}>No mappable financial rows.</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
-          {statementStats.unmappedEntryIds.length > 0 && (
-            <p className="payee-evidence-unmapped" role="status">
-              {statementStats.unmappedEntryIds.length} source entr
-              {statementStats.unmappedEntryIds.length === 1 ? 'y is' : 'ies are'} not mapped to
-              financial columns and remain available in Review.
+          <dl className="statement-stats-reconciliation">
+            <div>
+              <dt>Rows not mapped</dt>
+              <dd>
+                {statementStats.invalidRowCount} of {statementStats.sourceRowCount}
+              </dd>
+            </div>
+            <div>
+              <dt>Calculated close</dt>
+              <dd>
+                {statementStats.calculatedClosingBalance === null
+                  ? '—'
+                  : currency.format(statementStats.calculatedClosingBalance)}
+              </dd>
+            </div>
+            <div>
+              <dt>Statement close</dt>
+              <dd>
+                {statementStats.closingBalance === null
+                  ? '—'
+                  : currency.format(statementStats.closingBalance)}
+              </dd>
+            </div>
+            <div>
+              <dt>Difference</dt>
+              <dd>
+                {statementStats.difference === null
+                  ? '—'
+                  : currency.format(statementStats.difference)}
+              </dd>
+            </div>
+          </dl>
+          <section className="payee-evidence-panel" aria-labelledby="payee-evidence-title">
+            <header>
+              <div>
+                <span>PAYEE EVIDENCE</span>
+                <h4 id="payee-evidence-title">Mapped business descriptions</h4>
+              </div>
+              <span>{statementStats.rows.length} mapped rows</span>
+            </header>
+            <p className="statement-stats-note">
+              Payee text is derived evidence. It remains separate from the original extracted text.
             </p>
-          )}
-        </section>
+            <div className="payee-evidence-table-wrap">
+              <table className="payee-evidence-table">
+                <thead>
+                  <tr>
+                    <th>Payee</th>
+                    <th>Source entry</th>
+                    <th>Occurrences</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {[
+                    ...new Map(
+                      statementStats.rows.map((row) => [
+                        row.payee?.trim() || '(unmapped description)',
+                        statementStats.rows.filter(
+                          (candidate) =>
+                            (candidate.payee?.trim() || '(unmapped description)') ===
+                            (row.payee?.trim() || '(unmapped description)')
+                        )
+                      ])
+                    )
+                  ]
+                    .sort(([left], [right]) => left.localeCompare(right))
+                    .map(([payee, rows]) => (
+                      <tr key={payee}>
+                        <th scope="row">{payee}</th>
+                        <td>
+                          {rows.slice(0, 3).map((row) => (
+                            <button
+                              key={row.entryId}
+                              className="payee-evidence-entry-link"
+                              type="button"
+                              aria-label={`Open source entry ${row.entryId}`}
+                              onClick={() => onNavigateToEntry(row.entryId)}
+                            >
+                              {row.entryId}
+                            </button>
+                          ))}
+                          {rows.length > 3 ? ` +${rows.length - 3} more` : ''}
+                        </td>
+                        <td>{rows.length}</td>
+                      </tr>
+                    ))}
+                  {statementStats.rows.length === 0 && (
+                    <tr>
+                      <td colSpan={3}>No mapped payee evidence for this dataset.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {statementStats.unmappedEntryIds.length > 0 && (
+              <p className="payee-evidence-unmapped" role="status">
+                {statementStats.unmappedEntryIds.length} source entr
+                {statementStats.unmappedEntryIds.length === 1 ? 'y is' : 'ies are'} not mapped to
+                financial columns and remain available in Review.
+              </p>
+            )}
+          </section>
+        </div>
       </section>
       <AnalysisPanel entries={entries} snapshot={snapshot} onNavigateToEntry={onNavigateToEntry} />
     </section>

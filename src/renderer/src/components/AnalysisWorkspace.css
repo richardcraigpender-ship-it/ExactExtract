@@ -236,6 +236,20 @@
   text-overflow: ellipsis;
   font-weight: 650;
 }
+.payee-evidence-entry-link {
+  margin: 0 6px 0 0;
+  padding: 0;
+  border: 0;
+  color: var(--studio-accent);
+  background: transparent;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.payee-evidence-entry-link:focus-visible {
+  outline: 2px solid var(--studio-accent);
+  outline-offset: 2px;
+}
 .payee-evidence-unmapped {
   margin: 0;
   color: #9a6415;

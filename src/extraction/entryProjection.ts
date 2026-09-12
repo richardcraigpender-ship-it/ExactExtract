@@ -2,6 +2,7 @@ import type { ProjectEntry } from '../shared/contracts'
 import { extractAccountingLineDetails } from './accounting'
 import { classifySemanticLines } from './semantics'
 import { adaptRevolutTransaction, isRevolutStatement } from './revolutAdapter'
+import { normalizeTransactionDescription } from './transactionNormalization'
 import type { ExtractedLine, ParserExtractionResult } from './types'
 
 /**
@@ -74,14 +75,13 @@ const DATE_PREFIX =
   /^(?:\d{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}\s+\d{4}|\d{4}-\d{2}-\d{2}|\d{1,2}(?:st|nd|rd|th)?[/-]\d{1,2}[/-]\d{2,4})\s+/i
 const FIRST_AMOUNT = /(?:[$€£¥₹]\s*)?\(?[+-]?\d/
 const PERSONAL_HONORIFIC = /^(?:mr|mrs|ms|miss|dr|prof)\.?\s+/i
-const TRAILING_DIRECTION_WORDS = /\s+(?:money\s+(?:in|out)|debit|credit|in|out)\s*$/i
 const INCOMPLETE_TRANSACTION_DESCRIPTION =
   /^(?:payment\s+(?:from|to)|transfer\s+(?:from|to)|from|to)$/i
 const REFERENCE_DETAIL_LINE =
   /\b(?:ref(?:erence)?|card|invoice|inv|order|po|receipt|transaction|txn|id)\b/i
 
 function cleanDescriptionText(value: string): string {
-  return value.replace(TRAILING_DIRECTION_WORDS, '').replace(/\s+/g, ' ').trim()
+  return normalizeTransactionDescription(value).description
 }
 
 function completeFinancialText(

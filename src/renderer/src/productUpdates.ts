@@ -9,6 +9,34 @@ export interface ProductUpdate {
 
 export const PRODUCT_UPDATES: readonly ProductUpdate[] = [
   {
+    date: '2026-09-12',
+    kind: 'Fixed',
+    title: 'OCR startup reliability',
+    summary:
+      'OCR now starts from the bundled worker and core assets, avoiding the initialization stall at 1% progress.'
+  },
+  {
+    date: '2026-09-12',
+    kind: 'Feature',
+    title: 'Sharper background controls',
+    summary:
+      'Canvas background images now include a sharpness control so previews can be tuned from soft to crisp.'
+  },
+  {
+    date: '2026-09-12',
+    kind: 'Changed',
+    title: 'Predictable export previews',
+    summary:
+      'Text and PNG previewers open at 100% and stay open until their X close control is pressed.'
+  },
+  {
+    date: '2026-09-12',
+    kind: 'Feature',
+    title: 'Page number styling',
+    summary:
+      'Live export previews now show page numbers with configurable position, size, colour, and font weight.'
+  },
+  {
     date: '2026-09-09',
     kind: 'Fixed',
     title: 'Formatted text live preview parity',

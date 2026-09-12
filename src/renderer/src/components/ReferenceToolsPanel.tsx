@@ -1,5 +1,5 @@
 import React from 'react'
-import { Eraser, FileSearch, ScanText, Sparkles, X } from 'lucide-react'
+import { Eraser, FileSearch, Redo2, ScanText, Sparkles, Undo2, X } from 'lucide-react'
 import { DEFAULT_REFERENCE_PARENT_MAX_SCORE } from '../../../review/references'
 
 export interface ReferenceToolResult {
@@ -34,6 +34,10 @@ interface ReferenceToolsPanelProps {
   onCancelScan: () => void
   onClearScannedReferences: () => void
   onToggleOcrLanguage: (language: string) => void
+  canUndo?: boolean
+  canRedo?: boolean
+  onUndo?: () => void
+  onRedo?: () => void
 }
 
 export const ReferenceToolsPanel = React.memo(function ReferenceToolsPanel({
@@ -49,7 +53,11 @@ export const ReferenceToolsPanel = React.memo(function ReferenceToolsPanel({
   onScanOcr,
   onCancelScan,
   onClearScannedReferences,
-  onToggleOcrLanguage
+  onToggleOcrLanguage,
+  canUndo = false,
+  canRedo = false,
+  onUndo,
+  onRedo
 }: ReferenceToolsPanelProps): React.JSX.Element {
   const [confirmClear, setConfirmClear] = React.useState(false)
   const scanDisabled =
@@ -144,6 +152,30 @@ export const ReferenceToolsPanel = React.memo(function ReferenceToolsPanel({
           </button>
         )}
       </div>
+      {(onUndo || onRedo) && (
+        <div className="reference-tools-history" aria-label="Entry history">
+          {onUndo && (
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={!canUndo || isScanning || isBusy}
+              onClick={onUndo}
+            >
+              <Undo2 size={16} aria-hidden="true" /> Undo entry change
+            </button>
+          )}
+          {onRedo && (
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={!canRedo || isScanning || isBusy}
+              onClick={onRedo}
+            >
+              <Redo2 size={16} aria-hidden="true" /> Redo entry change
+            </button>
+          )}
+        </div>
+      )}
       <fieldset className="reference-tools-languages" disabled={isScanning || isBusy}>
         <legend>OCR languages for source re-scan</legend>
         <div>

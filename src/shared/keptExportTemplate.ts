@@ -132,6 +132,8 @@ export interface KeptExportPageTemplate {
   startY?: number
   endY?: number
   showReferenceUnderMainText?: boolean
+  /** Gap in points between the payee/description line and its reference line. */
+  referenceGap?: number
   defaultTextStyle: KeptExportTextStyle
   /** Styles the reference line on its own; falls back to a smaller payee style when unset. */
   referenceTextStyle?: KeptExportTextStyle

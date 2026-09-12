@@ -65,6 +65,27 @@ test('shows a loading state instead of an empty library message', () => {
   assert.doesNotMatch(markup, /No merchants learned yet/)
 })
 
+test('offers an exclude-all control at the top and bottom of the reviewable list', () => {
+  const markup = render({
+    records: [
+      record({ id: 'a', canonicalDisplayName: 'Greenfield Coffee' }),
+      record({ id: 'b', canonicalDisplayName: 'Northwind Utilities', normalizedKey: 'northwind' })
+    ]
+  })
+
+  assert.match(markup, /merchant-library-bulk-actions--top/)
+  assert.match(markup, /merchant-library-bulk-actions--bottom/)
+  assert.match(markup, /Exclude all shown \(2\)/g)
+})
+
+test('hides the exclude-all control once every visible record is already excluded', () => {
+  const markup = render({
+    records: [record({ classification: 'excluded' })]
+  })
+
+  assert.doesNotMatch(markup, /Exclude all shown/)
+})
+
 test('separates merchant candidates from private transfer flags', () => {
   const markup = render({
     records: [
@@ -183,7 +204,7 @@ test('treats a user decision as final over detection flags', () => {
 test('offers direction and pattern choices instead of hardcoding outgoing monthly rows', () => {
   const markup = render({ onAddScenarioRows: noop })
 
-  assert.match(markup, /Merchant forecast/)
+  assert.match(markup, /Planning forecast/)
   assert.match(markup, /Money out/)
   assert.match(markup, /Money in/)
   assert.match(markup, /Random rows/)
@@ -202,5 +223,5 @@ test('shows spend bounds for random rows and hides cadence until recurring is ch
 test('hides the forecast form entirely when the caller cannot accept scenario rows', () => {
   const markup = render()
 
-  assert.doesNotMatch(markup, /Merchant forecast/)
+  assert.doesNotMatch(markup, /Planning forecast/)
 })

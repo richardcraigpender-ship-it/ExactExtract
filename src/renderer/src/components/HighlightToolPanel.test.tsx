@@ -66,25 +66,26 @@ test('reports the outcome of the last apply in a live region', () => {
   assert.match(markup, /Updated 2 highlights across 1 entry\./)
 })
 
-test('offers scoped entry marking actions when wired by the app', () => {
-  const markup = render({ onSetStatus: () => {} })
+test('does not expose review status actions in the marks panel', () => {
+  const markup = render()
 
-  assert.match(markup, /Mark entries/)
-  assert.match(markup, /Keep/)
-  assert.match(markup, /Maybe/)
-  assert.match(markup, /Exclude/)
-  assert.match(markup, /Applies to the entries matched by the current highlight scope/)
+  assert.doesNotMatch(markup, /Mark entries/)
+  assert.doesNotMatch(markup, /Keep/)
+  assert.doesNotMatch(markup, /Maybe/)
+  assert.doesNotMatch(markup, /Exclude/)
 })
 
-test('disables scoped entry marking when no highlights are in scope', () => {
-  const markup = render({ affectedCount: 0, onSetStatus: () => {} })
+test('offers undo and redo for highlight changes', () => {
+  const markup = render({
+    canUndo: true,
+    canRedo: false,
+    onUndo: () => {},
+    onRedo: () => {}
+  })
 
-  assert.match(markup, /<button class="secondary-button" type="button" disabled="">Keep<\/button>/)
-  assert.match(markup, /<button class="secondary-button" type="button" disabled="">Maybe<\/button>/)
-  assert.match(
-    markup,
-    /<button class="secondary-button" type="button" disabled="">Exclude<\/button>/
-  )
+  assert.match(markup, /Highlight history/)
+  assert.match(markup, /aria-label="Undo highlight change"/)
+  assert.match(markup, /aria-label="Redo highlight change"[^>]*disabled/)
 })
 
 // HT-C-006

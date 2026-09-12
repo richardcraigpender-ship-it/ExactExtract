@@ -32,6 +32,11 @@ import { HighlightToolPanel } from './components/HighlightToolPanel'
 import { StyleProfilePanel } from './components/StyleProfilePanel'
 import { ReferenceToolsPanel, type ReferenceToolResult } from './components/ReferenceToolsPanel'
 import { MerchantLibraryPanel } from './components/MerchantLibraryPanel'
+import {
+  ExtractionReportPanel,
+  type ExtractionReportDocumentSummary,
+  type ExtractionReportFilterReason
+} from './components/ExtractionReportPanel'
 import { useMerchantLibrary } from './lib/useMerchantLibrary'
 import {
   applyHighlightGeometry,
@@ -93,6 +98,7 @@ import type {
   ExtractionSettings,
   ProjectDocument,
   ProjectEntry,
+  ProjectPage,
   ReviewStatus,
   ProjectState
 } from '../../shared/contracts'
@@ -129,6 +135,8 @@ import {
   type SaveRecoveryState
 } from '../../recovery'
 import {
+  buildExtractionReport,
+  buildReviewQueue,
   clearScannedReferenceNotes,
   copyKeptEntryReferencesToNotes,
   copySourceReferencesToKeptEntryNotes,
@@ -138,7 +146,8 @@ import {
   mergeReviewEntries,
   reconcileReviewSelection,
   splitReviewEntry,
-  type ReviewIssueCode
+  type ReviewIssueCode,
+  type ReviewQueueReasonCode
 } from '../../review'
 import {
   buildSessionKeptImageSources,
@@ -155,6 +164,7 @@ import {
   type KeptImagePlan
 } from '../../export'
 
+// Keep the App import surface synchronized with the active export wiring.
 type Screen = 'onboarding' | 'import' | 'preflight' | 'workspace'
 type Theme = 'light' | 'dark'
 type ExtractionMode = 'fast' | 'balanced' | 'maximum' | 'custom'
@@ -167,6 +177,14 @@ interface PageRemovalHistorySnapshot {
   pdfData: Uint8Array
   activePath: string
   reviewPage: number
+}
+
+interface HighlightHistorySnapshot {
+  regionsByEntry: Array<Pick<ProjectEntry, 'id' | 'regions'>>
+  visible: boolean
+  editMode: boolean
+  styleMode: HighlightStyleMode
+  scope: HighlightScope
 }
 
 interface ImportedDocument extends ProjectDocument {
@@ -216,6 +234,27 @@ function parsePageRange(value: string, maximumPage: number): number[] {
     for (let page = start; page <= Math.min(end, maximumPage); page += 1) pages.add(page)
   }
   return [...pages].sort((left, right) => left - right)
+}
+
+/**
+ * Highlight edits need each page's PDF-point size to convert normalized/pdf-points bboxes, so
+ * this must be populated on the live project as soon as extraction finishes, not only at save.
+ */
+function buildProjectPages(
+  documents: readonly ImportedDocument[],
+  preflight: Record<string, PdfPreflightResult>
+): ProjectPage[] {
+  return documents.flatMap((document) =>
+    (preflight[document.path]?.pages ?? []).map((page) => ({
+      documentId: document.id,
+      pageNumber: page.pageNumber,
+      width: page.width,
+      height: page.height,
+      rotation: page.rotation,
+      kind: page.kind,
+      confidence: page.confidence
+    }))
+  )
 }
 
 function restorePreflight(project: ProjectState): Record<string, PdfPreflightResult> {
@@ -278,6 +317,8 @@ function App(): React.JSX.Element {
   const screenHeadingRef = useRef<HTMLHeadingElement>(null)
   const undoStackRef = useRef<ProjectState['entries'][]>([])
   const redoStackRef = useRef<ProjectState['entries'][]>([])
+  const highlightUndoStackRef = useRef<HighlightHistorySnapshot[]>([])
+  const highlightRedoStackRef = useRef<HighlightHistorySnapshot[]>([])
   const pageRemovalUndoRef = useRef<PageRemovalHistorySnapshot[]>([])
   const pageRemovalRedoRef = useRef<PageRemovalHistorySnapshot[]>([])
   const extractionAbortRef = useRef<AbortController | null>(null)
@@ -289,6 +330,7 @@ function App(): React.JSX.Element {
   const lastPointerRef = useRef({ x: 200, y: 200 })
   const editedPdfDataRef = useRef(new Map<string, Uint8Array>())
   const [screen, setScreen] = useState<Screen>('onboarding')
+  const [newProjectName, setNewProjectName] = useState('')
   const [documents, setDocuments] = useState<ImportedDocument[]>([])
   const [activePath, setActivePath] = useState<string | null>(null)
   const [pdfData, setPdfData] = useState<Uint8Array | null>(null)
@@ -357,11 +399,16 @@ function App(): React.JSX.Element {
   const [reviewSource, setReviewSource] = useState<'all' | 'parser' | 'ocr' | 'merged'>('all')
   const [reviewCategory, setReviewCategory] = useState('all')
   const [reviewIssueFilter, setReviewIssueFilter] = useState<ReviewIssueCode | 'all'>('all')
+  const [reviewQueueReason, setReviewQueueReason] = useState<ReviewQueueReasonCode | 'all'>('all')
   const [requestedReviewSourcePage, setReviewSourcePage] = useState(1)
   const [viewAllReviewEntries, setViewAllReviewEntries] = useState(false)
   const [reviewPageSpan, setReviewPageSpan] = useState(String(DEFAULT_REVIEW_PAGE_SPAN))
   const [requestedPdfPage, setRequestedPdfPage] = useState<number | undefined>(undefined)
   const [historyState, setHistoryState] = useState({ undoCount: 0, redoCount: 0 })
+  const [highlightHistoryState, setHighlightHistoryState] = useState({
+    undoCount: 0,
+    redoCount: 0
+  })
   const [pageRemovalHistory, setPageRemovalHistory] = useState({ undoCount: 0, redoCount: 0 })
   const [editingEntryId, setEditingEntryId] = useState<string | null>(null)
   const [selectedReviewIds, setSelectedReviewIds] = useState<Set<string>>(() => new Set())
@@ -572,6 +619,44 @@ function App(): React.JSX.Element {
     }
     return index
   }, [reviewIssues])
+  const mergedEntryIds = useMemo(
+    () =>
+      new Set(
+        (project?.auditTrail ?? [])
+          .filter((event) => event.action === 'entries-merged')
+          .map((event) => event.entityId)
+      ),
+    [project?.auditTrail]
+  )
+  const projectExtractionSettings = project?.settings.extraction
+  const extractionReportSummaries = useMemo(
+    () =>
+      documents.flatMap((document): ExtractionReportDocumentSummary[] => {
+        const preflightResult = project?.preflight.find(
+          (candidate) => candidate.documentId === document.id
+        )
+        if (!preflightResult) return []
+        return [
+          {
+            documentId: document.id,
+            documentName: document.name,
+            report: buildExtractionReport(preflightResult, project?.entries ?? [], {
+              settings: projectExtractionSettings,
+              reviewIssues,
+              mergedEntryIds
+            })
+          }
+        ]
+      }),
+    [
+      documents,
+      mergedEntryIds,
+      project?.entries,
+      project?.preflight,
+      projectExtractionSettings,
+      reviewIssues
+    ]
+  )
   const normalizedDebouncedReviewQuery = normalizeReviewQuery(debouncedReviewQuery)
   const debouncedReviewFilterKey = [
     normalizedDebouncedReviewQuery,
@@ -679,7 +764,7 @@ function App(): React.JSX.Element {
   )
   const visibleReviewEntries = useMemo(
     () =>
-      viewAllReviewEntries || hasSearchQuery
+      viewAllReviewEntries
         ? activeDocumentEntries
         : filteredEntries.filter((entry) =>
             entry.regions.some(
@@ -691,7 +776,6 @@ function App(): React.JSX.Element {
       activeDocumentEntries,
       activeDocumentId,
       filteredEntries,
-      hasSearchQuery,
       viewAllReviewEntries,
       visibleSourcePages
     ]
@@ -730,6 +814,23 @@ function App(): React.JSX.Element {
     [analysisConfiguration, project?.entries]
   )
   const analysisSnapshot = persistedAnalysisState.snapshot
+  const reviewQueue = useMemo(
+    () =>
+      buildReviewQueue(project?.entries ?? [], {
+        reviewIssues,
+        analysisIssueEntryIds: new Set(analysisSnapshot.issues.flatMap((issue) => issue.entryIds))
+      }),
+    [analysisSnapshot.issues, project?.entries, reviewIssues]
+  )
+  const reviewQueueEntries = useMemo(
+    () =>
+      reviewQueue.filter(
+        (item) =>
+          reviewQueueReason === 'all' ||
+          item.reasons.some((reason) => reason.code === reviewQueueReason)
+      ),
+    [reviewQueue, reviewQueueReason]
+  )
   const selectedReviewEntries = useMemo(
     () => (project?.entries ?? []).filter((entry) => selectedReviewIds.has(entry.id)),
     [project?.entries, selectedReviewIds]
@@ -821,12 +922,41 @@ function App(): React.JSX.Element {
       selectedReviewIds
     ]
   )
+
+  const [highlightsVisible, setHighlightsVisible] = useState(true)
+  const [highlightEditMode, setHighlightEditMode] = useState(false)
+  const [highlightStyleMode, setHighlightStyleMode] = useState<HighlightStyleMode>('filled')
+  const [highlightScope, setHighlightScope] = useState<HighlightScope>('entry')
+  const [highlightResult, setHighlightResult] = useState<string | null>(null)
+
+  const recordHighlightHistory = (): void => {
+    highlightUndoStackRef.current = [
+      ...highlightUndoStackRef.current,
+      {
+        regionsByEntry: (project?.entries ?? []).map(({ id, regions }) => ({
+          id,
+          regions: regions.map((region) => ({ ...region, bbox: region.bbox && { ...region.bbox } }))
+        })),
+        visible: highlightsVisible,
+        editMode: highlightEditMode,
+        styleMode: highlightStyleMode,
+        scope: highlightScope
+      }
+    ]
+    highlightRedoStackRef.current = []
+    setHighlightHistoryState({
+      undoCount: highlightUndoStackRef.current.length,
+      redoCount: 0
+    })
+  }
+
   const changeViewerHighlight = useCallback(
     (
       entryId: string,
       regionIndex: number,
       region: { x: number; y: number; width: number; height: number }
     ): void => {
+      recordHighlightHistory()
       setProject((current) => {
         if (!current) return current
         const updatedAt = new Date().toISOString()
@@ -865,14 +995,108 @@ function App(): React.JSX.Element {
         }
       })
     },
-    []
+    [recordHighlightHistory]
   )
 
-  const [highlightsVisible, setHighlightsVisible] = useState(true)
-  const [highlightEditMode, setHighlightEditMode] = useState(false)
-  const [highlightStyleMode, setHighlightStyleMode] = useState<HighlightStyleMode>('filled')
-  const [highlightScope, setHighlightScope] = useState<HighlightScope>('entry')
-  const [highlightResult, setHighlightResult] = useState<string | null>(null)
+  const changeHighlightVisibility = useCallback((visible: boolean): void => {
+    if (visible === highlightsVisible) return
+    recordHighlightHistory()
+    setHighlightsVisible(visible)
+  }, [highlightsVisible])
+
+  const changeHighlightEditMode = useCallback((editMode: boolean): void => {
+    if (editMode === highlightEditMode) return
+    recordHighlightHistory()
+    setHighlightEditMode(editMode)
+  }, [highlightEditMode])
+
+  const changeHighlightStyleMode = useCallback((styleMode: HighlightStyleMode): void => {
+    if (styleMode === highlightStyleMode) return
+    recordHighlightHistory()
+    setHighlightStyleMode(styleMode)
+  }, [highlightStyleMode])
+
+  const changeHighlightScope = useCallback((scope: HighlightScope): void => {
+    if (scope === highlightScope) return
+    recordHighlightHistory()
+    setHighlightScope(scope)
+  }, [highlightScope])
+
+  const undoHighlight = useCallback((): void => {
+    const previous = highlightUndoStackRef.current.at(-1)
+    if (!previous) return
+    highlightUndoStackRef.current = highlightUndoStackRef.current.slice(0, -1)
+    highlightRedoStackRef.current = [
+      ...highlightRedoStackRef.current,
+      {
+        regionsByEntry: (project?.entries ?? []).map(({ id, regions }) => ({
+          id,
+          regions: regions.map((region) => ({ ...region, bbox: region.bbox && { ...region.bbox } }))
+        })),
+        visible: highlightsVisible,
+        editMode: highlightEditMode,
+        styleMode: highlightStyleMode,
+        scope: highlightScope
+      }
+    ]
+    setProject((current) =>
+      current
+        ? {
+            ...current,
+            entries: current.entries.map((entry) => {
+              const snapshot = previous.regionsByEntry.find((candidate) => candidate.id === entry.id)
+              return snapshot ? { ...entry, regions: snapshot.regions } : entry
+            })
+          }
+        : current
+    )
+    setHighlightsVisible(previous.visible)
+    setHighlightEditMode(previous.editMode)
+    setHighlightStyleMode(previous.styleMode)
+    setHighlightScope(previous.scope)
+    setHighlightHistoryState({
+      undoCount: highlightUndoStackRef.current.length,
+      redoCount: highlightRedoStackRef.current.length
+    })
+  }, [highlightEditMode, highlightScope, highlightStyleMode, highlightsVisible, project])
+
+  const redoHighlight = useCallback((): void => {
+    const next = highlightRedoStackRef.current.at(-1)
+    if (!next) return
+    highlightRedoStackRef.current = highlightRedoStackRef.current.slice(0, -1)
+    highlightUndoStackRef.current = [
+      ...highlightUndoStackRef.current,
+      {
+        regionsByEntry: (project?.entries ?? []).map(({ id, regions }) => ({
+          id,
+          regions: regions.map((region) => ({ ...region, bbox: region.bbox && { ...region.bbox } }))
+        })),
+        visible: highlightsVisible,
+        editMode: highlightEditMode,
+        styleMode: highlightStyleMode,
+        scope: highlightScope
+      }
+    ]
+    setProject((current) =>
+      current
+        ? {
+            ...current,
+            entries: current.entries.map((entry) => {
+              const snapshot = next.regionsByEntry.find((candidate) => candidate.id === entry.id)
+              return snapshot ? { ...entry, regions: snapshot.regions } : entry
+            })
+          }
+        : current
+    )
+    setHighlightsVisible(next.visible)
+    setHighlightEditMode(next.editMode)
+    setHighlightStyleMode(next.styleMode)
+    setHighlightScope(next.scope)
+    setHighlightHistoryState({
+      undoCount: highlightUndoStackRef.current.length,
+      redoCount: highlightRedoStackRef.current.length
+    })
+  }, [highlightEditMode, highlightScope, highlightStyleMode, highlightsVisible, project])
 
   const highlightTargets = useMemo(
     () =>
@@ -913,92 +1137,45 @@ function App(): React.JSX.Element {
       value: number,
       unit: LengthUnit
     ): void => {
-      setProject((current) => {
-        if (!current) return current
-        const updatedAt = new Date().toISOString()
-        const currentTargets = resolveHighlightTargets(current.entries, {
-          scope: highlightScope,
-          documentId: activeDocumentId,
-          pageNumber:
-            highlightScope === 'keep' || highlightScope === 'selected'
-              ? undefined
-              : requestedPdfPage,
-          selectedEntryId,
-          selectedEntryIds: selectedReviewIdsRef.current
-        })
-        const result = applyHighlightGeometry(
-          current.entries,
-          currentTargets,
-          { field, mode, value, unit },
-          current.pages,
-          updatedAt
-        )
-        if (result.changedRegionCount === 0) {
-          setHighlightResult('No highlights were changed.')
-          return current
-        }
-        setHighlightResult(
-          `Updated ${result.changedRegionCount} highlight${
-            result.changedRegionCount === 1 ? '' : 's'
-          } across ${result.changedEntryCount} entr${result.changedEntryCount === 1 ? 'y' : 'ies'}.`
-        )
-        return { ...current, updatedAt, entries: result.entries }
+      if (!project) return
+      const updatedAt = new Date().toISOString()
+      const currentTargets = resolveHighlightTargets(project.entries, {
+        scope: highlightScope,
+        documentId: activeDocumentId,
+        pageNumber:
+          highlightScope === 'keep' || highlightScope === 'selected'
+            ? undefined
+            : requestedPdfPage,
+        selectedEntryId,
+        selectedEntryIds: selectedReviewIdsRef.current
       })
+      const result = applyHighlightGeometry(
+        project.entries,
+        currentTargets,
+        { field, mode, value, unit },
+        project.pages,
+        updatedAt
+      )
+      if (result.changedRegionCount === 0) {
+        setHighlightResult('No highlights were changed.')
+        return
+      }
+      recordHighlightHistory()
+      setHighlightResult(
+        `Updated ${result.changedRegionCount} highlight${
+          result.changedRegionCount === 1 ? '' : 's'
+        } across ${result.changedEntryCount} entr${result.changedEntryCount === 1 ? 'y' : 'ies'}.`
+      )
+      setProject((current) => (current ? { ...current, updatedAt, entries: result.entries } : current))
     },
-    [activeDocumentId, highlightScope, requestedPdfPage, selectedEntryId]
-  )
-
-  const setHighlightTargetStatus = useCallback(
-    (status: ReviewStatus): void => {
-      setProject((current) => {
-        if (!current) return current
-        const targets = resolveHighlightTargets(current.entries, {
-          scope: highlightScope,
-          documentId: activeDocumentId,
-          pageNumber:
-            highlightScope === 'keep' || highlightScope === 'selected'
-              ? undefined
-              : requestedPdfPage,
-          selectedEntryId,
-          selectedEntryIds: selectedReviewIdsRef.current
-        })
-        const targetEntryIds = new Set(targets.map((target) => target.entryId))
-        const changedIds = current.entries
-          .filter((entry) => targetEntryIds.has(entry.id) && entry.status !== status)
-          .map((entry) => entry.id)
-        if (changedIds.length === 0) {
-          setHighlightResult('No entries were changed.')
-          return current
-        }
-        const updatedAt = new Date().toISOString()
-        undoStackRef.current = [...undoStackRef.current, current.entries]
-        redoStackRef.current = []
-        setHistoryState({ undoCount: undoStackRef.current.length, redoCount: 0 })
-        const changedIdSet = new Set(changedIds)
-        setHighlightResult(
-          `Marked ${changedIds.length} entr${changedIds.length === 1 ? 'y' : 'ies'} as ${status}.`
-        )
-        return {
-          ...current,
-          updatedAt,
-          entries: current.entries.map((entry) =>
-            changedIdSet.has(entry.id) ? { ...entry, status, updatedAt } : entry
-          ),
-          auditTrail: [
-            ...current.auditTrail,
-            {
-              id: crypto.randomUUID(),
-              occurredAt: updatedAt,
-              action: 'bulk-review-status-changed',
-              entityType: 'project',
-              entityId: current.id,
-              details: { status, count: changedIds.length, source: 'marks-panel' }
-            }
-          ]
-        }
-      })
-    },
-    [activeDocumentId, highlightScope, requestedPdfPage, selectedEntryId]
+    [
+      activeDocumentId,
+      highlightScope,
+      project,
+      recordHighlightHistory,
+      requestedPdfPage,
+      selectedEntryId
+    ]
   )
 
   const projectSnapshot = useMemo<ProjectState | null>(() => {
@@ -1014,17 +1191,7 @@ function App(): React.JSX.Element {
     return {
       ...project,
       documents,
-      pages: documents.flatMap((document) =>
-        (preflight[document.path]?.pages ?? []).map((page) => ({
-          documentId: document.id,
-          pageNumber: page.pageNumber,
-          width: page.width,
-          height: page.height,
-          rotation: page.rotation,
-          kind: page.kind,
-          confidence: page.confidence
-        }))
-      ),
+      pages: buildProjectPages(documents, preflight),
       preflight: documents.flatMap((document) => {
         const result = preflight[document.path]
         if (!result) return []
@@ -1218,11 +1385,11 @@ function App(): React.JSX.Element {
     [documents]
   )
 
-  const createProject = async (): Promise<void> => {
+  const createProject = async (name?: string): Promise<void> => {
     setError(null)
     try {
       const created = await window.studio.projects.create(
-        `PDF Review ${new Date().toLocaleDateString()}`
+        name?.trim() || `PDF Review ${new Date().toLocaleDateString()}`
       )
       const selectedCurrencyCode = currencyCode
       setProject({
@@ -1238,12 +1405,16 @@ function App(): React.JSX.Element {
       setActivePath(null)
       setPdfData(null)
       setScreen('import')
+      setNewProjectName('')
       undoStackRef.current = []
       redoStackRef.current = []
+      highlightUndoStackRef.current = []
+      highlightRedoStackRef.current = []
       pageRemovalUndoRef.current = []
       pageRemovalRedoRef.current = []
       setPageRemovalHistory({ undoCount: 0, redoCount: 0 })
       setHistoryState({ undoCount: 0, redoCount: 0 })
+      setHighlightHistoryState({ undoCount: 0, redoCount: 0 })
     } catch (projectError) {
       setError(projectError instanceof Error ? projectError.message : 'Unable to create project.')
     }
@@ -1323,10 +1494,13 @@ function App(): React.JSX.Element {
         setScreen(loaded.documents.length > 0 ? 'workspace' : 'import')
         undoStackRef.current = []
         redoStackRef.current = []
+        highlightUndoStackRef.current = []
+        highlightRedoStackRef.current = []
         pageRemovalUndoRef.current = []
         pageRemovalRedoRef.current = []
         setPageRemovalHistory({ undoCount: 0, redoCount: 0 })
         setHistoryState({ undoCount: 0, redoCount: 0 })
+        setHighlightHistoryState({ undoCount: 0, redoCount: 0 })
       } catch (projectError) {
         setError(projectError instanceof Error ? projectError.message : 'Unable to open project.')
       }
@@ -1484,6 +1658,7 @@ function App(): React.JSX.Element {
           ? {
               ...current,
               entries,
+              pages: buildProjectPages(documents, preflight),
               extractionJobs: current.extractionJobs.map((job) =>
                 job.id === jobId ? { ...job, status: 'completed', progress: 1, completedAt } : job
               )
@@ -2101,11 +2276,42 @@ function App(): React.JSX.Element {
     [activeDocumentId, filteredEntries, navigateToEntry, sourcePageCount]
   )
 
+  const reviewNext = useCallback((): void => {
+    const next = reviewQueueEntries[0]
+    if (!next) return
+    setWorkspaceMode('review')
+    navigateToEntry(next.entryId)
+  }, [navigateToEntry, reviewQueueEntries])
+
   const handlePdfPageChange = useCallback((page: number): void => {
     setRequestedPdfPage(page)
     setReviewSourcePage(page)
     setSelectedEntryId(null)
   }, [])
+
+  const navigateToExtractionReportPage = useCallback(
+    (documentId: string, pageNumber: number): void => {
+      const source = documentsRef.current.find((document) => document.id === documentId)
+      if (source && source.path !== activePathRef.current) {
+        setPdfData(null)
+        setActivePath(source.path)
+      }
+      setWorkspaceMode('review')
+      setReviewSourcePage(pageNumber)
+      setRequestedPdfPage(pageNumber)
+    },
+    []
+  )
+
+  const focusExtractionReportFilter = useCallback(
+    (reason: ExtractionReportFilterReason): void => {
+      if (reason === 'excluded') setReviewStatus('exclude')
+      else if (reason === 'maybe') setReviewStatus('maybe')
+      else if (reason === 'ocr') setReviewSource('ocr')
+      setWorkspaceMode('review')
+    },
+    []
+  )
 
   const focusEntryInReview = useCallback(
     (entryId: string): void => {
@@ -2834,6 +3040,7 @@ function App(): React.JSX.Element {
   const handleSelectSourcePath = useCallback((path: string) => {
     setPdfData(null)
     setActivePath(path)
+    setReviewSourcePage(1)
   }, [])
 
   const detectActiveDocumentStyle = useCallback(async (): Promise<void> => {
@@ -2941,11 +3148,11 @@ function App(): React.JSX.Element {
   }, [sourcePageEntries])
 
   const selectAllFilteredEntries = useCallback(() => {
-    // Without View all or a search query, only the entries on screen should be checked;
-    // otherwise every entry matching the current filters and search bar is checked.
-    const targets = viewAllReviewEntries || hasSearchQuery ? filteredEntries : pagedEntries
+    // Without View all checked, only the entries in the current page window should be checked;
+    // a search query narrows within that scope rather than expanding it.
+    const targets = viewAllReviewEntries ? filteredEntries : pagedEntries
     setSelectedReviewIds(new Set(targets.map((entry) => entry.id)))
-  }, [filteredEntries, hasSearchQuery, pagedEntries, viewAllReviewEntries])
+  }, [filteredEntries, pagedEntries, viewAllReviewEntries])
 
   const clearReviewSelection = useCallback(() => {
     setSelectedReviewIds(new Set())
@@ -2957,6 +3164,7 @@ function App(): React.JSX.Element {
     setReviewSource('all')
     setReviewCategory('all')
     setReviewIssueFilter('all')
+    setReviewQueueReason('all')
   }, [])
 
   const handlePlaceKeptImages = useCallback((plan: KeptImagePlan) => {
@@ -3169,7 +3377,8 @@ function App(): React.JSX.Element {
                 reviewStatus === 'all' &&
                 reviewSource === 'all' &&
                 reviewCategory === 'all' &&
-                reviewIssueFilter === 'all'
+                reviewIssueFilter === 'all' &&
+                reviewQueueReason === 'all'
               }
               onClick={resetReviewFilters}
             >
@@ -3177,6 +3386,30 @@ function App(): React.JSX.Element {
             </button>
           </header>
           <div className="review-toolbar" aria-label="Search and review filters">
+            <button
+              className="primary-button"
+              type="button"
+              disabled={reviewQueueEntries.length === 0}
+              onClick={reviewNext}
+              title="Open the highest-priority unresolved entry"
+            >
+              Review next ({reviewQueueEntries.length})
+            </button>
+            <select
+              value={reviewQueueReason}
+              onChange={(event) =>
+                setReviewQueueReason(event.target.value as ReviewQueueReasonCode | 'all')
+              }
+              aria-label="Filter review queue reason"
+            >
+              <option value="all">All attention reasons</option>
+              <option value="low-confidence">Low confidence</option>
+              <option value="ocr-derived">OCR-derived</option>
+              <option value="maybe-status">Maybe status</option>
+              <option value="duplicate-candidate">Possible duplicates</option>
+              <option value="review-warning">Review warnings</option>
+              <option value="unmapped-financial-row">Unmapped financial rows</option>
+            </select>
             <label className="review-search">
               <Search size={15} aria-hidden="true" />
               <span className="sr-only">Search extracted entries</span>
@@ -3258,8 +3491,7 @@ function App(): React.JSX.Element {
               className="secondary-button"
               type="button"
               disabled={
-                (viewAllReviewEntries || hasSearchQuery ? filteredEntries : pagedEntries).length ===
-                0
+                (viewAllReviewEntries ? filteredEntries : pagedEntries).length === 0
               }
               onClick={selectAllFilteredEntries}
             >
@@ -3366,6 +3598,9 @@ function App(): React.JSX.Element {
       reviewCategories,
       reviewCategory,
       reviewIssueFilter,
+      reviewNext,
+      reviewQueueEntries,
+      reviewQueueReason,
       reviewQuery,
       reviewSource,
       reviewStatus,
@@ -3667,13 +3902,27 @@ function App(): React.JSX.Element {
                 </div>
               )}
               <div className="onboarding-actions">
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() => void createProject()}
-                >
-                  <Upload size={17} /> Start a review
-                </button>
+                <div className="onboarding-actions-row">
+                  <label className="onboarding-project-name">
+                    <span className="visually-hidden">Project name</span>
+                    <input
+                      type="text"
+                      placeholder="Project name"
+                      value={newProjectName}
+                      onChange={(event) => setNewProjectName(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter') void createProject(newProjectName)
+                      }}
+                    />
+                  </label>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    onClick={() => void createProject(newProjectName)}
+                  >
+                    <Upload size={17} /> Start a review
+                  </button>
+                </div>
                 {recentProjects[0] && (
                   <button
                     className="secondary-button"
@@ -3807,7 +4056,30 @@ function App(): React.JSX.Element {
                     <FileText size={19} />
                   </span>
                   <div>
-                    <strong>{document.name}</strong>
+                    <input
+                      className="document-name-input"
+                      type="text"
+                      value={document.name}
+                      aria-label={`Name for ${document.name}`}
+                      onChange={(event) => {
+                        const name = event.target.value
+                        setDocuments((current) =>
+                          current.map((item) =>
+                            item.path === document.path ? { ...item, name } : item
+                          )
+                        )
+                      }}
+                      onBlur={(event) => {
+                        if (event.target.value.trim()) return
+                        const fallbackName =
+                          document.path.split(/[/\\]/).pop() || event.target.value
+                        setDocuments((current) =>
+                          current.map((item) =>
+                            item.path === document.path ? { ...item, name: fallbackName } : item
+                          )
+                        )
+                      }}
+                    />
                     <small>{formatSize(document.size)}</small>
                   </div>
                   <button
@@ -4340,12 +4612,47 @@ function App(): React.JSX.Element {
                         <span className="eyebrow">REVIEW QUEUE</span>
                         <strong>
                           {visibleReviewEntries.length}{' '}
-                          {viewAllReviewEntries || hasSearchQuery
+                          {viewAllReviewEntries
                             ? 'matching entries in this document'
                             : `entries on pages ${reviewSourcePage}-${reviewPageEnd}`}
                         </strong>
+                          <span className="review-queue-summary" role="status" aria-live="polite">
+                            {reviewQueueEntries.length} items need attention
+                          </span>
                       </div>
                       <div className="review-source-page-nav" aria-label="Source page navigation">
+                          <label className="review-queue-reason-select">
+                            <span>Queue</span>
+                            <select
+                              value={reviewQueueReason}
+                              onChange={(event) =>
+                                setReviewQueueReason(
+                                  event.target.value as ReviewQueueReasonCode | 'all'
+                                )
+                              }
+                              aria-label="Filter review queue reasons"
+                            >
+                              <option value="all">Needs attention</option>
+                              <option value="low-confidence">Low confidence</option>
+                              <option value="ocr-derived">OCR-derived</option>
+                              <option value="maybe-status">Maybe status</option>
+                              <option value="duplicate-candidate">Possible duplicate</option>
+                              <option value="review-warning">Review warning</option>
+                              <option value="unmapped-financial-row">Unmapped financial row</option>
+                            </select>
+                          </label>
+                          <button
+                            className="review-next-button"
+                            type="button"
+                            disabled={reviewQueueEntries.length === 0}
+                            aria-label="Review next item needing attention"
+                            onClick={() => {
+                              const next = reviewQueueEntries[0]
+                              if (next) navigateToEntry(next.entryId)
+                            }}
+                          >
+                            Review next
+                          </button>
                         <label className="review-source-page-select">
                           <span>Page</span>
                           <select
@@ -4436,6 +4743,13 @@ function App(): React.JSX.Element {
                       onAddPdfs={handleNavAddPdfs}
                     />
                   ),
+                  report: (
+                    <ExtractionReportPanel
+                      summaries={extractionReportSummaries}
+                      onNavigateToPage={navigateToExtractionReportPage}
+                      onFilterByReason={focusExtractionReportFilter}
+                    />
+                  ),
                   review: null,
                   references: (
                     <ReferenceToolsPanel
@@ -4454,6 +4768,10 @@ function App(): React.JSX.Element {
                       onCancelScan={cancelSourceReferenceScan}
                       onClearScannedReferences={clearScannedReferences}
                       onToggleOcrLanguage={toggleOcrLanguage}
+                      canUndo={historyState.undoCount > 0}
+                      canRedo={historyState.redoCount > 0}
+                      onUndo={undoReview}
+                      onRedo={redoReview}
                     />
                   ),
                   merchants: (
@@ -4596,11 +4914,14 @@ function App(): React.JSX.Element {
                       checkedCount={selectedReviewIds.size}
                       measurements={highlightMeasurements}
                       lastResult={highlightResult}
-                      onChangeVisible={setHighlightsVisible}
-                      onChangeEditMode={setHighlightEditMode}
-                      onChangeStyleMode={setHighlightStyleMode}
-                      onChangeScope={setHighlightScope}
-                      onSetStatus={setHighlightTargetStatus}
+                      onChangeVisible={changeHighlightVisibility}
+                      onChangeEditMode={changeHighlightEditMode}
+                      onChangeStyleMode={changeHighlightStyleMode}
+                      onChangeScope={changeHighlightScope}
+                      canUndo={highlightHistoryState.undoCount > 0}
+                      canRedo={highlightHistoryState.redoCount > 0}
+                      onUndo={undoHighlight}
+                      onRedo={redoHighlight}
                       onApply={applyHighlightEdit}
                     />
                   )

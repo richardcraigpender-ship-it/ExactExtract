@@ -85,6 +85,29 @@ test('round-trips persisted analysis and kept-entry layout state', async () => {
   })
 })
 
+test('round-trips project-scoped review presets and rejects invalid filters', async () => {
+  await withStore(async (store, directory) => {
+    const project = store.create('Preset review', 'preset-review')
+    project.reviewPresets = [
+      {
+        id: 'built-in:needs-attention',
+        name: 'Needs attention',
+        scope: 'project',
+        filters: { queueReasonCode: 'any' },
+        createdAt: project.createdAt,
+        updatedAt: project.createdAt
+      }
+    ]
+
+    await store.save(project)
+    const reopened = await new ProjectStore(directory).load(project.id)
+    assert.deepEqual(reopened.reviewPresets, project.reviewPresets)
+
+    const invalid = { ...reopened, reviewPresets: [{ ...project.reviewPresets[0], filters: { queueReasonCode: 'not-real' } }] }
+    assert.throws(() => store.save(invalid as typeof project), /queueReasonCode/)
+  })
+})
+
 test('round-trips a multi-page kept-image layout without embedding image bytes', async () => {
   await withStore(async (store, directory) => {
     const project = store.create('Image layout', 'image-layout')

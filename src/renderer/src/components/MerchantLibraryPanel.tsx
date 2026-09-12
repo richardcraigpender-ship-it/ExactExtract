@@ -146,7 +146,10 @@ export const MerchantLibraryPanel = React.memo(function MerchantLibraryPanel({
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState<MerchantDraft>(EMPTY_DRAFT)
   const [confirmForgetId, setConfirmForgetId] = useState<string | null>(null)
-  const [panelTab, setPanelTab] = useState<'review' | 'databases'>('review')
+  const [confirmExcludeAll, setConfirmExcludeAll] = useState(false)
+  const [panelTab, setPanelTab] = useState<'review' | 'databases' | 'planning'>(
+    onAddScenarioRows ? 'planning' : 'review'
+  )
   const [forecast, setForecast] = useState({
     mode: 'random' as 'random' | 'recurring',
     startDate: new Date().toISOString().slice(0, 10),
@@ -211,6 +214,41 @@ export const MerchantLibraryPanel = React.memo(function MerchantLibraryPanel({
     })
   }
 
+  const excludableVisible = visible.filter((record) => record.classification !== 'excluded')
+
+  const excludeAllVisible = (): void => {
+    excludableVisible.forEach((record) => onExclude(record.id))
+    setConfirmExcludeAll(false)
+  }
+
+  const excludeAllControl =
+    panelTab === 'review' && excludableVisible.length > 0 ? (
+      confirmExcludeAll ? (
+        <span className="merchant-library-exclude-all-confirm">
+          Exclude all {excludableVisible.length} shown?
+          <button type="button" className="secondary-button" onClick={excludeAllVisible}>
+            <X size={14} aria-hidden="true" /> Confirm exclude all
+          </button>
+          <button
+            type="button"
+            className="secondary-button"
+            onClick={() => setConfirmExcludeAll(false)}
+          >
+            Cancel
+          </button>
+        </span>
+      ) : (
+        <button
+          type="button"
+          className="secondary-button"
+          onClick={() => setConfirmExcludeAll(true)}
+          title="Exclude every merchant currently shown in this list"
+        >
+          <X size={14} aria-hidden="true" /> Exclude all shown ({excludableVisible.length})
+        </button>
+      )
+    ) : null
+
   return (
     <section className="merchant-library-panel" aria-label="Merchant library">
       <header>
@@ -260,6 +298,17 @@ export const MerchantLibraryPanel = React.memo(function MerchantLibraryPanel({
         >
           Review
         </button>
+        {onAddScenarioRows && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={panelTab === 'planning'}
+            className={panelTab === 'planning' ? 'is-active' : undefined}
+            onClick={() => setPanelTab('planning')}
+          >
+            Planning
+          </button>
+        )}
         <button
           type="button"
           role="tab"
@@ -274,10 +323,10 @@ export const MerchantLibraryPanel = React.memo(function MerchantLibraryPanel({
         </button>
       </div>
 
-      {panelTab === 'review' && onAddScenarioRows && (
+      {panelTab === 'planning' && onAddScenarioRows && (
         <form
           className="merchant-library-form merchant-library-forecast"
-          aria-label="Merchant forecast"
+          aria-label="Planning forecast"
           onSubmit={(event) => {
             event.preventDefault()
             try {
@@ -310,7 +359,7 @@ export const MerchantLibraryPanel = React.memo(function MerchantLibraryPanel({
             }
           }}
         >
-          <strong>Merchant forecast</strong>
+          <strong>Planning forecast</strong>
           <label>
             <span>Pattern</span>
             <select
@@ -600,7 +649,13 @@ export const MerchantLibraryPanel = React.memo(function MerchantLibraryPanel({
             : 'No merchants match this filter.'}
         </p>
       ) : (
-        <ul className="merchant-library-list">
+        <>
+          {excludeAllControl && (
+            <div className="merchant-library-bulk-actions merchant-library-bulk-actions--top">
+              {excludeAllControl}
+            </div>
+          )}
+          <ul className="merchant-library-list">
           {visible.map((record) => {
             const amount = typicalAmount(record)
             const direction = dominantDirection(record)
@@ -857,7 +912,13 @@ export const MerchantLibraryPanel = React.memo(function MerchantLibraryPanel({
               </li>
             )
           })}
-        </ul>
+          </ul>
+          {excludeAllControl && (
+            <div className="merchant-library-bulk-actions merchant-library-bulk-actions--bottom">
+              {excludeAllControl}
+            </div>
+          )}
+        </>
       )}
     </section>
   )

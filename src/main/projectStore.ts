@@ -4,6 +4,7 @@ import { basename, dirname, join } from 'node:path'
 
 import { PROJECT_SCHEMA_VERSION, type ProjectState, type RecentProject } from '../shared/contracts'
 import { isCurrencyCode } from '../shared/currencies'
+import { migrateProjectState } from '../shared/projectSchema'
 import { isLengthUnit } from '../shared/units'
 
 const PROJECT_ID_PATTERN = /^[A-Za-z0-9_-]+$/
@@ -11,6 +12,16 @@ const EXTRACTION_MODES = new Set(['fast', 'balanced', 'maximum', 'custom'])
 const REVIEW_STATUSES = new Set(['keep', 'exclude', 'maybe'])
 const EXTRACTION_SOURCES = new Set(['parser', 'ocr', 'merged'])
 const ROTATIONS = new Set([0, 90, 180, 270])
+const REVIEW_PRESET_REASONS = new Set([
+  'low-confidence',
+  'ocr-derived',
+  'maybe-status',
+  'duplicate-candidate',
+  'review-warning',
+  'unmapped-financial-row',
+  'any',
+  'all'
+])
 
 function requireString(value: unknown, field: string): asserts value is string {
   if (typeof value !== 'string' || value.length === 0) {
@@ -52,6 +63,33 @@ function requireExtractionSettings(value: unknown, field: string): void {
   ) {
     throw new Error(`Invalid project field: ${field}.selectedPages`)
   }
+}
+
+function requireReviewPresets(value: unknown, field: string): void {
+  requireArray(value, field)
+  value.forEach((preset, index) => {
+    const itemField = `${field}[${index}]`
+    requireRecord(preset, itemField)
+    for (const key of ['id', 'name', 'createdAt', 'updatedAt']) {
+      requireString(preset[key], `${itemField}.${key}`)
+    }
+    if (!['project', 'global'].includes(String(preset.scope))) {
+      throw new Error(`Invalid project field: ${itemField}.scope`)
+    }
+    requireRecord(preset.filters, `${itemField}.filters`)
+    if (preset.filters.status !== undefined && !REVIEW_STATUSES.has(String(preset.filters.status)) && preset.filters.status !== 'all') {
+      throw new Error(`Invalid project field: ${itemField}.filters.status`)
+    }
+    if (preset.filters.source !== undefined && !EXTRACTION_SOURCES.has(String(preset.filters.source)) && preset.filters.source !== 'all') {
+      throw new Error(`Invalid project field: ${itemField}.filters.source`)
+    }
+    if (preset.filters.category !== undefined && typeof preset.filters.category !== 'string') {
+      throw new Error(`Invalid project field: ${itemField}.filters.category`)
+    }
+    if (preset.filters.queueReasonCode !== undefined && !REVIEW_PRESET_REASONS.has(String(preset.filters.queueReasonCode))) {
+      throw new Error(`Invalid project field: ${itemField}.filters.queueReasonCode`)
+    }
+  })
 }
 
 function requireStyleProfile(value: unknown, field: string): void {
@@ -113,6 +151,7 @@ export function assertProjectState(value: unknown): asserts value is ProjectStat
   requireArray(project.preflight, 'preflight')
   requireArray(project.extractionJobs, 'extractionJobs')
   requireArray(project.auditTrail, 'auditTrail')
+  if (project.reviewPresets !== undefined) requireReviewPresets(project.reviewPresets, 'reviewPresets')
 
   for (const [index, document] of project.documents.entries()) {
     const field = `documents[${index}]`
@@ -285,7 +324,7 @@ export class ProjectStore {
 
   async load(projectId: string): Promise<ProjectState> {
     await this.writeQueue
-    const value = await readJson(this.projectPath(projectId))
+    const value = migrateProjectState(await readJson(this.projectPath(projectId)))
     assertProjectState(value)
     return value
   }

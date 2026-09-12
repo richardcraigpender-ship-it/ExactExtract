@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, dialog, ipcMain, net, protocol } from 'electron'
+import { app, shell, BrowserWindow, dialog, ipcMain, net, protocol, type OpenDialogOptions } from 'electron'
 import { mkdir, readFile, stat, writeFile } from 'fs/promises'
 import { basename, extname, join, resolve } from 'path'
 import { pathToFileURL } from 'url'
@@ -9,6 +9,7 @@ import { saveEntryImageRequest } from './entryImageSave'
 import { MerchantStore } from './merchantLibraryStore'
 import { PayeeStore } from './payeeLibraryStore'
 import { ProjectStore } from './projectStore'
+import { createProjectBundle, importProjectBundle } from './projectBundle'
 import { resolveOcrAssetPath } from './ocrAssets'
 import { ProjectImageStore } from './projectImageStore'
 import { pruneProjectImages } from './projectImageRetention'
@@ -273,6 +274,54 @@ function registerDocumentHandlers(
   })
 
   ipcMain.handle('studio:projects:list-recent', () => projectStore.listRecent())
+
+  ipcMain.handle('studio:projects:export-bundle', async (event, value: unknown) => {
+    if (
+      typeof value !== 'object' ||
+      value === null ||
+      typeof (value as { projectId?: unknown }).projectId !== 'string' ||
+      typeof (value as { includeSources?: unknown }).includeSources !== 'boolean'
+    ) {
+      throw new Error('A project ID and explicit source inclusion choice are required.')
+    }
+    const request = value as { projectId: string; includeSources: boolean }
+    const project = await projectStore.load(request.projectId)
+    const owner = BrowserWindow.fromWebContents(event.sender)
+    const dialogOptions: OpenDialogOptions = {
+      title: request.includeSources
+        ? 'Choose a folder for the project bundle and copied source PDFs'
+        : 'Choose a folder for the project bundle',
+      properties: ['openDirectory', 'createDirectory']
+    }
+    const result = owner
+      ? await dialog.showOpenDialog(owner, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions)
+    if (result.canceled || !result.filePaths[0]) return { status: 'cancelled' as const }
+    const manifest = await createProjectBundle(project, result.filePaths[0], {
+      includeSources: request.includeSources
+    })
+    return {
+      status: 'saved' as const,
+      path: result.filePaths[0],
+      includedSourceCount: manifest.sources.filter((source) => source.included).length
+    }
+  })
+
+  ipcMain.handle('studio:projects:import-bundle', async (event) => {
+    const owner = BrowserWindow.fromWebContents(event.sender)
+    const dialogOptions: OpenDialogOptions = {
+      title: 'Select a project bundle folder',
+      properties: ['openDirectory']
+    }
+    const selected = owner
+      ? await dialog.showOpenDialog(owner, dialogOptions)
+      : await dialog.showOpenDialog(dialogOptions)
+    if (selected.canceled || !selected.filePaths[0]) return { status: 'cancelled' as const }
+    const destination = join(app.getPath('userData'), 'projects', `bundle-${Date.now()}`)
+    const result = await importProjectBundle(selected.filePaths[0], destination)
+    await projectStore.save(result.project)
+    return { status: 'imported' as const, project: result.project, verifiedSources: result.verifiedSources }
+  })
 
   ipcMain.handle('studio:projects:list-recovery', () => listRecoveryProjects(projectStore))
 

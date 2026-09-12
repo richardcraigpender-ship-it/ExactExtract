@@ -109,7 +109,7 @@ test('fills between Start Y and End Y before continuing to the next page', () =>
     [
       [
         ['one', 60],
-        ['two', 90]
+        ['two', 95]
       ],
       [['three', 60]]
     ]
@@ -150,8 +150,8 @@ test('keeps every table-row column aligned to the payee row geometry', () => {
     [
       ['one', 'payee', 72],
       ['one', 'date', 72],
-      ['two', 'payee', 102],
-      ['two', 'date', 102]
+      ['two', 'payee', 107],
+      ['two', 'date', 107]
     ]
   )
 })
@@ -243,7 +243,35 @@ test('renders references under the main text column when configured', () => {
     (placement) => placement.columnId === 'payee:reference'
   )
   assert.equal(reference?.y, (payee?.y ?? 0) + (payee?.style.fontSize ?? 0) + 3)
-  assert.equal(reference?.height, (reference?.style.fontSize ?? 0) + 3)
+  assert.equal(reference?.height, reference?.style.fontSize ?? 0)
+})
+
+test('uses the configured payee-to-reference gap and reserves 5pt after the entry', () => {
+  const current = template()
+  current.pageOneTemplate.referenceGap = 8
+  current.pageOneTemplate.showReferenceUnderMainText = true
+  current.pageOneTemplate.columns[0]!.spacing = 20
+
+  const plan = buildKeptExportRenderPlan(
+    [
+      { entryId: 'one', values: { payee: 'One', reference: 'CARD-100' } },
+      { entryId: 'two', values: { payee: 'Two' } }
+    ],
+    current
+  )
+
+  const payee = plan.pages[0]?.placements.find(
+    (placement) => placement.entryId === 'one' && placement.columnId === 'payee'
+  )
+  const reference = plan.pages[0]?.placements.find(
+    (placement) => placement.entryId === 'one' && placement.columnId === 'payee:reference'
+  )
+  const nextPayee = plan.pages[0]?.placements.find(
+    (placement) => placement.entryId === 'two' && placement.columnId === 'payee'
+  )
+
+  assert.equal(reference?.y, (payee?.y ?? 0) + (payee?.style.fontSize ?? 0) + 8)
+  assert.equal(nextPayee?.y, (reference?.y ?? 0) + (reference?.height ?? 0) + 5)
 })
 
 test('styles the reference line separately when a reference text style is set', () => {

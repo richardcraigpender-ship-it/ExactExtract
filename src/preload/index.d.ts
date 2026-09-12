@@ -39,6 +39,16 @@ export interface StudioBridge {
       recoveredSourceCount: number
       remainingMissingSourceCount: number
     }>
+    exportBundle: (projectId: string, includeSources: boolean) => Promise<{
+      status: 'cancelled' | 'saved'
+      path?: string
+      includedSourceCount?: number
+    }>
+    importBundle: () => Promise<{
+      status: 'cancelled' | 'imported'
+      project?: ProjectState
+      verifiedSources?: number
+    }>
   }
   payees: {
     list: () => Promise<PayeeRecord[]>

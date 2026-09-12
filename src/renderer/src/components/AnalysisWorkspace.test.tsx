@@ -51,8 +51,10 @@ test('shows mapped payee evidence and keeps all-versus-kept dataset controls vis
   assert.match(markup, /Mapped business descriptions/)
   assert.match(markup, /Acme Supplies/)
   assert.match(markup, /Occurrences/)
-  assert.match(markup, /Balance total is the sum of balance snapshots/)
+  assert.match(markup, /Balance snapshot sum is the sum of balance snapshots/)
   assert.equal(markup.match(/All monetary values in this section are in GBP\./g)?.length, 2)
+  assert.match(markup, /role="tabpanel" aria-labelledby="statement-dataset-tab-all"/)
+  assert.match(markup, /aria-label="Open source entry vendor-a"/)
 })
 
 test('formats monetary values with the project currency', () => {

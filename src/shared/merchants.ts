@@ -69,6 +69,28 @@ export interface MerchantUpdate extends Partial<Omit<MerchantCreate, 'displayNam
   classification?: Extract<MerchantClassification, 'merchant-candidate' | 'excluded'>
 }
 
+export type MerchantRuleAction =
+  | 'set-category'
+  | 'set-canonical-name'
+  | 'add-alias'
+  | 'set-recurring'
+  | 'set-default-status'
+
+/**
+ * An auditable record of a user-approved rule being applied to future matching entries. Distinct
+ * from the record's current fields so applied rules stay reversible and traceable to entries.
+ */
+export interface MerchantRuleDecision {
+  id: string
+  merchantId: string
+  action: MerchantRuleAction
+  value: string | boolean
+  appliedToEntryIds: string[]
+  reversible: boolean
+  createdAt: string
+  reversedAt?: string
+}
+
 export function normalizeMerchantKey(value: string): string {
   return value
     .normalize('NFKC')

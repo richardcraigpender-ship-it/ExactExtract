@@ -2,6 +2,7 @@ import React from 'react'
 import {
   AlertTriangle,
   BarChart3,
+  ClipboardList,
   Download,
   Eye,
   EyeOff,
@@ -30,11 +31,13 @@ export type ContextMode =
   | 'marks'
   | 'references'
   | 'merchants'
+  | 'report'
 export type EntryActionCommand =
   'zoom-in' | 'zoom-out' | 'import' | 'save' | 'jump' | 'currency' | 'detect-style'
 
 const contextModes = [
   { id: 'source-pdf', label: 'Source PDF', shortLabel: 'Source', icon: FileText },
+  { id: 'report', label: 'Extraction report', shortLabel: 'Report', icon: ClipboardList },
   { id: 'analysis', label: 'Analysis', shortLabel: 'Stats', icon: BarChart3 },
   { id: 'export', label: 'Export', shortLabel: 'Export', icon: Download },
   { id: 'style', label: 'Document style profile', shortLabel: 'Style', icon: Fingerprint },

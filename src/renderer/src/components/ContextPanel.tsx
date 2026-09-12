@@ -12,7 +12,8 @@ const contextLabels: Record<ContextMode, string> = {
   'remove-pages': 'Remove pages',
   marks: 'Highlight tools',
   references: 'Reference tools',
-  merchants: 'Merchant library'
+  merchants: 'Merchant library',
+  report: 'Extraction report'
 }
 
 interface ContextPanelProps {

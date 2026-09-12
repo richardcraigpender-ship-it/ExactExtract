@@ -3,7 +3,29 @@ export {
   detectDuplicateEntries,
   detectReviewIssues
 } from './heuristics'
-export type { ReviewHeuristicOptions, ReviewIssue, ReviewIssueCode } from './heuristics'
+export type {
+  ReviewHeuristicOptions,
+  ReviewIssue,
+  ReviewIssueCode,
+  ReviewIssueSeverity
+} from './heuristics'
+export { buildReviewQueue, DEFAULT_REVIEW_QUEUE_CONFIDENCE_THRESHOLD } from './queue'
+export type {
+  ReviewQueueItem,
+  ReviewQueueOptions,
+  ReviewQueueReason,
+  ReviewQueueReasonCode
+} from './queue'
+export { buildExtractionReport, EXTRACTION_REPORT_CONFIDENCE_THRESHOLDS } from './extractionReport'
+export type {
+  ExtractionConfidenceDistribution,
+  ExtractionDocumentReport,
+  ExtractionReportAttentionPage,
+  ExtractionReportAttentionReason,
+  ExtractionReportOptions
+} from './extractionReport'
+export { createBuiltInReviewPresets } from './presets'
+export type { ReviewFilterPreset, ReviewFilterPresetFilters } from './presets'
 export {
   findEntryDirectlyAbove,
   findPreferredSourceRegion,

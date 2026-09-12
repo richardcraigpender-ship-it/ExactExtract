@@ -14,6 +14,7 @@
     "verify:ocr-package": "node scripts/verify-packaged-ocr.mjs",
     "verify:windows-beta": "node scripts/verify-windows-beta.mjs",
     "verify:windows-lifecycle": "pwsh -NoProfile -File scripts/verify-windows-lifecycle.ps1",
+    "benchmark:sprint0": "tsx scripts/measure-sprint0-baselines.ts",
     "predev": "npm run prepare:ocr-assets",
     "prestart": "npm run prepare:ocr-assets",
     "prebuild": "npm run prepare:ocr-assets",

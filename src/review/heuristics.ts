@@ -2,10 +2,16 @@ import type { ProjectEntry, ProjectPage } from '../shared/contracts'
 
 export type ReviewIssueCode = 'duplicate-entry' | 'broken-row-across-pages'
 
+/**
+ * 'info' notes something worth knowing but not necessarily wrong; 'warning' should be reviewed
+ * before export; 'critical' means the extraction is very likely wrong and blocks confidence.
+ */
+export type ReviewIssueSeverity = 'info' | 'warning' | 'critical'
+
 export interface ReviewIssue {
   id: string
   code: ReviewIssueCode
-  severity: 'warning'
+  severity: ReviewIssueSeverity
   entryIds: string[]
   documentId: string
   pageNumbers: number[]

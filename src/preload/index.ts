@@ -37,7 +37,10 @@ const studio = {
     removeRecent: (projectId: string) =>
       ipcRenderer.invoke('studio:projects:remove-recent', projectId),
     locateSources: (projectId: string) =>
-      ipcRenderer.invoke('studio:projects:locate-sources', projectId)
+      ipcRenderer.invoke('studio:projects:locate-sources', projectId),
+    exportBundle: (projectId: string, includeSources: boolean) =>
+      ipcRenderer.invoke('studio:projects:export-bundle', { projectId, includeSources }),
+    importBundle: () => ipcRenderer.invoke('studio:projects:import-bundle')
   },
   payees: {
     list: () => ipcRenderer.invoke('studio:payees:list'),

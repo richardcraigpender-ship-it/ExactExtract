@@ -19,10 +19,10 @@ function styleFor(template: KeptExportPageTemplate, column: KeptExportColumn): K
   return column.textStyle ?? template.defaultTextStyle
 }
 
-/** Reference line sits on a separate line below the payee/description with a 3pt gap. */
-const REFERENCE_TOP_OFFSET_POINTS = 3
-/** Clear space kept under the reference line so dividers do not crowd it. */
-const REFERENCE_BOTTOM_GAP_POINTS = 3
+/** Default reference gap for templates created before the setting existed. */
+const DEFAULT_REFERENCE_TOP_OFFSET_POINTS = 3
+/** Five points of white space after the final payee/reference line. */
+const ENTRY_BOTTOM_SPACING_POINTS = 5
 
 function referenceStyle(
   style: KeptExportTextStyle,
@@ -30,6 +30,10 @@ function referenceStyle(
 ): KeptExportTextStyle {
   if (template.referenceTextStyle) return template.referenceTextStyle
   return { ...style, fontSize: Math.max(6, style.fontSize - 2), fontWeight: 'normal' }
+}
+
+function referenceGap(template: KeptExportPageTemplate): number {
+  return Math.max(0, template.referenceGap ?? DEFAULT_REFERENCE_TOP_OFFSET_POINTS)
 }
 
 function lineCount(text: string, width: number, fontSize: number): number {
@@ -151,22 +155,16 @@ export function buildKeptExportRenderPlan(
       const anchorText = anchor ? valueFor(row, anchor.sourceField) : ''
       const anchorStyle = anchor ? styleFor(currentTemplate, anchor) : undefined
       const reference = valueFor(row, 'reference')
-      const payeeHeight =
+      const referenceLineStyle =
+        anchor && anchorStyle ? referenceStyle(anchorStyle, currentTemplate) : undefined
+      const contentHeight =
         anchor && anchorStyle
-          ? (currentTemplate.showReferenceUnderMainText && reference
-              ? 1
-              : lineCount(anchorText, anchor.width, anchorStyle.fontSize)) *
-            anchorStyle.fontSize *
-            1.2
-          : 0
-      const referenceHeight =
-        currentTemplate.showReferenceUnderMainText && reference && anchorStyle
-          ? referenceStyle(anchorStyle, currentTemplate).fontSize +
-            REFERENCE_TOP_OFFSET_POINTS +
-            REFERENCE_BOTTOM_GAP_POINTS
+          ? currentTemplate.showReferenceUnderMainText && reference && referenceLineStyle
+            ? anchorStyle.fontSize + referenceGap(currentTemplate) + referenceLineStyle.fontSize
+            : lineCount(anchorText, anchor.width, anchorStyle.fontSize) * anchorStyle.fontSize * 1.2
           : 0
       const geometry = rowGeometry(currentTemplate, anchor ?? currentTemplate.columns[0]!)
-      nextRowOffset += Math.max(geometry.spacing, payeeHeight + referenceHeight)
+      nextRowOffset += Math.max(geometry.spacing, contentHeight) + ENTRY_BOTTOM_SPACING_POINTS
     })
     rowPlacements.forEach(({ row, rowIndex, column }) => {
       const text = valueFor(row, column.sourceField)
@@ -223,11 +221,11 @@ export function buildKeptExportRenderPlan(
             pageNumber,
             text: `Ref: ${reference}`,
             x: anchor.x,
-            y: anchor.y + anchor.style.fontSize + REFERENCE_TOP_OFFSET_POINTS,
+            y: anchor.y + anchor.style.fontSize + referenceGap(currentTemplate),
             width: anchor.width,
             ...(column.align ? { align: column.align } : {}),
-            // The reference owns its own line box plus the clear space a divider must respect.
-            height: style.fontSize + REFERENCE_BOTTOM_GAP_POINTS,
+            // The reference owns its own line box; the row offset reserves the 5pt clear space.
+            height: style.fontSize,
             style
           })
         }

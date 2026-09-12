@@ -7,6 +7,14 @@ export const PROJECT_SCHEMA_VERSION = 1 as const
 
 export type ProjectSchemaVersion = typeof PROJECT_SCHEMA_VERSION
 export type ReviewStatus = 'keep' | 'exclude' | 'maybe'
+export type ReviewPresetScope = 'project' | 'global'
+export type ReviewPresetQueueReason =
+  | 'low-confidence'
+  | 'ocr-derived'
+  | 'maybe-status'
+  | 'duplicate-candidate'
+  | 'review-warning'
+  | 'unmapped-financial-row'
 export type ExtractionSource = 'parser' | 'ocr' | 'merged'
 export type ProjectEntryOrigin = 'imported' | 'manual' | 'scenario'
 export type EntryDirection = 'in' | 'out'
@@ -226,6 +234,20 @@ export interface ProjectSettings {
   lengthUnit?: LengthUnit
 }
 
+export interface ReviewPresetState {
+  id: string
+  name: string
+  scope: ReviewPresetScope
+  filters: {
+    status?: ReviewStatus | 'all'
+    source?: ExtractionSource | 'all'
+    category?: string | 'all'
+    queueReasonCode?: ReviewPresetQueueReason | 'any' | 'all'
+  }
+  createdAt: string
+  updatedAt: string
+}
+
 export interface ProjectState {
   schemaVersion: ProjectSchemaVersion
   id: string
@@ -242,6 +264,7 @@ export interface ProjectState {
   keptEntriesLayout?: KeptEntriesCanvasLayout
   keptExportTemplate?: KeptExportTemplate
   settings: ProjectSettings
+  reviewPresets?: ReviewPresetState[]
 }
 
 export interface RecentProject {

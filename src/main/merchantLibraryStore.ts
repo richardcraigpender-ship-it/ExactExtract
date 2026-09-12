@@ -39,6 +39,11 @@ function displayName(value: string): string {
   return value.replace(/\s+/g, ' ').trim()
 }
 
+/** "Seen" tracks the transaction date printed on the statement, not when the app processed it. */
+function seenDate(observation: MerchantObservation): string {
+  return observation.transactionDate ?? observation.seenAt
+}
+
 function entryObservation(projectId: string, entry: ProjectEntry): MerchantObservation | undefined {
   if (!entry.payee?.trim()) return undefined
   const region = entry.regions[0]
@@ -191,8 +196,8 @@ export class MerchantStore {
             forecastIncluded: true,
             occurrenceCount: 1,
             provenance: [provenance],
-            firstSeenAt: observation.seenAt,
-            lastSeenAt: observation.seenAt,
+            firstSeenAt: seenDate(observation),
+            lastSeenAt: seenDate(observation),
             createdAt: observation.seenAt,
             updatedAt: observation.seenAt
           })
@@ -208,9 +213,9 @@ export class MerchantStore {
           existing.occurrenceCount = existing.provenance.length
         }
         existing.firstSeenAt =
-          existing.firstSeenAt < observation.seenAt ? existing.firstSeenAt : observation.seenAt
+          existing.firstSeenAt < seenDate(observation) ? existing.firstSeenAt : seenDate(observation)
         existing.lastSeenAt =
-          existing.lastSeenAt > observation.seenAt ? existing.lastSeenAt : observation.seenAt
+          existing.lastSeenAt > seenDate(observation) ? existing.lastSeenAt : seenDate(observation)
         existing.updatedAt = observation.seenAt
       }
       if (observations.length) await this.writeRecords(records)

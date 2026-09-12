@@ -68,6 +68,16 @@ test('disables all reference actions while extraction or export is active', () =
   assert.match(buttonTag(markup, '3. OCR scan source refs'), /disabled=""/)
 })
 
+test('offers entry undo and redo controls with the shared history state', () => {
+  const markup = render({ canUndo: true, canRedo: false, onUndo: () => {}, onRedo: () => {} })
+
+  assert.match(markup, /aria-label="Entry history"/)
+  assert.match(markup, /Undo entry change/)
+  assert.match(markup, /Redo entry change/)
+  assert.doesNotMatch(buttonTag(markup, 'Undo entry change'), /disabled=""/)
+  assert.match(buttonTag(markup, 'Redo entry change'), /disabled=""/)
+})
+
 test('shows scan results and disables duplicate scanning', () => {
   const markup = render({
     isScanning: true,
