@@ -9,6 +9,69 @@ export interface ProductUpdate {
 
 export const PRODUCT_UPDATES: readonly ProductUpdate[] = [
   {
+    date: '2026-09-13',
+    kind: 'Feature',
+    title: 'Merchant review rules',
+    summary:
+      'Preview default Keep, Maybe, or Exclude decisions for matching merchant entries, review conflicts, and apply changes reversibly.'
+  },
+  {
+    date: '2026-09-13',
+    kind: 'Feature',
+    title: 'Saved review presets',
+    summary:
+      'Reuse project or global filters for needs attention, OCR-only, low-confidence, duplicate, and unmapped financial entries.'
+  },
+  {
+    date: '2026-09-13',
+    kind: 'Feature',
+    title: 'Documented export presets',
+    summary:
+      'Choose Clean statement, Source-faithful evidence, or Image archive workflows with explicit field and provenance behavior.'
+  },
+  {
+    date: '2026-09-13',
+    kind: 'Changed',
+    title: 'Simpler workspace navigation',
+    summary:
+      'Source, Analysis, and Export stay primary while reports, references, pages, warnings, merchants, and style tools live under Tools.'
+  },
+  {
+    date: '2026-09-13',
+    kind: 'Changed',
+    title: 'Reference-safe export spacing',
+    summary:
+      'Adjust the payee-to-reference gap and keep a fixed 5pt of white space after each exported entry.'
+  },
+  {
+    date: '2026-09-13',
+    kind: 'Feature',
+    title: 'Portable project bundles',
+    summary:
+      'Package a project with optional copied source PDFs, manifest metadata, and SHA-256 source verification.'
+  },
+  {
+    date: '2026-09-13',
+    kind: 'Changed',
+    title: 'Review next queue action',
+    summary:
+      'Filter attention items by reason and jump directly to the next low-confidence, OCR, duplicate, or unmapped entry.'
+  },
+  {
+    date: '2026-09-13',
+    kind: 'Feature',
+    title: 'Accessible extraction reports',
+    summary:
+      'Extraction reports now expose accessible dataset tabs and keyboard-actionable source entry links.'
+  },
+  {
+    date: '2026-09-13',
+    kind: 'Fixed',
+    title: 'Windows acceptance evidence',
+    summary:
+      'The current Windows candidate has verified install, launch, hash parity, reinstall, uninstall, and cleanup evidence.'
+  },
+  {
     date: '2026-09-12',
     kind: 'Fixed',
     title: 'OCR startup reliability',

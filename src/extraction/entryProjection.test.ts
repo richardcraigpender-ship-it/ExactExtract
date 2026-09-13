@@ -165,6 +165,35 @@ test('completes split payment-from payees from transaction detail lines', () => 
   assert.equal(payment?.notes, undefined)
 })
 
+test('completes payment-from payees when the dated line has no inline amount', () => {
+  const result = {
+    documentId: 'document-1',
+    pages: [],
+    blocks: [],
+    lines: [
+      line('l1', '28th March 2026 Payment from', 700),
+      line('l2', 'MRS A. R. Smith', 712),
+      line('l3', 'Card 4165', 724),
+      line('l4', '29th March 2026 Coffee £3.40', 748)
+    ],
+    tables: [],
+    classification: {
+      kind: 'tabular' as const,
+      confidence: 0.9,
+      scores: {},
+      evidence: ['financial:statement']
+    },
+    preflight: { pages: [], recommendedMode: 'parser' as const, warnings: [] }
+  }
+
+  const payment = projectParserEntries(result, '2026-08-16T12:00:00.000Z').find(
+    (entry) => entry.id === 'l1:entry'
+  )
+
+  assert.equal(payment?.payee, 'Payment from MRS A. R. Smith')
+  assert.equal(payment?.reference, 'Card 4165')
+})
+
 test('does not collect honorific-led personal text as a payee', () => {
   const sourceText = '02/04/2026 Dr Jane Smith $120.00'
 

@@ -1,5 +1,5 @@
 import React, { lazy, Suspense, useCallback, useMemo, useRef, useState } from 'react'
-import { Download, Eye, FileJson, FileOutput, Images, Table } from 'lucide-react'
+import { Download, Eye, FileJson, FileOutput, Images, Package, Table } from 'lucide-react'
 import {
   buildSessionKeptImageSources,
   type ExportSnapshot,
@@ -13,6 +13,7 @@ import type {
 } from '../../../shared/keptEntriesLayout'
 import { ExportPreview } from './ExportPreview'
 import { uploadProjectPngs } from '../lib/projectImageUploads'
+import { EXPORT_PRESETS, applyExportPresetToDraft, type TextExportPresetId } from '../lib/exportPresets'
 import { WorkspaceToolWindow } from './WorkspaceToolWindow'
 import { KeptImageLayoutEditor } from './KeptImageLayoutEditor'
 import { KeptExportTemplateEditor } from './KeptExportTemplateEditor'
@@ -67,6 +68,9 @@ interface ExportPanelProps {
   initialTemplateEditorOpen?: boolean
   initialImageLayoutEditorOpen?: boolean
   onConfigurationEditorClosed?: () => void
+  onExportBundle?: (includeSources: boolean) => void
+  bundleStatus?: string | null
+  isBundling?: boolean
 }
 
 export const ExportPanel = React.memo(function ExportPanel({
@@ -99,13 +103,17 @@ export const ExportPanel = React.memo(function ExportPanel({
   canvasBackground,
   initialTemplateEditorOpen = false,
   initialImageLayoutEditorOpen = false,
-  onConfigurationEditorClosed
+  onConfigurationEditorClosed,
+  onExportBundle,
+  bundleStatus,
+  isBundling = false
 }: ExportPanelProps): React.JSX.Element {
   const [previewFormat, setPreviewFormat] = useState<PdfExportFormat>('pdf')
   const [previewData, setPreviewData] = useState<Uint8Array | null>(null)
   const [isPreviewing, setIsPreviewing] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [templateStatus, setTemplateStatus] = useState<string | null>(null)
+  const [bundleIncludeSources, setBundleIncludeSources] = useState(false)
   const [autoCloseTemplateEditor, setAutoCloseTemplateEditor] = useState(
     () =>
       typeof localStorage !== 'undefined' &&
@@ -153,9 +161,38 @@ export const ExportPanel = React.memo(function ExportPanel({
   void rowHeight
   void onRowHeightChange
 
+  const applyExportPreset = (presetId: TextExportPresetId): void => {
+    const nextDraft = applyExportPresetToDraft(presetId, templateDraft)
+    applyTemplateDraft(nextDraft)
+    onOpenKeptTemplateCanvas?.(toKeptExportTemplate(nextDraft))
+  }
+
   return (
     <aside className="export-panel" aria-label="Export reviewed project">
       <div className="export-actions">
+        <section className="export-action-group" aria-label="Export presets">
+          <span className="export-action-group-label">Recommended presets</span>
+          <div className="export-preset-grid">
+            {EXPORT_PRESETS.map((preset) => (
+              <button
+                key={preset.id}
+                type="button"
+                className="export-preset-card"
+                disabled={isSaving || keptEntries.length === 0}
+                onClick={() => {
+                  if (preset.id === 'image-archive') {
+                    onOpenKeptCanvas?.()
+                    return
+                  }
+                  applyExportPreset(preset.id)
+                }}
+              >
+                <strong>{preset.name}</strong>
+                <span>{preset.description}</span>
+              </button>
+            ))}
+          </div>
+        </section>
         <section className="export-action-group" aria-label="Data exports">
           <span className="export-action-group-label">Data exports</span>
           <div className="export-primary-actions">
@@ -262,6 +299,39 @@ export const ExportPanel = React.memo(function ExportPanel({
             )}
           </div>
         </section>
+        {onExportBundle && (
+          <section className="export-action-group" aria-label="Portable project bundle">
+            <span className="export-action-group-label">Portable project bundle</span>
+            <p className="export-bundle-warning">
+              A bundle can include copies of your source PDFs so the project opens on another
+              device. Only include them if you trust where the bundle is going — it may contain
+              sensitive financial information.
+            </p>
+            <div className="export-primary-actions">
+              <label className="export-bundle-include">
+                <input
+                  type="checkbox"
+                  checked={bundleIncludeSources}
+                  onChange={(event) => setBundleIncludeSources(event.target.checked)}
+                />
+                Include source PDFs
+              </label>
+              <button
+                className="secondary-button"
+                type="button"
+                disabled={isBundling}
+                onClick={() => onExportBundle(bundleIncludeSources)}
+              >
+                <Package size={13} /> {isBundling ? 'Packaging…' : 'Package project'}
+              </button>
+            </div>
+            {bundleStatus && (
+              <span className="export-inline-status" role="status" aria-live="polite">
+                {bundleStatus}
+              </span>
+            )}
+          </section>
+        )}
         <span role="status">
           <Download size={12} aria-hidden="true" /> {status}
         </span>

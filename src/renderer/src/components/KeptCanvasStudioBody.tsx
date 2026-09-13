@@ -250,6 +250,7 @@ export function KeptCanvasStudioBody({
               ariaLabel="PNG snippet board page preview"
               layout={layout}
               pageNumber={currentPage}
+              templatePageCount={pageCount}
               zoom={zoom}
               showText={false}
               selectedImagePlacementId={selectedImagePlacementId}

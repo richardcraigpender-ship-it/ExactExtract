@@ -92,7 +92,25 @@ function completeFinancialText(
   const descriptionStart = dateMatch ? dateMatch[0].length : 0
   const withoutDate = text.slice(descriptionStart)
   const firstAmountIndex = withoutDate.search(FIRST_AMOUNT)
-  if (firstAmountIndex <= 0) return { text, consumedContinuationCount: 0 }
+  if (firstAmountIndex < 0) {
+    const description = cleanDescriptionText(withoutDate)
+    if (!INCOMPLETE_TRANSACTION_DESCRIPTION.test(description)) {
+      return { text, consumedContinuationCount: 0 }
+    }
+    const descriptionLines: string[] = []
+    for (const line of continuation) {
+      const normalized = line.text.replace(/\s+/g, ' ').trim()
+      if (!normalized) continue
+      if (REFERENCE_DETAIL_LINE.test(normalized)) break
+      descriptionLines.push(normalized)
+    }
+    if (descriptionLines.length === 0) return { text, consumedContinuationCount: 0 }
+    return {
+      text: `${text.trimEnd()} ${descriptionLines.join(' ')}`,
+      consumedContinuationCount: descriptionLines.length
+    }
+  }
+  if (firstAmountIndex === 0) return { text, consumedContinuationCount: 0 }
 
   const description = cleanDescriptionText(withoutDate.slice(0, firstAmountIndex))
   if (!INCOMPLETE_TRANSACTION_DESCRIPTION.test(description)) {
@@ -124,8 +142,10 @@ export function extractFinancialPayee(
   if (!accountingDocument) return undefined
   const withoutDate = text.replace(DATE_PREFIX, '')
   const firstAmountIndex = withoutDate.search(FIRST_AMOUNT)
-  if (firstAmountIndex <= 0) return undefined
-  const payee = cleanDescriptionText(withoutDate.slice(0, firstAmountIndex))
+  const payee = cleanDescriptionText(
+    firstAmountIndex < 0 ? withoutDate : withoutDate.slice(0, firstAmountIndex)
+  )
+  if (!payee || firstAmountIndex === 0) return undefined
   if (!payee || PERSONAL_HONORIFIC.test(payee)) return undefined
   return payee
 }
@@ -150,7 +170,9 @@ export function projectParserEntries(
     if (!DATE_PREFIX.test(line.text)) return false
     DATE_PREFIX.lastIndex = 0
     const withoutDate = line.text.replace(DATE_PREFIX, '')
-    return withoutDate.search(FIRST_AMOUNT) > 0
+    const firstAmountIndex = withoutDate.search(FIRST_AMOUNT)
+    if (firstAmountIndex > 0) return true
+    return INCOMPLETE_TRANSACTION_DESCRIPTION.test(cleanDescriptionText(withoutDate))
   })
   DATE_PREFIX.lastIndex = 0
   const useTransactionLines =

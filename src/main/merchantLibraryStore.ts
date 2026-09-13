@@ -105,6 +105,8 @@ export class MerchantStore {
         ...(Number.isFinite(input.defaultAmount) ? { defaultAmount: input.defaultAmount } : {}),
         ...(input.defaultCadence?.trim() ? { defaultCadence: input.defaultCadence.trim() } : {}),
         ...(input.notes?.trim() ? { notes: input.notes.trim() } : {}),
+        ...(input.defaultReviewStatus ? { defaultReviewStatus: input.defaultReviewStatus } : {}),
+        ...(input.defaultReviewScope ? { defaultReviewScope: input.defaultReviewScope } : {}),
         occurrenceCount: 0,
         provenance: [],
         firstSeenAt: now,
@@ -144,6 +146,10 @@ export class MerchantStore {
       if (input.defaultAmount !== undefined) record.defaultAmount = input.defaultAmount
       if (input.defaultCadence !== undefined)
         record.defaultCadence = input.defaultCadence.trim() || undefined
+      if (input.defaultReviewStatus !== undefined) {
+        record.defaultReviewStatus = input.defaultReviewStatus ?? undefined
+      }
+      if (input.defaultReviewScope !== undefined) record.defaultReviewScope = input.defaultReviewScope
       if (input.classification !== undefined) record.classification = input.classification
       record.userOverride = true
       record.updatedAt = now
@@ -213,7 +219,9 @@ export class MerchantStore {
           existing.occurrenceCount = existing.provenance.length
         }
         existing.firstSeenAt =
-          existing.firstSeenAt < seenDate(observation) ? existing.firstSeenAt : seenDate(observation)
+          existing.firstSeenAt < seenDate(observation)
+            ? existing.firstSeenAt
+            : seenDate(observation)
         existing.lastSeenAt =
           existing.lastSeenAt > seenDate(observation) ? existing.lastSeenAt : seenDate(observation)
         existing.updatedAt = observation.seenAt

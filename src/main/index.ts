@@ -1,4 +1,13 @@
-import { app, shell, BrowserWindow, dialog, ipcMain, net, protocol, type OpenDialogOptions } from 'electron'
+import {
+  app,
+  shell,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  net,
+  protocol,
+  type OpenDialogOptions
+} from 'electron'
 import { mkdir, readFile, stat, writeFile } from 'fs/promises'
 import { basename, extname, join, resolve } from 'path'
 import { pathToFileURL } from 'url'
@@ -320,7 +329,11 @@ function registerDocumentHandlers(
     const destination = join(app.getPath('userData'), 'projects', `bundle-${Date.now()}`)
     const result = await importProjectBundle(selected.filePaths[0], destination)
     await projectStore.save(result.project)
-    return { status: 'imported' as const, project: result.project, verifiedSources: result.verifiedSources }
+    return {
+      status: 'imported' as const,
+      project: result.project,
+      verifiedSources: result.verifiedSources
+    }
   })
 
   ipcMain.handle('studio:projects:list-recovery', () => listRecoveryProjects(projectStore))

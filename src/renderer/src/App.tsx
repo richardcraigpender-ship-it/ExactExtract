@@ -9,6 +9,7 @@ import {
   FileText,
   FolderOpen,
   GripVertical,
+  Package,
   Plus,
   Redo2,
   Search,
@@ -149,6 +150,11 @@ import {
   type ReviewIssueCode,
   type ReviewQueueReasonCode
 } from '../../review'
+import {
+  applyMerchantDefaultStatusRule,
+  applyMerchantDefaultStatusRules
+} from '../../shared/merchantRules'
+import type { MerchantRecord } from '../../shared/merchants'
 import {
   buildSessionKeptImageSources,
   buildExportSnapshot,
@@ -387,6 +393,8 @@ function App(): React.JSX.Element {
   })
   const [project, setProject] = useState<ProjectState | null>(null)
   const [recentProjects, setRecentProjects] = useState<RecentProjectRecoveryItem[]>([])
+  const [bundleStatus, setBundleStatus] = useState<string | null>(null)
+  const [isBundling, setIsBundling] = useState(false)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [saveError, setSaveError] = useState<string | null>(null)
   const [recoveryStatus, setRecoveryStatus] = useState<string | null>(null)
@@ -998,29 +1006,41 @@ function App(): React.JSX.Element {
     [recordHighlightHistory]
   )
 
-  const changeHighlightVisibility = useCallback((visible: boolean): void => {
-    if (visible === highlightsVisible) return
-    recordHighlightHistory()
-    setHighlightsVisible(visible)
-  }, [highlightsVisible])
+  const changeHighlightVisibility = useCallback(
+    (visible: boolean): void => {
+      if (visible === highlightsVisible) return
+      recordHighlightHistory()
+      setHighlightsVisible(visible)
+    },
+    [highlightsVisible]
+  )
 
-  const changeHighlightEditMode = useCallback((editMode: boolean): void => {
-    if (editMode === highlightEditMode) return
-    recordHighlightHistory()
-    setHighlightEditMode(editMode)
-  }, [highlightEditMode])
+  const changeHighlightEditMode = useCallback(
+    (editMode: boolean): void => {
+      if (editMode === highlightEditMode) return
+      recordHighlightHistory()
+      setHighlightEditMode(editMode)
+    },
+    [highlightEditMode]
+  )
 
-  const changeHighlightStyleMode = useCallback((styleMode: HighlightStyleMode): void => {
-    if (styleMode === highlightStyleMode) return
-    recordHighlightHistory()
-    setHighlightStyleMode(styleMode)
-  }, [highlightStyleMode])
+  const changeHighlightStyleMode = useCallback(
+    (styleMode: HighlightStyleMode): void => {
+      if (styleMode === highlightStyleMode) return
+      recordHighlightHistory()
+      setHighlightStyleMode(styleMode)
+    },
+    [highlightStyleMode]
+  )
 
-  const changeHighlightScope = useCallback((scope: HighlightScope): void => {
-    if (scope === highlightScope) return
-    recordHighlightHistory()
-    setHighlightScope(scope)
-  }, [highlightScope])
+  const changeHighlightScope = useCallback(
+    (scope: HighlightScope): void => {
+      if (scope === highlightScope) return
+      recordHighlightHistory()
+      setHighlightScope(scope)
+    },
+    [highlightScope]
+  )
 
   const undoHighlight = useCallback((): void => {
     const previous = highlightUndoStackRef.current.at(-1)
@@ -1044,7 +1064,9 @@ function App(): React.JSX.Element {
         ? {
             ...current,
             entries: current.entries.map((entry) => {
-              const snapshot = previous.regionsByEntry.find((candidate) => candidate.id === entry.id)
+              const snapshot = previous.regionsByEntry.find(
+                (candidate) => candidate.id === entry.id
+              )
               return snapshot ? { ...entry, regions: snapshot.regions } : entry
             })
           }
@@ -1143,9 +1165,7 @@ function App(): React.JSX.Element {
         scope: highlightScope,
         documentId: activeDocumentId,
         pageNumber:
-          highlightScope === 'keep' || highlightScope === 'selected'
-            ? undefined
-            : requestedPdfPage,
+          highlightScope === 'keep' || highlightScope === 'selected' ? undefined : requestedPdfPage,
         selectedEntryId,
         selectedEntryIds: selectedReviewIdsRef.current
       })
@@ -1166,7 +1186,9 @@ function App(): React.JSX.Element {
           result.changedRegionCount === 1 ? '' : 's'
         } across ${result.changedEntryCount} entr${result.changedEntryCount === 1 ? 'y' : 'ies'}.`
       )
-      setProject((current) => (current ? { ...current, updatedAt, entries: result.entries } : current))
+      setProject((current) =>
+        current ? { ...current, updatedAt, entries: result.entries } : current
+      )
     },
     [
       activeDocumentId,
@@ -1508,6 +1530,100 @@ function App(): React.JSX.Element {
     [migrateProjectBackgrounds]
   )
 
+  const exportProjectBundle = useCallback(
+    async (includeSources: boolean): Promise<void> => {
+      if (!project) return
+      setIsBundling(true)
+      setBundleStatus(null)
+      try {
+        const result = await window.studio.projects.exportBundle(project.id, includeSources)
+        setBundleStatus(
+          result.status === 'saved'
+            ? `Bundle saved to ${result.path}${
+                includeSources
+                  ? ` with ${result.includedSourceCount ?? 0} source PDF${
+                      result.includedSourceCount === 1 ? '' : 's'
+                    } copied in`
+                  : ' (source PDFs not included)'
+              }.`
+            : 'Bundle creation cancelled.'
+        )
+      } catch (bundleError) {
+        setBundleStatus(
+          bundleError instanceof Error ? bundleError.message : 'Unable to create the project bundle.'
+        )
+      } finally {
+        setIsBundling(false)
+      }
+    },
+    [project]
+  )
+
+  const importProjectBundleAction = useCallback(async (): Promise<void> => {
+    setIsBundling(true)
+    setBundleStatus(null)
+    try {
+      const result = await window.studio.projects.importBundle()
+      if (result.status === 'imported' && result.project) {
+        setBundleStatus(
+          `Imported ${result.verifiedSources ?? 0} verified source file${
+            result.verifiedSources === 1 ? '' : 's'
+          }.`
+        )
+        await openProject(result.project.id)
+      } else {
+        setBundleStatus('Bundle import cancelled.')
+      }
+    } catch (bundleError) {
+      setBundleStatus(
+        bundleError instanceof Error ? bundleError.message : 'Unable to import the project bundle.'
+      )
+    } finally {
+      setIsBundling(false)
+    }
+  }, [openProject])
+
+  const applyMerchantDefaultReviewRule = useCallback(
+    (merchant: MerchantRecord, overrideConflicts: boolean): void => {
+      setProject((current) => {
+        if (!current) return current
+        const updatedAt = new Date().toISOString()
+        const result = applyMerchantDefaultStatusRule(
+          current.entries,
+          merchant,
+          updatedAt,
+          { overrideConflicts }
+        )
+        if (result.changedEntryIds.length === 0) return current
+        undoStackRef.current = [...undoStackRef.current, current.entries]
+        redoStackRef.current = []
+        setHistoryState({ undoCount: undoStackRef.current.length, redoCount: 0 })
+        return {
+          ...current,
+          updatedAt,
+          entries: result.entries,
+          auditTrail: [
+            ...current.auditTrail,
+            {
+              id: crypto.randomUUID(),
+              occurredAt: updatedAt,
+              action: 'merchant-default-review-rule-applied',
+              entityType: 'project',
+              entityId: current.id,
+              details: {
+                merchantId: merchant.id,
+                status: String(result.decision.value),
+                changedCount: result.changedEntryIds.length,
+                overrideConflicts
+              }
+            }
+          ]
+        }
+      })
+    },
+    []
+  )
+
   const removeRecentProject = useCallback(async (projectId: string): Promise<void> => {
     await window.studio.projects.removeRecent(projectId)
     setRecentProjects(await window.studio.projects.listRecovery())
@@ -1635,7 +1751,13 @@ function App(): React.JSX.Element {
           }
         }
       })
-      const entries = results.flatMap((result) => result.entries)
+      const extractedEntries = results.flatMap((result) => result.entries)
+      const appliedMerchantRules = applyMerchantDefaultStatusRules(
+        extractedEntries,
+        merchantLibrary.records,
+        new Date().toISOString()
+      )
+      const entries = appliedMerchantRules.entries
       const styleProfiles = new Map(
         results.flatMap((result) =>
           result.styleProfile ? [[result.extraction.documentId, result.styleProfile] as const] : []
@@ -1658,6 +1780,25 @@ function App(): React.JSX.Element {
           ? {
               ...current,
               entries,
+              auditTrail:
+                appliedMerchantRules.decisions.length === 0
+                  ? current.auditTrail
+                  : [
+                      ...current.auditTrail,
+                      ...appliedMerchantRules.decisions.map((decision) => ({
+                        id: crypto.randomUUID(),
+                        occurredAt: decision.createdAt,
+                        action: 'merchant-default-review-rule-applied',
+                        entityType: 'project' as const,
+                        entityId: current.id,
+                        details: {
+                          merchantId: decision.merchantId,
+                          status: String(decision.value),
+                          changedCount: decision.appliedToEntryIds.length,
+                          overrideConflicts: false
+                        }
+                      }))
+                    ],
               pages: buildProjectPages(documents, preflight),
               extractionJobs: current.extractionJobs.map((job) =>
                 job.id === jobId ? { ...job, status: 'completed', progress: 1, completedAt } : job
@@ -1868,7 +2009,9 @@ function App(): React.JSX.Element {
                     action: 'entry-edited',
                     entityType: 'entry',
                     entityId: entryId,
-                    details: { fields: 'normalizedText,category,numericValue,date,notes,reference,tags' }
+                    details: {
+                      fields: 'normalizedText,category,numericValue,date,notes,reference,tags'
+                    }
                   }
                 ]
               }
@@ -2303,15 +2446,12 @@ function App(): React.JSX.Element {
     []
   )
 
-  const focusExtractionReportFilter = useCallback(
-    (reason: ExtractionReportFilterReason): void => {
-      if (reason === 'excluded') setReviewStatus('exclude')
-      else if (reason === 'maybe') setReviewStatus('maybe')
-      else if (reason === 'ocr') setReviewSource('ocr')
-      setWorkspaceMode('review')
-    },
-    []
-  )
+  const focusExtractionReportFilter = useCallback((reason: ExtractionReportFilterReason): void => {
+    if (reason === 'excluded') setReviewStatus('exclude')
+    else if (reason === 'maybe') setReviewStatus('maybe')
+    else if (reason === 'ocr') setReviewSource('ocr')
+    setWorkspaceMode('review')
+  }, [])
 
   const focusEntryInReview = useCallback(
     (entryId: string): void => {
@@ -3490,9 +3630,7 @@ function App(): React.JSX.Element {
             <button
               className="secondary-button"
               type="button"
-              disabled={
-                (viewAllReviewEntries ? filteredEntries : pagedEntries).length === 0
-              }
+              disabled={(viewAllReviewEntries ? filteredEntries : pagedEntries).length === 0}
               onClick={selectAllFilteredEntries}
             >
               All results
@@ -3931,6 +4069,20 @@ function App(): React.JSX.Element {
                   >
                     <FolderOpen size={17} /> Resume latest
                   </button>
+                )}
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={isBundling}
+                  onClick={() => void importProjectBundleAction()}
+                  title="Import a project bundle created with 'Package project' from the Export tab"
+                >
+                  <Package size={17} /> {isBundling ? 'Importing...' : 'Import project bundle'}
+                </button>
+                {bundleStatus && (
+                  <p className="onboarding-bundle-status" role="status" aria-live="polite">
+                    {bundleStatus}
+                  </p>
                 )}
               </div>
             </div>
@@ -4616,43 +4768,43 @@ function App(): React.JSX.Element {
                             ? 'matching entries in this document'
                             : `entries on pages ${reviewSourcePage}-${reviewPageEnd}`}
                         </strong>
-                          <span className="review-queue-summary" role="status" aria-live="polite">
-                            {reviewQueueEntries.length} items need attention
-                          </span>
+                        <span className="review-queue-summary" role="status" aria-live="polite">
+                          {reviewQueueEntries.length} items need attention
+                        </span>
                       </div>
                       <div className="review-source-page-nav" aria-label="Source page navigation">
-                          <label className="review-queue-reason-select">
-                            <span>Queue</span>
-                            <select
-                              value={reviewQueueReason}
-                              onChange={(event) =>
-                                setReviewQueueReason(
-                                  event.target.value as ReviewQueueReasonCode | 'all'
-                                )
-                              }
-                              aria-label="Filter review queue reasons"
-                            >
-                              <option value="all">Needs attention</option>
-                              <option value="low-confidence">Low confidence</option>
-                              <option value="ocr-derived">OCR-derived</option>
-                              <option value="maybe-status">Maybe status</option>
-                              <option value="duplicate-candidate">Possible duplicate</option>
-                              <option value="review-warning">Review warning</option>
-                              <option value="unmapped-financial-row">Unmapped financial row</option>
-                            </select>
-                          </label>
-                          <button
-                            className="review-next-button"
-                            type="button"
-                            disabled={reviewQueueEntries.length === 0}
-                            aria-label="Review next item needing attention"
-                            onClick={() => {
-                              const next = reviewQueueEntries[0]
-                              if (next) navigateToEntry(next.entryId)
-                            }}
+                        <label className="review-queue-reason-select">
+                          <span>Queue</span>
+                          <select
+                            value={reviewQueueReason}
+                            onChange={(event) =>
+                              setReviewQueueReason(
+                                event.target.value as ReviewQueueReasonCode | 'all'
+                              )
+                            }
+                            aria-label="Filter review queue reasons"
                           >
-                            Review next
-                          </button>
+                            <option value="all">Needs attention</option>
+                            <option value="low-confidence">Low confidence</option>
+                            <option value="ocr-derived">OCR-derived</option>
+                            <option value="maybe-status">Maybe status</option>
+                            <option value="duplicate-candidate">Possible duplicate</option>
+                            <option value="review-warning">Review warning</option>
+                            <option value="unmapped-financial-row">Unmapped financial row</option>
+                          </select>
+                        </label>
+                        <button
+                          className="review-next-button"
+                          type="button"
+                          disabled={reviewQueueEntries.length === 0}
+                          aria-label="Review next item needing attention"
+                          onClick={() => {
+                            const next = reviewQueueEntries[0]
+                            if (next) navigateToEntry(next.entryId)
+                          }}
+                        >
+                          Review next
+                        </button>
                         <label className="review-source-page-select">
                           <span>Page</span>
                           <select
@@ -4791,6 +4943,7 @@ function App(): React.JSX.Element {
                       onForget={merchantLibrary.forget}
                       onCreate={merchantLibrary.create}
                       onMergeAlias={merchantLibrary.mergeAlias}
+                      onApplyDefaultReviewRule={applyMerchantDefaultReviewRule}
                       onAddScenarioRows={addScenarioRows}
                       onRescanProject={() => {
                         if (project) merchantLibrary.rescanProject(project.id)
@@ -4842,6 +4995,9 @@ function App(): React.JSX.Element {
                       canvasBackground={keptEntriesLayout.background}
                       onDetectPageNumbers={detectActivePageNumberStyle}
                       onConfigurationEditorClosed={() => setOpenKeptConfig(null)}
+                      onExportBundle={(includeSources) => void exportProjectBundle(includeSources)}
+                      bundleStatus={bundleStatus}
+                      isBundling={isBundling}
                     />
                   ) : null,
                   style: (

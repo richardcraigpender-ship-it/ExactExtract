@@ -10,6 +10,7 @@ import {
   type KeptEntriesPageSize
 } from '../../../shared/keptEntriesLayout'
 import { ExportCanvas } from './ExportCanvas'
+import { DEFAULT_KEPT_EXPORT_PAGE_NUMBERS } from '../../../shared/keptExportTemplate'
 
 void React
 
@@ -134,6 +135,28 @@ test('renders the template render plan instead of static placements when provide
   assert.match(markup, /border-top:2px solid #336699/)
   assert.doesNotMatch(markup, /data-placement-id="placement-1"/)
   assert.doesNotMatch(markup, /Invoice total 120\.00/)
+})
+
+test('renders configured page numbers in the PNG layout branch', () => {
+  const markup = renderToStaticMarkup(
+    <ExportCanvas
+      layout={{
+        ...layout,
+        pageNumbers: {
+          ...DEFAULT_KEPT_EXPORT_PAGE_NUMBERS,
+          enabled: true,
+          format: { template: 'Board {n} of {total}', startAt: 1 }
+        }
+      }}
+      showText={false}
+      showImages
+      pageNumber={1}
+      templatePageCount={3}
+    />
+  )
+
+  assert.match(markup, /class="export-canvas-page-number"/)
+  assert.match(markup, /Board 1 of 3/)
 })
 
 test('uses landscape dimensions and renders system-font free text', () => {

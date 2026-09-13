@@ -35,11 +35,15 @@ export type ContextMode =
 export type EntryActionCommand =
   'zoom-in' | 'zoom-out' | 'import' | 'save' | 'jump' | 'currency' | 'detect-style'
 
+/** Primary destinations stay one click away; everything else groups under the Tools disclosure. */
 const contextModes = [
   { id: 'source-pdf', label: 'Source PDF', shortLabel: 'Source', icon: FileText },
-  { id: 'report', label: 'Extraction report', shortLabel: 'Report', icon: ClipboardList },
   { id: 'analysis', label: 'Analysis', shortLabel: 'Stats', icon: BarChart3 },
-  { id: 'export', label: 'Export', shortLabel: 'Export', icon: Download },
+  { id: 'export', label: 'Export', shortLabel: 'Export', icon: Download }
+] as const
+
+const toolModes = [
+  { id: 'report', label: 'Extraction report', shortLabel: 'Report', icon: ClipboardList },
   { id: 'style', label: 'Document style profile', shortLabel: 'Style', icon: Fingerprint },
   { id: 'pages', label: 'Page previewer', shortLabel: 'Pages', icon: Images },
   { id: 'warnings', label: 'Warnings and duplicates', shortLabel: 'Issues', icon: AlertTriangle },
@@ -74,6 +78,47 @@ export const EntryActionsStrip = React.memo(function EntryActionsStrip({
   warningCount = 0,
   highlightsVisible = true
 }: EntryActionsStripProps): React.JSX.Element {
+  const renderTab = ({
+    id,
+    label,
+    shortLabel,
+    icon: Icon
+  }: (typeof contextModes)[number] | (typeof toolModes)[number]): React.JSX.Element => {
+    const isMarks = id === 'marks'
+    const TabIcon = isMarks && !highlightsVisible ? EyeOff : Icon
+    const tabLabel = isMarks && !highlightsVisible ? `${label} (highlights hidden)` : label
+    return (
+      <button
+        key={id}
+        type="button"
+        role="tab"
+        aria-label={tabLabel}
+        aria-selected={mode === id}
+        aria-controls={`right-workspace-context-${id}`}
+        title={tabLabel}
+        onClick={(event) => {
+          event.stopPropagation()
+          onModeChange(id)
+        }}
+        onKeyDown={(event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.stopPropagation()
+          }
+        }}
+      >
+        <TabIcon size={17} aria-hidden="true" />
+        <span className="right-workspace-tool-label" aria-hidden="true">
+          {shortLabel}
+        </span>
+        {id === 'warnings' && warningCount > 0 && (
+          <span className="right-workspace-command-count" aria-label={`${warningCount} warnings`}>
+            {warningCount > 99 ? '99+' : warningCount}
+          </span>
+        )}
+      </button>
+    )
+  }
+
   return (
     <nav className="workspace-tool-strip" aria-label="Workspace tools">
       <div className="right-workspace-commands" aria-label="Quick commands">
@@ -107,44 +152,13 @@ export const EntryActionsStrip = React.memo(function EntryActionsStrip({
         ))}
       </div>
       <div role="tablist" aria-label="Context panel">
-        {contextModes.map(({ id, label, shortLabel, icon: Icon }) => {
-          const isMarks = id === 'marks'
-          const TabIcon = isMarks && !highlightsVisible ? EyeOff : Icon
-          const tabLabel = isMarks && !highlightsVisible ? `${label} (highlights hidden)` : label
-          return (
-            <button
-              key={id}
-              type="button"
-              role="tab"
-              aria-label={tabLabel}
-              aria-selected={mode === id}
-              aria-controls={`right-workspace-context-${id}`}
-              title={tabLabel}
-              onClick={(event) => {
-                event.stopPropagation()
-                onModeChange(id)
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' || event.key === ' ') {
-                  event.stopPropagation()
-                }
-              }}
-            >
-              <TabIcon size={17} aria-hidden="true" />
-              <span className="right-workspace-tool-label" aria-hidden="true">
-                {shortLabel}
-              </span>
-              {id === 'warnings' && warningCount > 0 && (
-                <span
-                  className="right-workspace-command-count"
-                  aria-label={`${warningCount} warnings`}
-                >
-                  {warningCount > 99 ? '99+' : warningCount}
-                </span>
-              )}
-            </button>
-          )
-        })}
+        {contextModes.map(renderTab)}
+      </div>
+      <span className="workspace-tools-divider" aria-hidden="true">
+        Tools
+      </span>
+      <div role="tablist" aria-label="More tools" className="workspace-tools-secondary">
+        {toolModes.map(renderTab)}
       </div>
     </nav>
   )

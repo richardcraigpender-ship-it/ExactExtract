@@ -26,15 +26,15 @@ The large profile is generated at runtime rather than committed as a large binar
 
 Environment: Windows workspace, Node `v24.18.0`, five iterations per measurement.
 
-| Operation | Median | Target |
-| --- | ---: | ---: |
-| Review filtering, 2,000 entries | 2.38 ms | < 250 ms |
-| Incremental review filtering, 2,000 entries | 108.56 ms | < 250 ms |
-| Review navigation, 2,000 entries | 0.11 ms | < 250 ms |
-| Financial mapping and stats, 2,000 entries | 40.17 ms | < 250 ms |
-| Export preview render plan, 2,000 entries | 14.17 ms | < 500 ms |
+| Operation                                            |    Median |     Target |
+| ---------------------------------------------------- | --------: | ---------: |
+| Review filtering, 2,000 entries                      |   2.38 ms |   < 250 ms |
+| Incremental review filtering, 2,000 entries          | 108.56 ms |   < 250 ms |
+| Review navigation, 2,000 entries                     |   0.11 ms |   < 250 ms |
+| Financial mapping and stats, 2,000 entries           |  40.17 ms |   < 250 ms |
+| Export preview render plan, 2,000 entries            |  14.17 ms |   < 500 ms |
 | Project save and reopen, 2,000 pages / 2,000 entries | 189.80 ms | < 1,000 ms |
-| OCR cancellation and canvas cleanup | 0.33 ms | < 100 ms |
+| OCR cancellation and canvas cleanup                  |   0.33 ms |   < 100 ms |
 
 These are medians from five local runs. They are regression baselines and targets, not universal guarantees for every installed machine.
 

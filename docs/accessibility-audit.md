@@ -1,6 +1,6 @@
 # Accessibility audit
 
-Audit date: 2026-08-25. Scope: current Electron renderer components and standalone recovery/Analysis/Export surfaces.
+Audit date: 2026-09-12. Scope: current Electron renderer components and standalone recovery/Analysis/Export surfaces.
 
 ## Verified
 
@@ -65,6 +65,12 @@ Audit date: 2026-08-25. Scope: current Electron renderer components and standalo
 - Packaged single- and multi-source native relinking exposed enabled, focusable recovery controls and visible `1 missing source recovered.` / `2 missing sources recovered.` status text. Replacement paths persisted after restart.
 - A real locked-file autosave failure exposed `Autosave failed`, the exact atomic-rename `EPERM` detail, and an enabled, focusable `Retry save` command. Retrying after unlock cleared the recovery UI and persisted the changed theme.
 - The Windows lifecycle verifier passed silent install, installed launch, executable hash parity, same-version reinstall, clean close, quiet uninstall, and cleanup for the current candidate.
+
+## Agent C acceptance follow-up - 2026-09-12
+
+- Focused acceptance tests passed 14/14 with no failures, cancellations, or skips across contrast, status semantics, modal workspace behavior, analysis/report rendering, virtualized entry rendering, and PDF resource cleanup.
+- The current Windows lifecycle manifest confirms install, isolated launch, hash parity, same-version reinstall, clean close, quiet uninstall, shortcut/registration/process cleanup, and retained user data.
+- This is executable evidence only. It does not replace a human-audible Narrator pass, a complete keyboard-only import-to-export workflow, or clean-account/VM acceptance.
 ## Remediation evidence - 2026-08-27
 
 - The PDF viewer exposes a per-page marked-region summary (for example `3 marked source regions on page 2: 2 keep, 1 exclude.`) whenever the status overlay is visible, so assistive technology is no longer limited to the single selected region while the visual overlay stays `aria-hidden`.

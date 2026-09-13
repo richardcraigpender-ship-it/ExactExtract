@@ -84,12 +84,16 @@ export function buildReviewQueue(
     .map(([entryId, codes]) => {
       const reasons = [...codes]
         .map(reason)
-        .sort((left, right) => left.priority - right.priority || left.code.localeCompare(right.code))
+        .sort(
+          (left, right) => left.priority - right.priority || left.code.localeCompare(right.code)
+        )
       return {
         entryId,
         reasons,
         priority: reasons[0]?.priority ?? Number.POSITIVE_INFINITY
       }
     })
-    .sort((left, right) => left.priority - right.priority || left.entryId.localeCompare(right.entryId))
+    .sort(
+      (left, right) => left.priority - right.priority || left.entryId.localeCompare(right.entryId)
+    )
 }

@@ -6,6 +6,7 @@ import {
   normalizeMerchantKey,
   type MerchantClassificationReason,
   type MerchantCreate,
+  type MerchantDefaultReviewScope,
   type MerchantRecord,
   type MerchantUpdate
 } from '../../../shared/merchants'
@@ -68,6 +69,8 @@ interface MerchantDraft {
   forecastIncluded: boolean
   defaultAmount: string
   defaultCadence: string
+  defaultReviewStatus: 'keep' | 'maybe' | 'exclude' | ''
+  defaultReviewScope: MerchantDefaultReviewScope
   notes: string
 }
 
@@ -79,6 +82,8 @@ const EMPTY_DRAFT: MerchantDraft = {
   forecastIncluded: false,
   defaultAmount: '',
   defaultCadence: 'monthly',
+  defaultReviewStatus: '',
+  defaultReviewScope: 'future-projects',
   notes: ''
 }
 
@@ -92,6 +97,8 @@ function draftToCreate(draft: MerchantDraft): MerchantCreate {
     forecastIncluded: draft.forecastIncluded,
     defaultAmount: Number.isFinite(amount) ? amount : undefined,
     defaultCadence: draft.defaultCadence.trim() || undefined,
+    defaultReviewStatus: draft.defaultReviewStatus || undefined,
+    defaultReviewScope: draft.defaultReviewStatus ? draft.defaultReviewScope : undefined,
     notes: draft.notes.trim() || undefined
   }
 }
@@ -114,6 +121,7 @@ interface MerchantLibraryPanelProps {
   onCreate: (input: MerchantCreate) => void
   onMergeAlias: (targetId: string, alias: string) => void
   onRescanProject: () => void
+  onApplyDefaultReviewRule?: (record: MerchantRecord, overrideConflicts: boolean) => void
   onAddScenarioRows?: (rows: readonly ProjectEntry[]) => void
   onNavigateToEntry?: (entryId: string) => void
 }
@@ -136,6 +144,7 @@ export const MerchantLibraryPanel = React.memo(function MerchantLibraryPanel({
   onCreate,
   onMergeAlias,
   onRescanProject,
+  onApplyDefaultReviewRule,
   onAddScenarioRows,
   onNavigateToEntry
 }: MerchantLibraryPanelProps): React.JSX.Element {
@@ -210,6 +219,8 @@ export const MerchantLibraryPanel = React.memo(function MerchantLibraryPanel({
       forecastIncluded: record.forecastIncluded,
       defaultAmount: record.defaultAmount?.toString() ?? '',
       defaultCadence: record.defaultCadence ?? '',
+      defaultReviewStatus: record.defaultReviewStatus ?? '',
+      defaultReviewScope: record.defaultReviewScope ?? 'future-projects',
       notes: record.notes ?? ''
     })
   }
@@ -570,6 +581,40 @@ export const MerchantLibraryPanel = React.memo(function MerchantLibraryPanel({
               <option value="yearly">Yearly</option>
             </select>
           </label>
+          <label>
+            <span>Default review decision</span>
+            <select
+              value={draft.defaultReviewStatus}
+              onChange={(event) =>
+                setDraft({
+                  ...draft,
+                  defaultReviewStatus: event.target.value as MerchantDraft['defaultReviewStatus']
+                })
+              }
+            >
+              <option value="">Ask me each time</option>
+              <option value="keep">Keep</option>
+              <option value="maybe">Maybe</option>
+              <option value="exclude">Exclude</option>
+            </select>
+          </label>
+          {draft.defaultReviewStatus && (
+            <label>
+              <span>Rule scope</span>
+              <select
+                value={draft.defaultReviewScope}
+                onChange={(event) =>
+                  setDraft({
+                    ...draft,
+                    defaultReviewScope: event.target.value as MerchantDefaultReviewScope
+                  })
+                }
+              >
+                <option value="future-projects">Future projects</option>
+                <option value="current-project">Current project too</option>
+              </select>
+            </label>
+          )}
           <label className="merchant-library-checkbox">
             <input
               type="checkbox"
@@ -656,262 +701,316 @@ export const MerchantLibraryPanel = React.memo(function MerchantLibraryPanel({
             </div>
           )}
           <ul className="merchant-library-list">
-          {visible.map((record) => {
-            const amount = typicalAmount(record)
-            const direction = dominantDirection(record)
-            const flagged = isLikelyPersonal(record)
-            const projectHits = projectId
-              ? record.provenance.filter((entry) => entry.projectId === projectId)
-              : []
-            return (
-              <li key={record.id} className={flagged ? 'is-flagged' : undefined}>
-                <div className="merchant-library-row">
-                  <div className="merchant-library-identity">
-                    <strong>{record.canonicalDisplayName}</strong>
-                    {record.aliases.length > 0 && (
-                      <span className="merchant-library-aliases">{record.aliases.join(', ')}</span>
-                    )}
-                  </div>
-                  <span
-                    className={`merchant-library-badge merchant-library-badge--${
-                      record.classification === 'excluded'
-                        ? 'excluded'
-                        : flagged
-                          ? 'personal'
-                          : isApproved(record)
-                            ? 'approved'
-                            : 'review'
-                    }`}
-                  >
-                    {record.classification === 'excluded'
-                      ? 'Excluded'
-                      : flagged
-                        ? 'Likely personal'
-                        : isApproved(record)
-                          ? 'Approved'
-                          : 'Review needed'}
-                  </span>
-                </div>
-
-                <dl className="merchant-library-facts">
-                  <div>
-                    <dt>Category</dt>
-                    <dd>{record.category ?? '—'}</dd>
-                  </div>
-                  <div>
-                    <dt>Seen</dt>
-                    <dd>{record.occurrenceCount}×</dd>
-                  </div>
-                  <div>
-                    <dt>Last seen</dt>
-                    <dd>{formatDate(record.lastSeenAt)}</dd>
-                  </div>
-                  <div>
-                    <dt>Typical</dt>
-                    <dd>
-                      {typeof amount === 'number'
-                        ? `${currencySymbol}${Math.abs(amount).toFixed(2)}`
-                        : '—'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Direction</dt>
-                    <dd>
-                      {direction === 'in' ? 'Money in' : direction === 'out' ? 'Money out' : '—'}
-                    </dd>
-                  </div>
-                  <div>
-                    <dt>Cadence</dt>
-                    <dd>{record.recurring ? (record.defaultCadence ?? 'Recurring') : 'One-off'}</dd>
-                  </div>
-                </dl>
-
-                {flagged && (
-                  <p className="merchant-library-reasons">
-                    <ShieldAlert size={13} aria-hidden="true" />
-                    {record.classificationReasons.map((reason) => REASON_LABELS[reason]).join(', ')}
-                    . Kept out of forecasts until you approve it.
-                  </p>
-                )}
-
-                {projectHits.length > 0 && onNavigateToEntry && (
-                  <div className="merchant-library-provenance">
-                    <span>In this project:</span>
-                    {projectHits.slice(0, 5).map((entry) => (
-                      <button
-                        key={entry.entryId}
-                        type="button"
-                        className="link-button"
-                        onClick={() => onNavigateToEntry(entry.entryId)}
-                      >
-                        {entry.pageNumber ? `p${entry.pageNumber}` : 'entry'}
-                      </button>
-                    ))}
-                  </div>
-                )}
-
-                {editingId === record.id ? (
-                  <form
-                    className="merchant-library-form"
-                    aria-label={`Edit ${record.canonicalDisplayName}`}
-                    onSubmit={(event) => {
-                      event.preventDefault()
-                      const next = draftToCreate(editDraft)
-                      onUpdate(record.id, next)
-                      setEditingId(null)
-                    }}
-                  >
-                    <label>
-                      <span>Name</span>
-                      <input
-                        value={editDraft.displayName}
-                        onChange={(event) =>
-                          setEditDraft({ ...editDraft, displayName: event.target.value })
-                        }
-                      />
-                    </label>
-                    <label>
-                      <span>Aliases</span>
-                      <input
-                        value={editDraft.aliases}
-                        onChange={(event) =>
-                          setEditDraft({ ...editDraft, aliases: event.target.value })
-                        }
-                      />
-                    </label>
-                    <label>
-                      <span>Category</span>
-                      <input
-                        value={editDraft.category}
-                        onChange={(event) =>
-                          setEditDraft({ ...editDraft, category: event.target.value })
-                        }
-                      />
-                    </label>
-                    <label>
-                      <span>Default amount</span>
-                      <input
-                        type="number"
-                        step="0.01"
-                        value={editDraft.defaultAmount}
-                        onChange={(event) =>
-                          setEditDraft({ ...editDraft, defaultAmount: event.target.value })
-                        }
-                      />
-                    </label>
-                    <label className="merchant-library-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={editDraft.recurring}
-                        onChange={(event) =>
-                          setEditDraft({ ...editDraft, recurring: event.target.checked })
-                        }
-                      />
-                      Recurring
-                    </label>
-                    <label className="merchant-library-notes">
-                      <span>Notes</span>
-                      <textarea
-                        rows={2}
-                        value={editDraft.notes}
-                        onChange={(event) =>
-                          setEditDraft({ ...editDraft, notes: event.target.value })
-                        }
-                      />
-                    </label>
-                    <div className="merchant-library-form-actions">
-                      <button type="submit" className="primary-button">
-                        Save changes
-                      </button>
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => setEditingId(null)}
-                      >
-                        Cancel
-                      </button>
+            {visible.map((record) => {
+              const amount = typicalAmount(record)
+              const direction = dominantDirection(record)
+              const flagged = isLikelyPersonal(record)
+              const projectHits = projectId
+                ? record.provenance.filter((entry) => entry.projectId === projectId)
+                : []
+              return (
+                <li key={record.id} className={flagged ? 'is-flagged' : undefined}>
+                  <div className="merchant-library-row">
+                    <div className="merchant-library-identity">
+                      <strong>{record.canonicalDisplayName}</strong>
+                      {record.aliases.length > 0 && (
+                        <span className="merchant-library-aliases">
+                          {record.aliases.join(', ')}
+                        </span>
+                      )}
                     </div>
-                  </form>
-                ) : (
-                  <div className="merchant-library-actions">
-                    {record.classification === 'excluded' ? (
-                      <button
-                        type="button"
-                        className="secondary-button"
-                        onClick={() => onRestore(record.id)}
-                      >
-                        <Undo2 size={14} aria-hidden="true" /> Restore
-                      </button>
-                    ) : (
-                      <>
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          disabled={isApproved(record)}
-                          onClick={() => onApprove(record.id)}
-                        >
-                          <Check size={14} aria-hidden="true" /> Approve
-                        </button>
-                        <button
-                          type="button"
-                          className="secondary-button"
-                          onClick={() => onExclude(record.id)}
-                        >
-                          <X size={14} aria-hidden="true" /> Exclude
-                        </button>
-                      </>
-                    )}
-                    <label className="merchant-library-checkbox">
-                      <input
-                        type="checkbox"
-                        checked={record.forecastIncluded}
-                        disabled={flagged || record.classification === 'excluded'}
-                        onChange={(event) => onToggleForecast(record.id, event.target.checked)}
-                      />
-                      Forecast
-                    </label>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={() => beginEdit(record)}
+                    <span
+                      className={`merchant-library-badge merchant-library-badge--${
+                        record.classification === 'excluded'
+                          ? 'excluded'
+                          : flagged
+                            ? 'personal'
+                            : isApproved(record)
+                              ? 'approved'
+                              : 'review'
+                      }`}
                     >
-                      <Pencil size={14} aria-hidden="true" /> Edit
-                    </button>
-                    {confirmForgetId === record.id ? (
-                      <span className="merchant-library-confirm" role="alert">
-                        Delete merchant data permanently? Project entries are kept.
+                      {record.classification === 'excluded'
+                        ? 'Excluded'
+                        : flagged
+                          ? 'Likely personal'
+                          : isApproved(record)
+                            ? 'Approved'
+                            : 'Review needed'}
+                    </span>
+                  </div>
+
+                  <dl className="merchant-library-facts">
+                    <div>
+                      <dt>Category</dt>
+                      <dd>{record.category ?? '—'}</dd>
+                    </div>
+                    <div>
+                      <dt>Seen</dt>
+                      <dd>{record.occurrenceCount}×</dd>
+                    </div>
+                    <div>
+                      <dt>Last seen</dt>
+                      <dd>{formatDate(record.lastSeenAt)}</dd>
+                    </div>
+                    <div>
+                      <dt>Typical</dt>
+                      <dd>
+                        {typeof amount === 'number'
+                          ? `${currencySymbol}${Math.abs(amount).toFixed(2)}`
+                          : '—'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Direction</dt>
+                      <dd>
+                        {direction === 'in' ? 'Money in' : direction === 'out' ? 'Money out' : '—'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>Cadence</dt>
+                      <dd>
+                        {record.recurring ? (record.defaultCadence ?? 'Recurring') : 'One-off'}
+                      </dd>
+                    </div>
+                  </dl>
+
+                  {flagged && (
+                    <p className="merchant-library-reasons">
+                      <ShieldAlert size={13} aria-hidden="true" />
+                      {record.classificationReasons
+                        .map((reason) => REASON_LABELS[reason])
+                        .join(', ')}
+                      . Kept out of forecasts until you approve it.
+                    </p>
+                  )}
+
+                  {projectHits.length > 0 && onNavigateToEntry && (
+                    <div className="merchant-library-provenance">
+                      <span>In this project:</span>
+                      {projectHits.slice(0, 5).map((entry) => (
                         <button
+                          key={entry.entryId}
                           type="button"
-                          className="danger-button"
-                          onClick={() => {
-                            onForget(record.id)
-                            setConfirmForgetId(null)
-                          }}
+                          className="link-button"
+                          onClick={() => onNavigateToEntry(entry.entryId)}
                         >
-                          Confirm
+                          {entry.pageNumber ? `p${entry.pageNumber}` : 'entry'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {editingId === record.id ? (
+                    <form
+                      className="merchant-library-form"
+                      aria-label={`Edit ${record.canonicalDisplayName}`}
+                      onSubmit={(event) => {
+                        event.preventDefault()
+                        const next = draftToCreate(editDraft)
+                        onUpdate(record.id, next)
+                        if (
+                          editDraft.defaultReviewStatus &&
+                          editDraft.defaultReviewScope === 'current-project'
+                        ) {
+                          onApplyDefaultReviewRule?.(
+                            {
+                              ...record,
+                              defaultReviewStatus: editDraft.defaultReviewStatus,
+                              defaultReviewScope: editDraft.defaultReviewScope
+                            },
+                            false
+                          )
+                        }
+                        setEditingId(null)
+                      }}
+                    >
+                      <label>
+                        <span>Name</span>
+                        <input
+                          value={editDraft.displayName}
+                          onChange={(event) =>
+                            setEditDraft({ ...editDraft, displayName: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>Aliases</span>
+                        <input
+                          value={editDraft.aliases}
+                          onChange={(event) =>
+                            setEditDraft({ ...editDraft, aliases: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>Category</span>
+                        <input
+                          value={editDraft.category}
+                          onChange={(event) =>
+                            setEditDraft({ ...editDraft, category: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>Default amount</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={editDraft.defaultAmount}
+                          onChange={(event) =>
+                            setEditDraft({ ...editDraft, defaultAmount: event.target.value })
+                          }
+                        />
+                      </label>
+                      <label>
+                        <span>Default review decision</span>
+                        <select
+                          value={editDraft.defaultReviewStatus}
+                          onChange={(event) =>
+                            setEditDraft({
+                              ...editDraft,
+                              defaultReviewStatus:
+                                event.target.value as MerchantDraft['defaultReviewStatus']
+                            })
+                          }
+                        >
+                          <option value="">Ask me each time</option>
+                          <option value="keep">Keep</option>
+                          <option value="maybe">Maybe</option>
+                          <option value="exclude">Exclude</option>
+                        </select>
+                      </label>
+                      {editDraft.defaultReviewStatus && (
+                        <label>
+                          <span>Rule scope</span>
+                          <select
+                            value={editDraft.defaultReviewScope}
+                            onChange={(event) =>
+                              setEditDraft({
+                                ...editDraft,
+                                defaultReviewScope: event.target.value as MerchantDefaultReviewScope
+                              })
+                            }
+                          >
+                            <option value="future-projects">Future projects</option>
+                            <option value="current-project">Current project too</option>
+                          </select>
+                        </label>
+                      )}
+                      <label className="merchant-library-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={editDraft.recurring}
+                          onChange={(event) =>
+                            setEditDraft({ ...editDraft, recurring: event.target.checked })
+                          }
+                        />
+                        Recurring
+                      </label>
+                      <label className="merchant-library-notes">
+                        <span>Notes</span>
+                        <textarea
+                          rows={2}
+                          value={editDraft.notes}
+                          onChange={(event) =>
+                            setEditDraft({ ...editDraft, notes: event.target.value })
+                          }
+                        />
+                      </label>
+                      <div className="merchant-library-form-actions">
+                        <button type="submit" className="primary-button">
+                          Save changes
                         </button>
                         <button
                           type="button"
                           className="secondary-button"
-                          onClick={() => setConfirmForgetId(null)}
+                          onClick={() => setEditingId(null)}
                         >
-                          Keep
+                          Cancel
                         </button>
-                      </span>
-                    ) : (
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="merchant-library-actions">
+                      {record.classification === 'excluded' ? (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => onRestore(record.id)}
+                        >
+                          <Undo2 size={14} aria-hidden="true" /> Restore
+                        </button>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            disabled={isApproved(record)}
+                            onClick={() => onApprove(record.id)}
+                          >
+                            <Check size={14} aria-hidden="true" /> Approve
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => onExclude(record.id)}
+                          >
+                            <X size={14} aria-hidden="true" /> Exclude
+                          </button>
+                        </>
+                      )}
+                      <label className="merchant-library-checkbox">
+                        <input
+                          type="checkbox"
+                          checked={record.forecastIncluded}
+                          disabled={flagged || record.classification === 'excluded'}
+                          onChange={(event) => onToggleForecast(record.id, event.target.checked)}
+                        />
+                        Forecast
+                      </label>
                       <button
                         type="button"
                         className="secondary-button"
-                        onClick={() => setConfirmForgetId(record.id)}
+                        onClick={() => beginEdit(record)}
                       >
-                        <Trash2 size={14} aria-hidden="true" /> Forget
+                        <Pencil size={14} aria-hidden="true" /> Edit
                       </button>
-                    )}
-                  </div>
-                )}
-              </li>
-            )
-          })}
+                      {confirmForgetId === record.id ? (
+                        <span className="merchant-library-confirm" role="alert">
+                          Delete merchant data permanently? Project entries are kept.
+                          <button
+                            type="button"
+                            className="danger-button"
+                            onClick={() => {
+                              onForget(record.id)
+                              setConfirmForgetId(null)
+                            }}
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            onClick={() => setConfirmForgetId(null)}
+                          >
+                            Keep
+                          </button>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => setConfirmForgetId(record.id)}
+                        >
+                          <Trash2 size={14} aria-hidden="true" /> Forget
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </li>
+              )
+            })}
           </ul>
           {excludeAllControl && (
             <div className="merchant-library-bulk-actions merchant-library-bulk-actions--bottom">

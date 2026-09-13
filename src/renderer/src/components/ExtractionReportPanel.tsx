@@ -67,7 +67,9 @@ export function ExtractionReportPanel({
             </div>
           </dl>
           {report.ocrLanguages.length > 0 && (
-            <p className="extraction-report-languages">OCR languages: {report.ocrLanguages.join(', ')}</p>
+            <p className="extraction-report-languages">
+              OCR languages: {report.ocrLanguages.join(', ')}
+            </p>
           )}
           <div className="extraction-report-rows">
             <button type="button" onClick={() => onFilterByReason('excluded')}>

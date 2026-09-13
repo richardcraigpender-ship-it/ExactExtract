@@ -13,7 +13,10 @@ export { classifySemanticLines } from './semantics'
 export { parseTextLayerPage } from './textLayer'
 export { detectTableCandidates } from './tables'
 export { adaptRevolutTransaction, isRevolutStatement } from './revolutAdapter'
-export { normalizeTransactionDescription, shouldReplaceStalePayee } from './transactionNormalization'
+export {
+  normalizeTransactionDescription,
+  shouldReplaceStalePayee
+} from './transactionNormalization'
 export type { NormalizedTransactionDescription } from './transactionNormalization'
 export type {
   ClassifiedPage,

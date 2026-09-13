@@ -39,7 +39,10 @@ export interface StudioBridge {
       recoveredSourceCount: number
       remainingMissingSourceCount: number
     }>
-    exportBundle: (projectId: string, includeSources: boolean) => Promise<{
+    exportBundle: (
+      projectId: string,
+      includeSources: boolean
+    ) => Promise<{
       status: 'cancelled' | 'saved'
       path?: string
       includedSourceCount?: number

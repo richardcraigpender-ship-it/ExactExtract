@@ -103,7 +103,10 @@ test('round-trips project-scoped review presets and rejects invalid filters', as
     const reopened = await new ProjectStore(directory).load(project.id)
     assert.deepEqual(reopened.reviewPresets, project.reviewPresets)
 
-    const invalid = { ...reopened, reviewPresets: [{ ...project.reviewPresets[0], filters: { queueReasonCode: 'not-real' } }] }
+    const invalid = {
+      ...reopened,
+      reviewPresets: [{ ...project.reviewPresets[0], filters: { queueReasonCode: 'not-real' } }]
+    }
     assert.throws(() => store.save(invalid as typeof project), /queueReasonCode/)
   })
 })

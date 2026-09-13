@@ -3,7 +3,10 @@ import test from 'node:test'
 import React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
-import { ExtractionReportPanel, type ExtractionReportDocumentSummary } from './ExtractionReportPanel'
+import {
+  ExtractionReportPanel,
+  type ExtractionReportDocumentSummary
+} from './ExtractionReportPanel'
 import type { ExtractionDocumentReport } from '../../../review'
 
 void React
@@ -30,7 +33,9 @@ function report(overrides: Partial<ExtractionDocumentReport> = {}): ExtractionDo
   }
 }
 
-function summary(overrides: Partial<ExtractionReportDocumentSummary> = {}): ExtractionReportDocumentSummary {
+function summary(
+  overrides: Partial<ExtractionReportDocumentSummary> = {}
+): ExtractionReportDocumentSummary {
   return {
     documentId: 'doc-1',
     documentName: 'statement.pdf',
@@ -49,7 +54,11 @@ test('reports an honest empty state before extraction has run', () => {
 
 test('renders per-document counts, OCR languages, and attention pages', () => {
   const markup = renderToStaticMarkup(
-    <ExtractionReportPanel summaries={[summary()]} onNavigateToPage={noop} onFilterByReason={noop} />
+    <ExtractionReportPanel
+      summaries={[summary()]}
+      onNavigateToPage={noop}
+      onFilterByReason={noop}
+    />
   )
 
   assert.match(markup, /statement\.pdf/)

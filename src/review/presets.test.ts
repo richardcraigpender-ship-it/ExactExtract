@@ -30,8 +30,10 @@ test('creates the five named presets with stable ids and the requested scope', (
 })
 
 test('maps each preset to the matching queue reason code', () => {
-  const [needsAttention, ocrOnly, lowConfidence, duplicates, unmapped] =
-    createBuiltInReviewPresets('global', '2026-01-01T00:00:00.000Z')
+  const [needsAttention, ocrOnly, lowConfidence, duplicates, unmapped] = createBuiltInReviewPresets(
+    'global',
+    '2026-01-01T00:00:00.000Z'
+  )
 
   assert.equal(needsAttention?.filters.queueReasonCode, 'any')
   assert.equal(ocrOnly?.filters.queueReasonCode, 'ocr-derived')

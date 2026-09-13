@@ -77,16 +77,27 @@ function requireReviewPresets(value: unknown, field: string): void {
       throw new Error(`Invalid project field: ${itemField}.scope`)
     }
     requireRecord(preset.filters, `${itemField}.filters`)
-    if (preset.filters.status !== undefined && !REVIEW_STATUSES.has(String(preset.filters.status)) && preset.filters.status !== 'all') {
+    if (
+      preset.filters.status !== undefined &&
+      !REVIEW_STATUSES.has(String(preset.filters.status)) &&
+      preset.filters.status !== 'all'
+    ) {
       throw new Error(`Invalid project field: ${itemField}.filters.status`)
     }
-    if (preset.filters.source !== undefined && !EXTRACTION_SOURCES.has(String(preset.filters.source)) && preset.filters.source !== 'all') {
+    if (
+      preset.filters.source !== undefined &&
+      !EXTRACTION_SOURCES.has(String(preset.filters.source)) &&
+      preset.filters.source !== 'all'
+    ) {
       throw new Error(`Invalid project field: ${itemField}.filters.source`)
     }
     if (preset.filters.category !== undefined && typeof preset.filters.category !== 'string') {
       throw new Error(`Invalid project field: ${itemField}.filters.category`)
     }
-    if (preset.filters.queueReasonCode !== undefined && !REVIEW_PRESET_REASONS.has(String(preset.filters.queueReasonCode))) {
+    if (
+      preset.filters.queueReasonCode !== undefined &&
+      !REVIEW_PRESET_REASONS.has(String(preset.filters.queueReasonCode))
+    ) {
       throw new Error(`Invalid project field: ${itemField}.filters.queueReasonCode`)
     }
   })
@@ -151,7 +162,8 @@ export function assertProjectState(value: unknown): asserts value is ProjectStat
   requireArray(project.preflight, 'preflight')
   requireArray(project.extractionJobs, 'extractionJobs')
   requireArray(project.auditTrail, 'auditTrail')
-  if (project.reviewPresets !== undefined) requireReviewPresets(project.reviewPresets, 'reviewPresets')
+  if (project.reviewPresets !== undefined)
+    requireReviewPresets(project.reviewPresets, 'reviewPresets')
 
   for (const [index, document] of project.documents.entries()) {
     const field = `documents[${index}]`

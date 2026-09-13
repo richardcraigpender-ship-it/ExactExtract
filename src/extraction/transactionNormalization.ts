@@ -14,7 +14,9 @@ export function normalizeTransactionDescription(value: string): NormalizedTransa
   const directionMatch = description.match(PAYMENT_DIRECTION)
   return {
     description,
-    ...(directionMatch ? { direction: directionMatch[1]!.toLocaleLowerCase() === 'from' ? 'in' : 'out' } : {})
+    ...(directionMatch
+      ? { direction: directionMatch[1]!.toLocaleLowerCase() === 'from' ? 'in' : 'out' }
+      : {})
   }
 }
 

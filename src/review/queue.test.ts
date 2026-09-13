@@ -27,42 +27,46 @@ test('uses the shared confidence threshold and stable priority order', () => {
     entry('low', { confidence: DEFAULT_REVIEW_QUEUE_CONFIDENCE_THRESHOLD - 0.01 })
   ])
 
-  assert.deepEqual(queue.map((item) => item.entryId), ['low', 'ocr', 'maybe'])
-  assert.deepEqual(queue[0]?.reasons.map((item) => item.code), ['low-confidence'])
+  assert.deepEqual(
+    queue.map((item) => item.entryId),
+    ['low', 'ocr', 'maybe']
+  )
+  assert.deepEqual(
+    queue[0]?.reasons.map((item) => item.code),
+    ['low-confidence']
+  )
 })
 
 test('combines review, analysis, and mapping reasons without duplicate queue items', () => {
-  const queue = buildReviewQueue(
-    [entry('a', { confidence: 0.5 }), entry('b'), entry('c')],
-    {
-      reviewIssues: [
-        {
-          id: 'duplicate:a|b',
-          code: 'duplicate-entry',
-          severity: 'warning',
-          entryIds: ['a', 'b'],
-          documentId: 'doc',
-          pageNumbers: [1],
-          evidence: 'same text'
-        }
-      ],
-      analysisIssueEntryIds: new Set(['a']),
-      unmappedEntryIds: new Set(['c'])
-    }
-  )
+  const queue = buildReviewQueue([entry('a', { confidence: 0.5 }), entry('b'), entry('c')], {
+    reviewIssues: [
+      {
+        id: 'duplicate:a|b',
+        code: 'duplicate-entry',
+        severity: 'warning',
+        entryIds: ['a', 'b'],
+        documentId: 'doc',
+        pageNumbers: [1],
+        evidence: 'same text'
+      }
+    ],
+    analysisIssueEntryIds: new Set(['a']),
+    unmappedEntryIds: new Set(['c'])
+  })
 
   assert.equal(queue.length, 3)
-  assert.deepEqual(queue.find((item) => item.entryId === 'a')?.reasons.map((item) => item.code), [
-    'low-confidence',
-    'duplicate-candidate',
-    'review-warning'
-  ])
-  assert.deepEqual(queue.find((item) => item.entryId === 'b')?.reasons.map((item) => item.code), [
-    'duplicate-candidate'
-  ])
-  assert.deepEqual(queue.find((item) => item.entryId === 'c')?.reasons.map((item) => item.code), [
-    'unmapped-financial-row'
-  ])
+  assert.deepEqual(
+    queue.find((item) => item.entryId === 'a')?.reasons.map((item) => item.code),
+    ['low-confidence', 'duplicate-candidate', 'review-warning']
+  )
+  assert.deepEqual(
+    queue.find((item) => item.entryId === 'b')?.reasons.map((item) => item.code),
+    ['duplicate-candidate']
+  )
+  assert.deepEqual(
+    queue.find((item) => item.entryId === 'c')?.reasons.map((item) => item.code),
+    ['unmapped-financial-row']
+  )
 })
 
 test('clamps an invalid confidence threshold', () => {

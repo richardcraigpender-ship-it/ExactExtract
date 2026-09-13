@@ -20,7 +20,11 @@ interface BuiltInPresetSeed {
 const BUILT_IN_PRESET_SEEDS: readonly BuiltInPresetSeed[] = [
   { slug: 'needs-attention', name: 'Needs attention', filters: { queueReasonCode: 'any' } },
   { slug: 'ocr-only', name: 'OCR only', filters: { queueReasonCode: 'ocr-derived' } },
-  { slug: 'low-confidence', name: 'Low confidence', filters: { queueReasonCode: 'low-confidence' } },
+  {
+    slug: 'low-confidence',
+    name: 'Low confidence',
+    filters: { queueReasonCode: 'low-confidence' }
+  },
   {
     slug: 'possible-duplicates',
     name: 'Possible duplicates',

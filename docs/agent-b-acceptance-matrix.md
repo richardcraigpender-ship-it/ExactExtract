@@ -1,6 +1,6 @@
 # Agent B acceptance matrix
 
-Assessment date: 2026-08-25. Scope: reliability, recovery, accessibility, responsive behavior, and deterministic resource cleanup on the current source tree.
+Assessment date: 2026-09-12. Scope: reliability, recovery, accessibility, responsive behavior, and deterministic resource cleanup on the current source tree.
 
 The workload is split into two tracks: **B1 Reliability and recovery** and **B2 Accessibility and responsive acceptance**. The tables below are grouped by track; the final decision is shared.
 
@@ -74,6 +74,13 @@ npm run build
 ```
 
 The Agent B source gate passes 277/277 tests plus Node/renderer typechecks and focused formatting. The current Windows candidate also passes packaged OCR verification and `verify:windows-lifecycle`: silent install, installed launch, candidate hash parity, same-version reinstall, clean close, quiet uninstall, and cleanup. Narrator speech output and quantitative heap checks are not replaced by these commands.
+
+## Agent C follow-up evidence - 2026-09-12
+
+- Focused accessibility/resource acceptance passed 14/14 tests with 0 failures, cancellations, or skips across semantic contrast, header status, recent-project status, modal workspace semantics, analysis workspace, virtualized entries, and PDF resource lifecycle cleanup.
+- The current `dist-windows-beta` lifecycle manifest records install exit `0`, reinstall exit `0`, uninstall exit `0`, candidate hash parity, responsive installed launch with title `EXACT EXTRACT`, isolated profile creation, zero stderr bytes, removed registration/files/shortcuts/processes, and retained isolated user data.
+- The current candidate remains unsigned (`NotSigned` for installer and executable). Hash verification remains required before bypassing SmartScreen.
+- Human-audible Narrator announcements, a complete keyboard-only import-to-export workflow, and clean-account/VM execution remain manual or unavailable acceptance boundaries.
 
 ## Decision
 

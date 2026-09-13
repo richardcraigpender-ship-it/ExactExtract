@@ -160,19 +160,28 @@ export function ExportCanvas({
   const imageBalance = layout.imagePlacementOptions?.runningBalance
 
   const pageNumberDraw = useMemo(() => {
-    if (!templatePage || !templatePageNumbers?.enabled) return undefined
+    const pageNumbers = templatePageNumbers ?? layout.pageNumbers
+    if (!pageNumbers?.enabled) return undefined
     const measureTextWidth = (text: string, fontSize: number): number => {
       return text.length * fontSize * 0.6
     }
     return buildPageNumberDraw(
-      templatePageNumbers,
-      templatePage.pageNumber,
+      pageNumbers,
+      templatePage?.pageNumber ?? pageNumber,
       templatePageCount,
       dimensions.width,
       dimensions.height,
       measureTextWidth
     )
-  }, [templatePage, templatePageCount, templatePageNumbers, dimensions.width, dimensions.height])
+  }, [
+    dimensions.height,
+    dimensions.width,
+    layout.pageNumbers,
+    pageNumber,
+    templatePage,
+    templatePageCount,
+    templatePageNumbers
+  ])
 
   return (
     <div className="export-canvas-viewport">
@@ -401,13 +410,18 @@ export function ExportCanvas({
                   dimensions.height
                 ),
                 fontSize: `${pageNumberDraw.fontSize}px`,
-                fontFamily: templatePageNumbers?.textStyle.fontRef
-                  ? fontFamily(templatePageNumbers.textStyle.fontRef)
+                fontFamily: (templatePageNumbers ?? layout.pageNumbers)?.textStyle.fontRef
+                  ? fontFamily((templatePageNumbers ?? layout.pageNumbers)!.textStyle.fontRef)
                   : 'inherit',
-                color: templatePageNumbers?.textStyle.color ?? '#000000',
-                fontWeight: templatePageNumbers?.textStyle.fontWeight === 'bold' ? 700 : 'inherit',
+                color: (templatePageNumbers ?? layout.pageNumbers)?.textStyle.color ?? '#000000',
+                fontWeight:
+                  (templatePageNumbers ?? layout.pageNumbers)?.textStyle.fontWeight === 'bold'
+                    ? 700
+                    : 'inherit',
                 fontStyle:
-                  templatePageNumbers?.textStyle.fontStyle === 'italic' ? 'italic' : 'inherit'
+                  (templatePageNumbers ?? layout.pageNumbers)?.textStyle.fontStyle === 'italic'
+                    ? 'italic'
+                    : 'inherit'
               }}
             >
               {pageNumberDraw.text}

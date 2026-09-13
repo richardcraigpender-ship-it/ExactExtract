@@ -27,9 +27,30 @@ function preflight(overrides: Partial<DocumentPreflightResult> = {}): DocumentPr
     confidence: 0.9,
     completedAt: '2026-01-01T00:00:00.000Z',
     pages: [
-      { pageNumber: 1, kind: 'text', characterCount: 400, confidence: 0.9, ocrRecommended: false, rotation: 0 },
-      { pageNumber: 2, kind: 'image', characterCount: 0, confidence: 0.4, ocrRecommended: true, rotation: 0 },
-      { pageNumber: 3, kind: 'mixed', characterCount: 60, confidence: 0.6, ocrRecommended: false, rotation: 0 }
+      {
+        pageNumber: 1,
+        kind: 'text',
+        characterCount: 400,
+        confidence: 0.9,
+        ocrRecommended: false,
+        rotation: 0
+      },
+      {
+        pageNumber: 2,
+        kind: 'image',
+        characterCount: 0,
+        confidence: 0.4,
+        ocrRecommended: true,
+        rotation: 0
+      },
+      {
+        pageNumber: 3,
+        kind: 'mixed',
+        characterCount: 60,
+        confidence: 0.6,
+        ocrRecommended: false,
+        rotation: 0
+      }
     ],
     ...overrides
   }

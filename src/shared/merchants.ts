@@ -1,3 +1,5 @@
+import type { ReviewStatus } from './contracts'
+
 export const MERCHANT_LIBRARY_SCHEMA_VERSION = 1 as const
 
 export type MerchantClassification =
@@ -33,6 +35,10 @@ export interface MerchantRecord {
   defaultAmount?: number
   defaultCadence?: string
   notes?: string
+  /** When set, future matching entries can be auto-decided instead of re-reviewed by hand. */
+  defaultReviewStatus?: ReviewStatus
+  defaultReviewScope?: MerchantDefaultReviewScope
+  ruleDecisions?: MerchantRuleDecision[]
   occurrenceCount: number
   provenance: MerchantProvenanceReference[]
   firstSeenAt: string
@@ -62,19 +68,22 @@ export interface MerchantCreate {
   defaultAmount?: number
   defaultCadence?: string
   notes?: string
+  defaultReviewStatus?: ReviewStatus
+  defaultReviewScope?: MerchantDefaultReviewScope
 }
 
-export interface MerchantUpdate extends Partial<Omit<MerchantCreate, 'displayName'>> {
+export interface MerchantUpdate
+  extends Partial<Omit<MerchantCreate, 'displayName' | 'defaultReviewStatus'>> {
   displayName?: string
   classification?: Extract<MerchantClassification, 'merchant-candidate' | 'excluded'>
+  /** Passing null clears an existing default-review rule. */
+  defaultReviewStatus?: ReviewStatus | null
 }
 
 export type MerchantRuleAction =
-  | 'set-category'
-  | 'set-canonical-name'
-  | 'add-alias'
-  | 'set-recurring'
-  | 'set-default-status'
+  'set-category' | 'set-canonical-name' | 'add-alias' | 'set-recurring' | 'set-default-status'
+
+export type MerchantDefaultReviewScope = 'current-project' | 'future-projects'
 
 /**
  * An auditable record of a user-approved rule being applied to future matching entries. Distinct

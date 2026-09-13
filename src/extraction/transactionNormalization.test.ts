@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import { normalizeTransactionDescription, shouldReplaceStalePayee } from './transactionNormalization'
+import {
+  normalizeTransactionDescription,
+  shouldReplaceStalePayee
+} from './transactionNormalization'
 
 test('normalizes direction labels without changing the transaction meaning', () => {
   assert.deepEqual(normalizeTransactionDescription('Payment from Northwind money in'), {

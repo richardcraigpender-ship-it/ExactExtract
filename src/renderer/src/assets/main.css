@@ -1305,6 +1305,16 @@ button:disabled {
   align-self: stretch;
   padding-top: 16px;
 }
+.workspace-tools-divider {
+  display: block;
+  padding: 8px 2px 2px;
+  color: var(--studio-text-muted);
+  font-size: 9px;
+  font-weight: 800;
+  text-align: center;
+  text-transform: uppercase;
+  border-top: 1px solid var(--studio-border);
+}
 .workspace-tool-strip button {
   position: relative;
   display: grid;
@@ -3851,6 +3861,52 @@ button:disabled {
   color: var(--studio-text-muted);
   font-size: 11px;
   font-weight: 700;
+}
+.export-bundle-warning {
+  margin: 0;
+  color: var(--studio-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.export-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.export-preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--studio-border);
+  border-radius: 6px;
+  background: var(--studio-surface);
+  color: var(--studio-text);
+  text-align: left;
+  cursor: pointer;
+}
+.export-preset-card:hover,
+.export-preset-card:focus-visible {
+  border-color: var(--studio-accent);
+}
+.export-preset-card > strong {
+  font-size: 12px;
+}
+.export-preset-card > span {
+  color: var(--studio-text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.export-bundle-include {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.onboarding-bundle-status {
+  margin: 0;
+  color: var(--studio-text-muted);
+  font-size: 12px;
 }
 .export-pdf-preview {
   width: min(1000px, 82vw);
