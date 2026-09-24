@@ -70,6 +70,26 @@ function referenceColumn(template: KeptExportPageTemplate): KeptExportColumn | u
   )
 }
 
+/** Content height for a single column's text, including its reference line when it is the anchor. */
+function columnContentHeight(
+  template: KeptExportPageTemplate,
+  column: KeptExportColumn,
+  row: KeptExportSourceRow,
+  isAnchor: boolean
+): number {
+  const style = styleFor(template, column)
+  if (isAnchor) {
+    const reference = valueFor(row, 'reference')
+    if (template.showReferenceUnderMainText && reference) {
+      const referenceLineStyle = referenceStyle(style, template)
+      return style.fontSize + referenceGap(template) + referenceLineStyle.fontSize
+    }
+  }
+  const text = valueFor(row, column.sourceField)
+  if (!text) return 0
+  return lineCount(text, column.width, style.fontSize) * style.fontSize * 1.2
+}
+
 function pageTemplate(template: KeptExportTemplate, pageNumber: number): KeptExportPageTemplate {
   return pageNumber === 1 || !template.useSeparateLaterPages
     ? template.pageOneTemplate
@@ -148,23 +168,21 @@ export function buildKeptExportRenderPlan(
             currentTemplate.columns.map((column) => ({ row, rowIndex, column }))
           )
     const rowOffsets: number[] = []
+    const rowContentHeights: number[] = []
     let nextRowOffset = 0
     pageRows.forEach((row, rowIndex) => {
       rowOffsets[rowIndex] = nextRowOffset
       const anchor = referenceColumn(currentTemplate)
-      const anchorText = anchor ? valueFor(row, anchor.sourceField) : ''
-      const anchorStyle = anchor ? styleFor(currentTemplate, anchor) : undefined
-      const reference = valueFor(row, 'reference')
-      const referenceLineStyle =
-        anchor && anchorStyle ? referenceStyle(anchorStyle, currentTemplate) : undefined
-      const contentHeight =
-        anchor && anchorStyle
-          ? currentTemplate.showReferenceUnderMainText && reference && referenceLineStyle
-            ? anchorStyle.fontSize + referenceGap(currentTemplate) + referenceLineStyle.fontSize
-            : lineCount(anchorText, anchor.width, anchorStyle.fontSize) * anchorStyle.fontSize * 1.2
-          : 0
       const geometry = rowGeometry(currentTemplate, anchor ?? currentTemplate.columns[0]!)
-      nextRowOffset += Math.max(geometry.spacing, contentHeight) + ENTRY_BOTTOM_SPACING_POINTS
+      const columnHeights =
+        currentTemplate.layoutMode === 'table-row'
+          ? currentTemplate.columns.map((column) =>
+              columnContentHeight(currentTemplate, column, row, column === anchor)
+            )
+          : [anchor ? columnContentHeight(currentTemplate, anchor, row, true) : 0]
+      const rowContentHeight = Math.max(0, ...columnHeights)
+      rowContentHeights[rowIndex] = rowContentHeight
+      nextRowOffset += Math.max(geometry.spacing, rowContentHeight) + ENTRY_BOTTOM_SPACING_POINTS
     })
     rowPlacements.forEach(({ row, rowIndex, column }) => {
       const text = valueFor(row, column.sourceField)
@@ -179,7 +197,18 @@ export function buildKeptExportRenderPlan(
         return
       }
       const geometry = rowGeometry(currentTemplate, column)
-      const y = geometry.startY + rowOffsets[rowIndex]!
+      const isAnchor = column === referenceColumn(currentTemplate)
+      // Centers shorter columns within the row's tallest entry so entries stay mid-row aligned.
+      const centeringOffset =
+        currentTemplate.layoutMode === 'table-row'
+          ? Math.max(
+              0,
+              (rowContentHeights[rowIndex]! -
+                columnContentHeight(currentTemplate, column, row, isAnchor)) /
+                2
+            )
+          : 0
+      const y = geometry.startY + rowOffsets[rowIndex]! + centeringOffset
       const style = styleFor(currentTemplate, column)
       if (y + geometry.spacing > geometry.endY) {
         warnings.push({

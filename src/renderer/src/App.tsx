@@ -409,7 +409,7 @@ function App(): React.JSX.Element {
   const [reviewIssueFilter, setReviewIssueFilter] = useState<ReviewIssueCode | 'all'>('all')
   const [reviewQueueReason, setReviewQueueReason] = useState<ReviewQueueReasonCode | 'all'>('all')
   const [requestedReviewSourcePage, setReviewSourcePage] = useState(1)
-  const [viewAllReviewEntries, setViewAllReviewEntries] = useState(false)
+  const [viewAllReviewEntries, setViewAllReviewEntries] = useState(true)
   const [reviewPageSpan, setReviewPageSpan] = useState(String(DEFAULT_REVIEW_PAGE_SPAN))
   const [requestedPdfPage, setRequestedPdfPage] = useState<number | undefined>(undefined)
   const [historyState, setHistoryState] = useState({ undoCount: 0, redoCount: 0 })
@@ -456,7 +456,7 @@ function App(): React.JSX.Element {
       }
     })
   }, [])
-  const [workspaceMode, setWorkspaceMode] = useState<RightWorkspaceMode>('source-pdf')
+  const [workspaceMode, setWorkspaceMode] = useState<RightWorkspaceMode>('review')
   const [analysisConfiguration, setAnalysisConfiguration] = useState<AnalysisConfiguration>(
     DEFAULT_ANALYSIS_CONFIGURATION
   )
@@ -2456,6 +2456,14 @@ function App(): React.JSX.Element {
   const focusEntryInReview = useCallback(
     (entryId: string): void => {
       setWorkspaceMode('review')
+      navigateToEntry(entryId)
+    },
+    [navigateToEntry]
+  )
+
+  const openEntryReferences = useCallback(
+    (entryId: string): void => {
+      setWorkspaceMode('references')
       navigateToEntry(entryId)
     },
     [navigateToEntry]
@@ -4856,6 +4864,7 @@ function App(): React.JSX.Element {
                       onToggleSelection={toggleReviewSelection}
                       onSetStatus={setEntryStatus}
                       onEdit={openEntryEditor}
+                      onOpenReferences={openEntryReferences}
                       onMergeUp={mergeEntryWithRowAbove}
                       canMergeUp={canMergeEntryUp}
                       onPageJump={navigateToReviewPage}
@@ -4902,7 +4911,7 @@ function App(): React.JSX.Element {
                       onFilterByReason={focusExtractionReportFilter}
                     />
                   ),
-                  review: null,
+                  review: reviewBulkContext,
                   references: (
                     <ReferenceToolsPanel
                       hasKeptEntries={

@@ -61,6 +61,7 @@ function placementStyle(
   placement: KeptEntryPlacement,
   pageWidth: number,
   pageHeight: number,
+  zoom: number,
   textStyleOverride?: KeptExportTextStyle
 ): React.CSSProperties {
   const fontRef = textStyleOverride?.fontRef ?? placement.fontRef
@@ -73,7 +74,7 @@ function placementStyle(
     height: asPercent(placement.height, pageHeight),
     color: textStyleOverride?.color ?? placement.color,
     fontFamily: fontFamily(fontRef),
-    fontSize: `${textStyleOverride?.fontSize ?? placement.fontSize}px`,
+    fontSize: `${(textStyleOverride?.fontSize ?? placement.fontSize) * zoom}px`,
     fontStyle:
       fontStyle === 'italic' ||
       (fontRef.kind === 'system' && fontRef.style?.toLowerCase().includes('italic'))
@@ -375,7 +376,7 @@ export function ExportCanvas({
                       ),
                       top: asPercent(placement.y + imageBalance.offsetY, dimensions.height),
                       color: imageBalance.color,
-                      fontSize: `${imageBalance.fontSize}px`
+                      fontSize: `${imageBalance.fontSize * canvasZoom}px`
                     }}
                   >
                     {placement.runningBalanceText}
@@ -409,7 +410,7 @@ export function ExportCanvas({
                   dimensions.height - pageNumberDraw.y - pageNumberDraw.fontSize,
                   dimensions.height
                 ),
-                fontSize: `${pageNumberDraw.fontSize}px`,
+                fontSize: `${pageNumberDraw.fontSize * canvasZoom}px`,
                 fontFamily: (templatePageNumbers ?? layout.pageNumbers)?.textStyle.fontRef
                   ? fontFamily((templatePageNumbers ?? layout.pageNumbers)!.textStyle.fontRef)
                   : 'inherit',
@@ -440,7 +441,7 @@ export function ExportCanvas({
                   width: asPercent(placement.width, dimensions.width),
                   color: placement.style.color,
                   fontFamily: fontFamily(placement.style.fontRef),
-                  fontSize: `${placement.style.fontSize}px`,
+                  fontSize: `${placement.style.fontSize * canvasZoom}px`,
                   fontStyle: placement.style.fontStyle === 'italic' ? 'italic' : undefined,
                   fontWeight: placement.style.fontWeight === 'bold' ? 700 : undefined,
                   textAlign: placement.align
@@ -469,6 +470,7 @@ export function ExportCanvas({
                   placement,
                   dimensions.width,
                   dimensions.height,
+                  canvasZoom,
                   textStyleOverride
                 )}
                 onClick={interactive ? () => onSelectPlacement?.(placement.id) : undefined}

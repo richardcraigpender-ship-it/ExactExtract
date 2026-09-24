@@ -1,5 +1,5 @@
 appId: com.exactextract.app
-productName: EXACT EXTRACT
+productName: ExactExtract
 directories:
   buildResources: build
   output: dist-windows-beta
@@ -27,7 +27,7 @@ asarUnpack:
 win:
   executableName: exact-extract
 nsis:
-  artifactName: ${name}-${version}-setup.${ext}
+  artifactName: ExactExtract-${version}-setup.${ext}
   shortcutName: ${productName}
   uninstallDisplayName: ${productName}
   createDesktopShortcut: always

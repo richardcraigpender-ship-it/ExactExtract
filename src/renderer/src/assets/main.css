@@ -3190,7 +3190,7 @@ button:disabled {
 }
 .entry-decisions {
   display: grid;
-  grid-template-columns: repeat(5, 30px);
+  grid-template-columns: repeat(6, 30px);
   align-items: center;
   gap: 4px;
   padding: 0;
@@ -3223,6 +3223,9 @@ button:disabled {
   color: var(--studio-error);
 }
 .entry-decisions .decision-edit {
+  display: inline-grid;
+}
+.entry-decisions .decision-references {
   display: inline-grid;
 }
 .entry-decisions .decision-merge-up {

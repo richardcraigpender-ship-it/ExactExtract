@@ -421,3 +421,32 @@ test('keeps a divider clear of the reference line beneath the payee', () => {
 
   assert.ok((divider?.y ?? 0) >= referenceTextBottom + 3)
 })
+
+test('vertically centers shorter sibling columns against the tallest entry in a row', () => {
+  const current = template()
+  current.useSeparateLaterPages = false
+  current.pageOneTemplate.columns[0]!.width = 30
+  current.pageOneTemplate.columns[0]!.spacing = 12
+  current.pageOneTemplate.columns.push({
+    id: 'date',
+    name: 'Date',
+    sourceField: 'date',
+    x: 300,
+    y: 12,
+    width: 80,
+    height: 20,
+    spacing: 12,
+    overflow: 'next-page'
+  })
+
+  const plan = buildKeptExportRenderPlan(
+    [{ entryId: 'one', values: { payee: 'A long payee description that wraps', date: '1 Jan' } }],
+    current
+  )
+
+  const payee = plan.pages[0]?.placements.find((placement) => placement.columnId === 'payee')
+  const date = plan.pages[0]?.placements.find((placement) => placement.columnId === 'date')
+
+  // The wrapped payee text defines the row height; the single-line date sits centered within it.
+  assert.ok((date?.y ?? 0) > (payee?.y ?? 0))
+})

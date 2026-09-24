@@ -11,6 +11,7 @@ import {
   Fingerprint,
   Images,
   Link,
+  ListChecks,
   Save,
   Store,
   Trash2,
@@ -38,6 +39,7 @@ export type EntryActionCommand =
 /** Primary destinations stay one click away; everything else groups under the Tools disclosure. */
 const contextModes = [
   { id: 'source-pdf', label: 'Source PDF', shortLabel: 'Source', icon: FileText },
+  { id: 'review', label: 'Review queue', shortLabel: 'Review', icon: ListChecks },
   { id: 'analysis', label: 'Analysis', shortLabel: 'Stats', icon: BarChart3 },
   { id: 'export', label: 'Export', shortLabel: 'Export', icon: Download }
 ] as const

@@ -43,6 +43,7 @@ import {
 const selectedPdfPaths = new Set<string>()
 const closeGuardStates = new Map<number, CloseGuardState>()
 
+
 protocol.registerSchemesAsPrivileged([
   {
     scheme: OCR_ASSET_SCHEME,
@@ -53,6 +54,8 @@ protocol.registerSchemesAsPrivileged([
     privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true }
   }
 ])
+
+
 
 app.setName('EXACT EXTRACT')
 if (!app.commandLine.hasSwitch('user-data-dir')) {

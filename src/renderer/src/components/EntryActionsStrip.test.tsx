@@ -6,12 +6,12 @@ import { EntryActionsStrip } from './EntryActionsStrip'
 
 void React
 
-test('does not offer a Review tab because review controls are persistent', () => {
+test('offers a direct Review queue tab', () => {
   const markup = renderToStaticMarkup(
     <EntryActionsStrip mode="review" onModeChange={() => undefined} onCommand={() => undefined} />
   )
 
-  assert.doesNotMatch(markup, /aria-label="Review and bulk actions"/)
+  assert.match(markup, /aria-label="Review queue"/)
   assert.match(markup, /aria-label="Quick commands"[\s\S]*aria-label="Zoom out"/)
   assert.match(markup, /aria-label="Quick commands"[\s\S]*aria-label="Project currency"/)
 })

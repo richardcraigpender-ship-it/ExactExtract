@@ -33,6 +33,7 @@ test('renders compact numbered metadata and aligned accessible actions without s
       onToggleSelection={() => {}}
       onSetStatus={() => {}}
       onEdit={() => {}}
+      onOpenReferences={() => {}}
       onMergeUp={() => {}}
       canMergeUp={() => true}
       onPageJump={() => {}}
@@ -46,6 +47,7 @@ test('renders compact numbered metadata and aligned accessible actions without s
   assert.doesNotMatch(markup, /Sensitive source wording/)
   assert.match(markup, /title="Keep entry 1"/)
   assert.match(markup, /title="Edit entry 1"/)
+  assert.match(markup, /title="Open reference tools for entry 1"/)
 })
 
 test('renders only the visible slice for a long review list', () => {

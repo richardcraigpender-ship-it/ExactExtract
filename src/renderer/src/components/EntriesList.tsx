@@ -1,5 +1,5 @@
 import type { ProjectEntry, ReviewStatus } from '../../../shared/contracts'
-import { ArrowUp, Check, CircleHelp, Pencil, X } from 'lucide-react'
+import { ArrowUp, Check, CircleHelp, Link, Pencil, X } from 'lucide-react'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { hasNestedInteractiveTarget } from './entryRowInteraction'
 
@@ -14,6 +14,7 @@ interface EntriesListProps {
   onToggleSelection: (entryId: string) => void
   onSetStatus: (entryId: string, status: ReviewStatus) => void
   onEdit: (entryId: string) => void
+  onOpenReferences?: (entryId: string) => void
   onMergeUp?: (entryId: string) => void
   canMergeUp?: (entryId: string) => boolean
   pageForEntry?: (entry: ProjectEntry) => number | undefined
@@ -32,6 +33,7 @@ export const EntriesList = React.memo(function EntriesList({
   onToggleSelection,
   onSetStatus,
   onEdit,
+  onOpenReferences,
   onMergeUp,
   canMergeUp = () => false,
   pageForEntry,
@@ -272,6 +274,20 @@ export const EntriesList = React.memo(function EntriesList({
                     <Pencil size={14} aria-hidden="true" />
                     <span className="sr-only">Edit entry {entryNumber}</span>
                   </button>
+                  {onOpenReferences && (
+                    <button
+                      className="decision-references"
+                      type="button"
+                      title={`Open reference tools for entry ${entryNumber}`}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onOpenReferences(entry.id)
+                      }}
+                    >
+                      <Link size={14} aria-hidden="true" />
+                      <span className="sr-only">Open reference tools for entry {entryNumber}</span>
+                    </button>
+                  )}
                 </div>
               </article>
             </div>

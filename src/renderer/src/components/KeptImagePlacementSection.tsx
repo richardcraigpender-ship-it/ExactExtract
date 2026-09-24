@@ -895,6 +895,25 @@ export function KeptImagePlacementSection({
             />
           </label>
           <label>
+            <span>Weight</span>
+            <select
+              value={pageNumbers.textStyle.fontWeight}
+              disabled={!pageNumbers.enabled}
+              onChange={(event) =>
+                updatePageNumbers((current) => ({
+                  ...current,
+                  textStyle: {
+                    ...current.textStyle,
+                    fontWeight: event.target.value as 'normal' | 'bold'
+                  }
+                }))
+              }
+            >
+              <option value="normal">Normal</option>
+              <option value="bold">Bold</option>
+            </select>
+          </label>
+          <label>
             <span>Color</span>
             <input
               type="color"

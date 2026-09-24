@@ -26,17 +26,20 @@ export const RightWorkspace = React.memo(function RightWorkspace({
   warningCount = 0,
   highlightsVisible = true
 }: RightWorkspaceProps): React.JSX.Element {
-  const displayedMode = mode === 'review' ? 'source-pdf' : mode
   return (
     <>
       <aside className="left-workspace" aria-label="Workspace tools">
-        <section className="persistent-review-controls" aria-label="Review controls">
-          {reviewControls}
-        </section>
-        <ContextPanel mode={displayedMode}>{contexts[displayedMode]}</ContextPanel>
+        {mode !== 'review' && (
+          <section className="persistent-review-controls" aria-label="Review controls">
+            {reviewControls}
+          </section>
+        )}
+        <ContextPanel mode={mode}>
+          {mode === 'review' ? reviewControls : contexts[mode]}
+        </ContextPanel>
       </aside>
       <EntryActionsStrip
-        mode={displayedMode}
+        mode={mode}
         warningCount={warningCount}
         highlightsVisible={highlightsVisible}
         onModeChange={onModeChange}

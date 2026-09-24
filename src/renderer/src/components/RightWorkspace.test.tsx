@@ -84,6 +84,24 @@ test('exposes exactly one Marks control in the strip', () => {
   assert.equal(markup.match(/>Marks</g)?.length, 1)
 })
 
+test('shows review controls in the direct Review queue context', () => {
+  const markup = renderToStaticMarkup(
+    <RightWorkspace
+      mode="review"
+      reviewControls={<p>Review queue controls</p>}
+      entries={<p>Entries</p>}
+      contexts={contexts}
+      onModeChange={() => {}}
+      onCommand={() => {}}
+    />
+  )
+
+  assert.match(markup, /role="tab"[^>]*aria-label="Review queue"[^>]*aria-selected="true"/)
+  assert.match(markup, /role="tabpanel"[^>]*aria-label="Review and bulk actions"/)
+  assert.match(markup, />Review queue controls</)
+  assert.doesNotMatch(markup, /Source documents/)
+})
+
 test('opens the marks context panel when that tool is selected', () => {
   const markup = renderToStaticMarkup(
     <RightWorkspace

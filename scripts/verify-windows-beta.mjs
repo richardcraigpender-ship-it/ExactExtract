@@ -14,7 +14,7 @@ await Promise.all([access(archivePath), access(effectiveConfigPath), access(exec
 
 const outputFiles = await readdir(outputRoot)
 const installerName = outputFiles.find((name) =>
-  /^exact-extract-\d+\.\d+\.\d+-setup\.exe$/i.test(name)
+  /^ExactExtract-\d+\.\d+\.\d+-setup\.exe$/i.test(name)
 )
 if (!installerName) throw new Error('Windows beta installer is missing or has an unexpected name.')
 const installerPath = join(outputRoot, installerName)
@@ -24,7 +24,7 @@ await access(blockmapPath)
 const effectiveConfig = await readFile(effectiveConfigPath, 'utf8')
 const requiredConfig = [
   'appId: com.exactextract.app',
-  'productName: EXACT EXTRACT',
+  'productName: ExactExtract',
   'executableName: exact-extract',
   'createDesktopShortcut: always'
 ]
