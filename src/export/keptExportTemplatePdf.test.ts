@@ -5,6 +5,7 @@ import { PDFDocument } from 'pdf-lib'
 
 import { PROJECT_SCHEMA_VERSION, type ProjectEntry, type ProjectState } from '../shared/contracts'
 import type { KeptExportTemplate, KeptExportPageTemplate } from '../shared/keptExportTemplate'
+import { buildKeptExportRenderPlan } from './keptExportLayout'
 import {
   buildKeptExportSourceRows,
   exportProjectKeptEntriesTemplatePdf
@@ -322,13 +323,15 @@ test('renders a kept entry reference under the main text when configured', async
   const withReference = template()
   withReference.pageOneTemplate.showReferenceUnderMainText = true
   const referencedEntry = entry('entry-1', 'Consulting summary note')
-  referencedEntry.notes = 'CARD-100'
+  referencedEntry.notes = 'CARD-100\nAUTH-42'
 
   const bytes = await exportProjectKeptEntriesTemplatePdf(project([referencedEntry]), withReference)
 
   const text = decodePdfText(bytes)
   assert.match(text, /Consulting summary note/)
   assert.match(text, /Ref: CARD-100/)
+  assert.match(text, /AUTH-42/)
+  assert.doesNotMatch(text, /\?/)
 })
 
 test('does not invent a reference from the entry text when notes are empty', async () => {
@@ -431,4 +434,30 @@ test('leaves metadata untouched when no source files are supplied', async () => 
   const output = await PDFDocument.load(bytes, { updateMetadata: false })
 
   assert.equal(output.getAuthor(), undefined)
+})
+
+test('draws long text on separate lines instead of one overflowing line, matching the preview', async () => {
+  const longText =
+    'This detailed statement description explains the transaction thoroughly for the customer records'
+  const withNarrowColumn = template()
+  withNarrowColumn.pageOneTemplate.columns[0]!.width = 120
+
+  const bytes = await exportProjectKeptEntriesTemplatePdf(
+    project([entry('entry-1', longText)]),
+    withNarrowColumn
+  )
+
+  const rows = buildKeptExportSourceRows(project([entry('entry-1', longText)]), withNarrowColumn)
+  const plan = buildKeptExportRenderPlan(rows, withNarrowColumn)
+  const placement = plan.pages[0]?.placements.find(
+    (candidate) => candidate.columnId === 'column-text'
+  )
+  assert.ok((placement?.lines.length ?? 0) > 1, 'expected the render plan to wrap this text')
+
+  const text = decodePdfText(bytes)
+  for (const line of placement!.lines) {
+    assert.match(text, new RegExp(line.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+  }
+  // The full string must not appear as one contiguous run; a single drawText call would overflow.
+  assert.doesNotMatch(text, new RegExp(longText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')))
 })

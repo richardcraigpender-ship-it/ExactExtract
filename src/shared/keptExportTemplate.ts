@@ -161,6 +161,8 @@ export interface KeptExportPlacement {
   columnId: string
   pageNumber: number
   text: string
+  /** Explicit wrapped lines; both the canvas preview and the PDF renderer must draw exactly these. */
+  lines: string[]
   x: number
   y: number
   width: number

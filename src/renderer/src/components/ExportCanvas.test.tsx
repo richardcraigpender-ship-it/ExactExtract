@@ -11,6 +11,7 @@ import {
 } from '../../../shared/keptEntriesLayout'
 import { ExportCanvas } from './ExportCanvas'
 import { DEFAULT_KEPT_EXPORT_PAGE_NUMBERS } from '../../../shared/keptExportTemplate'
+import { KEPT_EXPORT_SUMMARY_GEOMETRY } from '../../../export/keptExportTemplatePdf'
 
 void React
 
@@ -97,6 +98,7 @@ test('renders the template render plan instead of static placements when provide
         columnId: 'payee',
         pageNumber: 1,
         text: 'TEMPLATE PAYEE ROW',
+        lines: ['TEMPLATE PAYEE ROW'],
         x: 48,
         y: 100,
         width: 200,
@@ -131,6 +133,9 @@ test('renders the template render plan instead of static placements when provide
   assert.match(markup, /data-render-branch="template"/)
   assert.match(markup, /Text renderer: template \(1 placements, 0 references\)/)
   assert.match(markup, /color:#112233/)
+  // Auto-wrap must be off: the PDF never wraps a drawn line, so the preview only
+  // breaks at the render plan's explicit lines, or overflow would look "fixed" here.
+  assert.match(markup, /white-space:pre(?!-)/)
   assert.match(markup, /export-canvas-image-divider/)
   assert.match(markup, /border-top:2px solid #336699/)
   assert.doesNotMatch(markup, /data-placement-id="placement-1"/)
@@ -157,6 +162,30 @@ test('renders configured page numbers in the PNG layout branch', () => {
 
   assert.match(markup, /class="export-canvas-page-number"/)
   assert.match(markup, /Board 1 of 3/)
+})
+
+test('renders statement summary lines using the shared export geometry, not a duplicate estimate', () => {
+  const markup = renderToStaticMarkup(
+    <ExportCanvas
+      layout={layout}
+      summaryLines={[
+        { field: 'money-in-total', text: 'Money in total: 500.00' },
+        { field: 'money-out-total', text: 'Money out total: 125.00' }
+      ]}
+    />
+  )
+
+  assert.match(markup, /class="export-canvas-summary-line"/)
+  assert.match(markup, /Money in total: 500\.00/)
+  assert.match(markup, /Money out total: 125\.00/)
+  const expectedLeft = `${(KEPT_EXPORT_SUMMARY_GEOMETRY.x / 612) * 100}%`
+  assert.ok(markup.includes(`left:${expectedLeft}`), 'expected the shared summary x position')
+})
+
+test('omits the summary block on pages that have no summary lines', () => {
+  const markup = renderToStaticMarkup(<ExportCanvas layout={layout} summaryLines={[]} />)
+
+  assert.doesNotMatch(markup, /export-canvas-summary-line/)
 })
 
 test('uses landscape dimensions and renders system-font free text', () => {

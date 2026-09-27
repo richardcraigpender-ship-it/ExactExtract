@@ -46,8 +46,14 @@ test('renders compact numbered metadata and aligned accessible actions without s
   assert.match(markup, />98%</)
   assert.doesNotMatch(markup, /Sensitive source wording/)
   assert.match(markup, /title="Keep entry 1"/)
-  assert.match(markup, /title="Edit entry 1"/)
+  assert.match(markup, /title="Mark entry 1 maybe"/)
+  assert.match(markup, /title="Exclude entry 1"/)
+  assert.match(markup, /title="Adjust metadata for entry 1"/)
+  assert.match(markup, /title="Merge with row above"/)
   assert.match(markup, /title="Open reference tools for entry 1"/)
+  assert.match(markup, /aria-label="More review actions"/)
+  assert.match(markup, /class="decision-overflow-toggle"[^>]*aria-expanded="false"/)
+  assert.doesNotMatch(markup, /decision-overflow-menu/)
 })
 
 test('renders only the visible slice for a long review list', () => {

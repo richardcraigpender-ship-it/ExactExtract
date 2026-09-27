@@ -3,6 +3,7 @@ import React from 'react'
 import type { ProjectEntry } from '../../../shared/contracts'
 import type { KeptEntriesCanvasLayout, KeptImageSourceRef } from '../../../shared/keptEntriesLayout'
 import type { KeptExportRenderPlan, KeptExportTemplate } from '../../../shared/keptExportTemplate'
+import type { KeptExportSummaryLine } from '../../../export'
 import { KeptCanvasStudioBody } from './KeptCanvasStudioBody'
 
 interface KeptTextCanvasWorkspaceProps {
@@ -11,6 +12,8 @@ interface KeptTextCanvasWorkspaceProps {
   keptExportTemplate?: KeptExportTemplate
   onTextTemplateChange?: (template: KeptExportTemplate) => void
   textRenderPlan?: KeptExportRenderPlan
+  /** Statement summary lines drawn on the export's final page; kept in sync with the preview. */
+  summaryLines?: readonly KeptExportSummaryLine[]
   onLayoutChange: (layout: KeptEntriesCanvasLayout) => void
   onClose: () => void
   onExport: () => void

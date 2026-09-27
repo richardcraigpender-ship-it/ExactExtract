@@ -7,6 +7,7 @@ import {
   applyHighlightGeometry,
   describeHighlightScope,
   measureHighlight,
+  measureHighlightTargets,
   resolveHighlightTargets
 } from './highlightGeometry'
 
@@ -196,6 +197,43 @@ test('describes the affected highlight count', () => {
   assert.equal(describeHighlightScope(0), 'No highlights match this scope.')
   assert.equal(describeHighlightScope(1), '1 highlight will be updated.')
   assert.equal(describeHighlightScope(4), '4 highlights will be updated.')
+})
+
+test('reports the most common geometry across multiple selected highlights', () => {
+  const entries = [
+    entry('one', {}, [
+      {
+        documentId: 'doc-1',
+        pageNumber: 1,
+        bbox: { x: 10, y: 20, width: 50, height: 30, coordinateSpace: 'pdf-points' }
+      }
+    ]),
+    entry('two', {}, [
+      {
+        documentId: 'doc-1',
+        pageNumber: 1,
+        bbox: { x: 10, y: 20, width: 50, height: 30, coordinateSpace: 'pdf-points' }
+      }
+    ]),
+    entry('three', {}, [
+      {
+        documentId: 'doc-1',
+        pageNumber: 1,
+        bbox: { x: 90, y: 100, width: 20, height: 10, coordinateSpace: 'pdf-points' }
+      }
+    ])
+  ]
+  const targets = entries.map((value) => ({ entryId: value.id, regionIndex: 0 }))
+
+  assert.deepEqual(measureHighlightTargets(entries, targets, pages), {
+    status: 'measured',
+    x: 10,
+    y: 20,
+    width: 50,
+    height: 30,
+    targetCount: 3,
+    commonTargetCount: 2
+  })
 })
 
 // HT-A-007

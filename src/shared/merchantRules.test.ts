@@ -5,7 +5,8 @@ import type { ProjectEntry } from './contracts'
 import {
   applyMerchantDefaultStatusRule,
   applyMerchantDefaultStatusRules,
-  previewMerchantDefaultStatusRule
+  previewMerchantDefaultStatusRule,
+  undoMerchantRuleDecision
 } from './merchantRules'
 import type { MerchantRecord } from './merchants'
 
@@ -54,7 +55,10 @@ test('previews matching aliases, affected entries, and explicit conflicts', () =
 
   assert.equal(preview?.affectedCount, 1)
   assert.equal(preview?.conflictCount, 0)
-  assert.deepEqual(preview?.matches.map((match) => match.entryId), ['maybe', 'keep'])
+  assert.deepEqual(
+    preview?.matches.map((match) => match.entryId),
+    ['maybe', 'keep']
+  )
 })
 
 test('applies only maybe entries by default and records a reversible decision', () => {
@@ -69,6 +73,25 @@ test('applies only maybe entries by default and records a reversible decision', 
   assert.equal(result.entries[1]?.status, 'exclude')
   assert.equal(result.decision.action, 'set-default-status')
   assert.equal(result.decision.reversible, true)
+  assert.deepEqual(result.decision.previousStatuses, { maybe: 'maybe' })
+})
+
+test('undoes an applied merchant rule from its persisted previous statuses', () => {
+  const applied = applyMerchantDefaultStatusRule(
+    [entry('maybe', 'Northwind Utilities', 'maybe')],
+    merchant,
+    '2026-09-12T00:00:00.000Z'
+  )
+  const undone = undoMerchantRuleDecision(
+    applied.entries,
+    applied.decision,
+    '2026-09-12T00:05:00.000Z'
+  )
+
+  assert.equal(undone.entries[0]?.status, 'maybe')
+  assert.deepEqual(undone.restoredEntryIds, ['maybe'])
+  assert.equal(undone.decision.reversible, false)
+  assert.equal(undone.decision.reversedAt, '2026-09-12T00:05:00.000Z')
 })
 
 test('can explicitly override conflicts after preview', () => {

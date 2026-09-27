@@ -1,5 +1,5 @@
 import type { ProjectEntry, ReviewStatus } from '../../../shared/contracts'
-import { ArrowUp, Check, CircleHelp, Link, Pencil, X } from 'lucide-react'
+import { ArrowUp, Check, CircleHelp, Link, MoreHorizontal, Plus, X } from 'lucide-react'
 import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { hasNestedInteractiveTarget } from './entryRowInteraction'
 
@@ -12,8 +12,8 @@ interface EntriesListProps {
   issuesByEntry?: ReadonlyMap<string, readonly { id: string; code: string }[]>
   onSelect: (entryId: string) => void
   onToggleSelection: (entryId: string) => void
-  onSetStatus: (entryId: string, status: ReviewStatus) => void
-  onEdit: (entryId: string) => void
+  onSetStatus?: (entryId: string, status: ReviewStatus) => void
+  onEdit?: (entryId: string) => void
   onOpenReferences?: (entryId: string) => void
   onMergeUp?: (entryId: string) => void
   canMergeUp?: (entryId: string) => boolean
@@ -45,6 +45,28 @@ export const EntriesList = React.memo(function EntriesList({
   const listRef = useRef<HTMLDivElement | null>(null)
   const [scrollTop, setScrollTop] = useState(0)
   const [measuredViewportHeight, setMeasuredViewportHeight] = useState<number>(400)
+  const [openOverflowEntryId, setOpenOverflowEntryId] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!openOverflowEntryId) return
+
+    const handlePointerDown = (event: PointerEvent): void => {
+      const target = event.target
+      if (!(target instanceof Element) || !target.closest('.decision-overflow')) {
+        setOpenOverflowEntryId(null)
+      }
+    }
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') setOpenOverflowEntryId(null)
+    }
+
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
+  }, [openOverflowEntryId])
 
   useEffect(() => {
     if (viewportHeight) return
@@ -213,7 +235,7 @@ export const EntriesList = React.memo(function EntriesList({
                     title={`Keep entry ${entryNumber}`}
                     onClick={(event) => {
                       event.stopPropagation()
-                      onSetStatus(entry.id, 'keep')
+                      onSetStatus?.(entry.id, 'keep')
                     }}
                   >
                     <Check size={14} aria-hidden="true" />
@@ -226,7 +248,7 @@ export const EntriesList = React.memo(function EntriesList({
                     title={`Mark entry ${entryNumber} maybe`}
                     onClick={(event) => {
                       event.stopPropagation()
-                      onSetStatus(entry.id, 'maybe')
+                      onSetStatus?.(entry.id, 'maybe')
                     }}
                   >
                     <CircleHelp size={14} aria-hidden="true" />
@@ -239,7 +261,7 @@ export const EntriesList = React.memo(function EntriesList({
                     title={`Exclude entry ${entryNumber}`}
                     onClick={(event) => {
                       event.stopPropagation()
-                      onSetStatus(entry.id, 'exclude')
+                      onSetStatus?.(entry.id, 'exclude')
                     }}
                   >
                     <X size={14} aria-hidden="true" />
@@ -253,9 +275,7 @@ export const EntriesList = React.memo(function EntriesList({
                       disabled={!mergeEnabled}
                       onClick={(event) => {
                         event.stopPropagation()
-                        if (mergeEnabled) {
-                          onMergeUp(entry.id)
-                        }
+                        if (mergeEnabled) onMergeUp(entry.id)
                       }}
                     >
                       <ArrowUp size={14} aria-hidden="true" />
@@ -265,14 +285,14 @@ export const EntriesList = React.memo(function EntriesList({
                   <button
                     className="decision-edit"
                     type="button"
-                    title={`Edit entry ${entryNumber}`}
+                    title={`Adjust metadata for entry ${entryNumber}`}
                     onClick={(event) => {
                       event.stopPropagation()
-                      onEdit(entry.id)
+                      onEdit?.(entry.id)
                     }}
                   >
-                    <Pencil size={14} aria-hidden="true" />
-                    <span className="sr-only">Edit entry {entryNumber}</span>
+                    <Plus size={14} aria-hidden="true" />
+                    <span className="sr-only">Adjust metadata for entry {entryNumber}</span>
                   </button>
                   {onOpenReferences && (
                     <button
@@ -287,6 +307,73 @@ export const EntriesList = React.memo(function EntriesList({
                       <Link size={14} aria-hidden="true" />
                       <span className="sr-only">Open reference tools for entry {entryNumber}</span>
                     </button>
+                  )}
+                  {(onMergeUp || onOpenReferences) && (
+                    <div
+                      className={`decision-overflow ${
+                        openOverflowEntryId === entry.id ? 'is-open' : ''
+                      }`}
+                    >
+                      <button
+                        className="decision-overflow-toggle"
+                        type="button"
+                        title="More review actions"
+                        aria-label="More review actions"
+                        aria-expanded={openOverflowEntryId === entry.id}
+                        onClick={() =>
+                          setOpenOverflowEntryId((current) =>
+                            current === entry.id ? null : entry.id
+                          )
+                        }
+                      >
+                        <MoreHorizontal size={14} aria-hidden="true" />
+                      </button>
+                      {openOverflowEntryId === entry.id && (
+                        <div
+                          className="decision-overflow-menu"
+                          role="menu"
+                          aria-label="More review actions"
+                        >
+                          <button
+                            className="decision-overflow-close"
+                            type="button"
+                            role="menuitem"
+                            onClick={() => setOpenOverflowEntryId(null)}
+                          >
+                            <X size={14} aria-hidden="true" /> Close
+                          </button>
+                          {onMergeUp && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              disabled={!mergeEnabled}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                if (mergeEnabled) {
+                                  onMergeUp(entry.id)
+                                  setOpenOverflowEntryId(null)
+                                }
+                              }}
+                            >
+                              <ArrowUp size={14} aria-hidden="true" /> Merge above
+                            </button>
+                          )}
+                          {onOpenReferences && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                onOpenReferences(entry.id)
+                                setOpenOverflowEntryId(null)
+                              }}
+                            >
+                              <Link size={14} aria-hidden="true" /> References
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   )}
                 </div>
               </article>

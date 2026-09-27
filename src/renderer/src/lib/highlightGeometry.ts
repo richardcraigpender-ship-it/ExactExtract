@@ -226,7 +226,11 @@ export interface HighlightMeasurements {
  * panel has to say so rather than appear to work.
  */
 export type HighlightMeasurement =
-  | ({ status: 'measured' } & HighlightMeasurements)
+  | ({
+      status: 'measured'
+      targetCount?: number
+      commonTargetCount?: number
+    } & HighlightMeasurements)
   | { status: 'no-selection' }
   | { status: 'no-page-size' }
 
@@ -258,5 +262,42 @@ export function measureHighlight(
     y: (1 - normalized.y - normalized.height) * page.height,
     width: normalized.width * page.width,
     height: normalized.height * page.height
+  }
+}
+
+/**
+ * Measures all active targets and returns the most common complete geometry shape. The values are
+ * rounded to hundredths of a point for stable grouping while retaining the first matching shape's
+ * precise values for display. This lets a multi-selection show a useful representative shape while
+ * edits still apply to every resolved target.
+ */
+export function measureHighlightTargets(
+  entries: readonly ProjectEntry[],
+  targets: readonly HighlightScopeTarget[],
+  pages: readonly ProjectPage[]
+): HighlightMeasurement {
+  if (targets.length === 0) return { status: 'no-selection' }
+  const measured = targets
+    .map((target) => measureHighlight(entries, target, pages))
+    .filter(
+      (value): value is Extract<HighlightMeasurement, { status: 'measured' }> =>
+        value.status === 'measured'
+    )
+  if (measured.length === 0) return { status: 'no-page-size' }
+
+  const groups = new Map<string, { count: number; value: (typeof measured)[number] }>()
+  for (const value of measured) {
+    const key = [value.x, value.y, value.width, value.height]
+      .map((part) => Math.round(part * 100) / 100)
+      .join('|')
+    const group = groups.get(key)
+    if (group) group.count += 1
+    else groups.set(key, { count: 1, value })
+  }
+  const representative = [...groups.values()].sort((left, right) => right.count - left.count)[0]!
+  return {
+    ...representative.value,
+    targetCount: targets.length,
+    commonTargetCount: representative.count
   }
 }

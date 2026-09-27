@@ -41,7 +41,7 @@ import {
 import { useMerchantLibrary } from './lib/useMerchantLibrary'
 import {
   applyHighlightGeometry,
-  measureHighlight,
+  measureHighlightTargets,
   resolveHighlightTargets,
   type HighlightGeometryField,
   type HighlightScope,
@@ -160,6 +160,7 @@ import {
   buildExportSnapshot,
   buildKeptExportRenderPlan,
   buildKeptExportSourceRows,
+  buildKeptExportSummaryLines,
   exportProjectCsv,
   exportProjectJson,
   exportProjectKeptEntriesCanvasPdf,
@@ -347,8 +348,8 @@ function App(): React.JSX.Element {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
   })
   const [panePercent, setPanePercent] = useState(() => {
-    const saved = Number(localStorage.getItem('studio-pane-percent'))
-    return saved >= 35 && saved <= 70 ? saved : 52
+    const saved = Number(localStorage.getItem('studio-pane-percent-v2'))
+    return saved >= 35 && saved <= 70 ? saved : 47
   })
   // Seeded from the last unit the user chose, then owned by the project once one is open.
   const [lengthUnit, setLengthUnit] = useState<LengthUnit>(() => {
@@ -408,6 +409,7 @@ function App(): React.JSX.Element {
   const [reviewCategory, setReviewCategory] = useState('all')
   const [reviewIssueFilter, setReviewIssueFilter] = useState<ReviewIssueCode | 'all'>('all')
   const [reviewQueueReason, setReviewQueueReason] = useState<ReviewQueueReasonCode | 'all'>('all')
+  const [reviewMode, setReviewMode] = useState<'standard' | 'attention'>('standard')
   const [requestedReviewSourcePage, setReviewSourcePage] = useState(1)
   const [viewAllReviewEntries, setViewAllReviewEntries] = useState(true)
   const [reviewPageSpan, setReviewPageSpan] = useState(String(DEFAULT_REVIEW_PAGE_SPAN))
@@ -830,15 +832,31 @@ function App(): React.JSX.Element {
       }),
     [analysisSnapshot.issues, project?.entries, reviewIssues]
   )
-  const reviewQueueEntries = useMemo(
-    () =>
-      reviewQueue.filter(
-        (item) =>
-          reviewQueueReason === 'all' ||
-          item.reasons.some((reason) => reason.code === reviewQueueReason)
-      ),
-    [reviewQueue, reviewQueueReason]
-  )
+  const reviewQueueEntries = useMemo(() => {
+    const visibleIds = new Set(visibleReviewEntries.map((entry) => entry.id))
+    if (reviewMode === 'standard') {
+      return visibleReviewEntries.map((entry) => ({ entryId: entry.id }))
+    }
+    return reviewQueue.filter(
+      (item) =>
+        visibleIds.has(item.entryId) &&
+        (reviewQueueReason === 'all' ||
+          item.reasons.some((reason) => reason.code === reviewQueueReason))
+    )
+  }, [reviewMode, reviewQueue, reviewQueueReason, visibleReviewEntries])
+  const reviewNextEntries = useMemo(() => {
+    if (reviewMode === 'standard') return reviewQueueEntries
+    const visibleIds = new Set(visibleReviewEntries.map((entry) => entry.id))
+    const matching = reviewQueue.filter(
+      (item) =>
+        reviewQueueReason === 'all' ||
+        item.reasons.some((reason) => reason.code === reviewQueueReason)
+    )
+    return [
+      ...matching.filter((item) => visibleIds.has(item.entryId)),
+      ...matching.filter((item) => !visibleIds.has(item.entryId))
+    ]
+  }, [reviewMode, reviewQueue, reviewQueueEntries, reviewQueueReason, visibleReviewEntries])
   const selectedReviewEntries = useMemo(
     () => (project?.entries ?? []).filter((entry) => selectedReviewIds.has(entry.id)),
     [project?.entries, selectedReviewIds]
@@ -1143,14 +1161,8 @@ function App(): React.JSX.Element {
   )
 
   const highlightMeasurements = useMemo(() => {
-    const target = resolveHighlightTargets(project?.entries ?? [], {
-      scope: 'entry',
-      documentId: activeDocumentId,
-      pageNumber: requestedPdfPage,
-      selectedEntryId
-    })[0]
-    return measureHighlight(project?.entries ?? [], target, project?.pages ?? [])
-  }, [activeDocumentId, project?.entries, project?.pages, requestedPdfPage, selectedEntryId])
+    return measureHighlightTargets(project?.entries ?? [], highlightTargets, project?.pages ?? [])
+  }, [highlightTargets, project?.entries, project?.pages])
 
   const applyHighlightEdit = useCallback(
     (
@@ -1279,7 +1291,7 @@ function App(): React.JSX.Element {
   }, [theme])
 
   useEffect(() => {
-    localStorage.setItem('studio-pane-percent', String(panePercent))
+    localStorage.setItem('studio-pane-percent-v2', String(panePercent))
   }, [panePercent])
 
   // Remembered only as the seed for the next new project; the open project owns the real value.
@@ -1550,7 +1562,9 @@ function App(): React.JSX.Element {
         )
       } catch (bundleError) {
         setBundleStatus(
-          bundleError instanceof Error ? bundleError.message : 'Unable to create the project bundle.'
+          bundleError instanceof Error
+            ? bundleError.message
+            : 'Unable to create the project bundle.'
         )
       } finally {
         setIsBundling(false)
@@ -1588,12 +1602,9 @@ function App(): React.JSX.Element {
       setProject((current) => {
         if (!current) return current
         const updatedAt = new Date().toISOString()
-        const result = applyMerchantDefaultStatusRule(
-          current.entries,
-          merchant,
-          updatedAt,
-          { overrideConflicts }
-        )
+        const result = applyMerchantDefaultStatusRule(current.entries, merchant, updatedAt, {
+          overrideConflicts
+        })
         if (result.changedEntryIds.length === 0) return current
         undoStackRef.current = [...undoStackRef.current, current.entries]
         redoStackRef.current = []
@@ -2420,11 +2431,25 @@ function App(): React.JSX.Element {
   )
 
   const reviewNext = useCallback((): void => {
-    const next = reviewQueueEntries[0]
+    const next = reviewNextEntries[0]
     if (!next) return
     setWorkspaceMode('review')
     navigateToEntry(next.entryId)
-  }, [navigateToEntry, reviewQueueEntries])
+  }, [navigateToEntry, reviewNextEntries])
+
+  const canMergeEntryUp = useCallback(
+    (entryId: string): boolean => {
+      const entry = project?.entries.find((candidate) => candidate.id === entryId)
+      const rowAbove = entry ? findEntryDirectlyAbove(entry, project?.entries ?? []) : undefined
+      return Boolean(entry && rowAbove && rowAbove.status === entry.status)
+    },
+    [project?.entries]
+  )
+
+  const openEntryReferences = useCallback((entryId: string): void => {
+    setSelectedEntryId(entryId)
+    setWorkspaceMode('references')
+  }, [])
 
   const handlePdfPageChange = useCallback((page: number): void => {
     setRequestedPdfPage(page)
@@ -2456,14 +2481,6 @@ function App(): React.JSX.Element {
   const focusEntryInReview = useCallback(
     (entryId: string): void => {
       setWorkspaceMode('review')
-      navigateToEntry(entryId)
-    },
-    [navigateToEntry]
-  )
-
-  const openEntryReferences = useCallback(
-    (entryId: string): void => {
-      setWorkspaceMode('references')
       navigateToEntry(entryId)
     },
     [navigateToEntry]
@@ -2720,31 +2737,22 @@ function App(): React.JSX.Element {
     }
   }, [])
 
-  const mergeSelectedReviewEntries = useCallback((): void => {
-    const proj = projectRef.current
-    if (!proj || selectedReviewEntries.length < 2) return
-    applyMergedEntries(selectedReviewEntries)
-  }, [applyMergedEntries, selectedReviewEntries])
-
   const mergeEntryWithRowAbove = useCallback(
     (entryId: string): void => {
-      const proj = projectRef.current
-      if (!proj) return
-      const entry = proj.entries.find((candidate) => candidate.id === entryId)
-      if (!entry) return
-      const rowAbove = findEntryDirectlyAbove(entry, proj.entries)
-      if (!rowAbove || rowAbove.status !== entry.status) return
+      const entries = projectRef.current?.entries ?? []
+      const entry = entries.find((candidate) => candidate.id === entryId)
+      const rowAbove = entry ? findEntryDirectlyAbove(entry, entries) : undefined
+      if (!entry || !rowAbove || rowAbove.status !== entry.status) return
       applyMergedEntries([rowAbove, entry])
     },
     [applyMergedEntries]
   )
 
-  const canMergeEntryUp = useCallback((entryId: string): boolean => {
+  const mergeSelectedReviewEntries = useCallback((): void => {
     const proj = projectRef.current
-    const entry = proj?.entries.find((candidate) => candidate.id === entryId)
-    const rowAbove = entry ? findEntryDirectlyAbove(entry, proj?.entries ?? []) : undefined
-    return Boolean(entry && rowAbove && rowAbove.status === entry.status)
-  }, [])
+    if (!proj || selectedReviewEntries.length < 2) return
+    applyMergedEntries(selectedReviewEntries)
+  }, [applyMergedEntries, selectedReviewEntries])
 
   const splitSelectedReviewEntry = useCallback((entryId: string, parts: string[]): void => {
     const proj = projectRef.current
@@ -2859,6 +2867,11 @@ function App(): React.JSX.Element {
       buildKeptExportSourceRows(projectSnapshot, keptExportTemplate),
       keptExportTemplate
     )
+  }, [projectSnapshot, keptExportTemplate])
+
+  const keptTextSummaryLines = useMemo(() => {
+    if (!projectSnapshot || !keptExportTemplate) return []
+    return buildKeptExportSummaryLines(projectSnapshot, keptExportTemplate)
   }, [projectSnapshot, keptExportTemplate])
 
   const saveExport = useCallback(
@@ -3313,6 +3326,7 @@ function App(): React.JSX.Element {
     setReviewCategory('all')
     setReviewIssueFilter('all')
     setReviewQueueReason('all')
+    setReviewMode('standard')
   }, [])
 
   const handlePlaceKeptImages = useCallback((plan: KeptImagePlan) => {
@@ -3526,7 +3540,8 @@ function App(): React.JSX.Element {
                 reviewSource === 'all' &&
                 reviewCategory === 'all' &&
                 reviewIssueFilter === 'all' &&
-                reviewQueueReason === 'all'
+                reviewQueueReason === 'all' &&
+                reviewMode === 'standard'
               }
               onClick={resetReviewFilters}
             >
@@ -3537,19 +3552,26 @@ function App(): React.JSX.Element {
             <button
               className="primary-button"
               type="button"
-              disabled={reviewQueueEntries.length === 0}
+              disabled={reviewNextEntries.length === 0}
               onClick={reviewNext}
               title="Open the highest-priority unresolved entry"
             >
-              Review next ({reviewQueueEntries.length})
+              Review next ({reviewNextEntries.length})
             </button>
             <select
-              value={reviewQueueReason}
-              onChange={(event) =>
+              value={reviewMode === 'standard' ? 'standard' : reviewQueueReason}
+              onChange={(event) => {
+                if (event.target.value === 'standard') {
+                  setReviewMode('standard')
+                  setReviewQueueReason('all')
+                  return
+                }
+                setReviewMode('attention')
                 setReviewQueueReason(event.target.value as ReviewQueueReasonCode | 'all')
-              }
+              }}
               aria-label="Filter review queue reason"
             >
+              <option value="standard">Standard review</option>
               <option value="all">All attention reasons</option>
               <option value="low-confidence">Low confidence</option>
               <option value="ocr-derived">OCR-derived</option>
@@ -3745,7 +3767,8 @@ function App(): React.JSX.Element {
       reviewCategory,
       reviewIssueFilter,
       reviewNext,
-      reviewQueueEntries,
+      reviewNextEntries,
+      reviewMode,
       reviewQueueReason,
       reviewQuery,
       reviewSource,
@@ -3807,6 +3830,7 @@ function App(): React.JSX.Element {
           keptExportTemplate={keptExportTemplate}
           onTextTemplateChange={applyKeptExportTemplate}
           textRenderPlan={keptTextRenderPlan}
+          summaryLines={keptTextSummaryLines}
           isExporting={exportState.isSaving}
           onLayoutChange={setKeptEntriesLayout}
           onClose={() => setShowKeptCanvas(null)}
@@ -4069,24 +4093,26 @@ function App(): React.JSX.Element {
                     <Upload size={17} /> Start a review
                   </button>
                 </div>
-                {recentProjects[0] && (
+                <div className="onboarding-launch-actions" aria-label="Continue a project">
+                  {recentProjects[0] && (
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void openProject(recentProjects[0].id)}
+                    >
+                      <FolderOpen size={17} /> Resume latest
+                    </button>
+                  )}
                   <button
                     className="secondary-button"
                     type="button"
-                    onClick={() => void openProject(recentProjects[0].id)}
+                    disabled={isBundling}
+                    onClick={() => void importProjectBundleAction()}
+                    title="Open a Project bundle created from the Export tab"
                   >
-                    <FolderOpen size={17} /> Resume latest
+                    <Package size={17} /> {isBundling ? 'Opening...' : 'Project bundle'}
                   </button>
-                )}
-                <button
-                  className="secondary-button"
-                  type="button"
-                  disabled={isBundling}
-                  onClick={() => void importProjectBundleAction()}
-                  title="Import a project bundle created with 'Package project' from the Export tab"
-                >
-                  <Package size={17} /> {isBundling ? 'Importing...' : 'Import project bundle'}
-                </button>
+                </div>
                 {bundleStatus && (
                   <p className="onboarding-bundle-status" role="status" aria-live="polite">
                     {bundleStatus}
@@ -4777,21 +4803,31 @@ function App(): React.JSX.Element {
                             : `entries on pages ${reviewSourcePage}-${reviewPageEnd}`}
                         </strong>
                         <span className="review-queue-summary" role="status" aria-live="polite">
-                          {reviewQueueEntries.length} items need attention
+                          {reviewQueueEntries.length}{' '}
+                          {reviewMode === 'standard'
+                            ? 'entries in standard review'
+                            : 'items need attention'}
                         </span>
                       </div>
                       <div className="review-source-page-nav" aria-label="Source page navigation">
                         <label className="review-queue-reason-select">
                           <span>Queue</span>
                           <select
-                            value={reviewQueueReason}
-                            onChange={(event) =>
+                            value={reviewMode === 'standard' ? 'standard' : reviewQueueReason}
+                            onChange={(event) => {
+                              if (event.target.value === 'standard') {
+                                setReviewMode('standard')
+                                setReviewQueueReason('all')
+                                return
+                              }
+                              setReviewMode('attention')
                               setReviewQueueReason(
                                 event.target.value as ReviewQueueReasonCode | 'all'
                               )
-                            }
+                            }}
                             aria-label="Filter review queue reasons"
                           >
+                            <option value="standard">Standard review</option>
                             <option value="all">Needs attention</option>
                             <option value="low-confidence">Low confidence</option>
                             <option value="ocr-derived">OCR-derived</option>
@@ -4804,10 +4840,10 @@ function App(): React.JSX.Element {
                         <button
                           className="review-next-button"
                           type="button"
-                          disabled={reviewQueueEntries.length === 0}
+                          disabled={reviewNextEntries.length === 0}
                           aria-label="Review next item needing attention"
                           onClick={() => {
-                            const next = reviewQueueEntries[0]
+                            const next = reviewNextEntries[0]
                             if (next) navigateToEntry(next.entryId)
                           }}
                         >
@@ -4853,7 +4889,6 @@ function App(): React.JSX.Element {
                           <span>pages</span>
                         </label>
                       </div>
-                      <span className="status-pill">Parser</span>
                     </div>
                     <EntriesList
                       entries={pagedEntries}

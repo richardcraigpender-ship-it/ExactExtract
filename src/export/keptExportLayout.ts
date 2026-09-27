@@ -36,10 +36,48 @@ function referenceGap(template: KeptExportPageTemplate): number {
   return Math.max(0, template.referenceGap ?? DEFAULT_REFERENCE_TOP_OFFSET_POINTS)
 }
 
-function lineCount(text: string, width: number, fontSize: number): number {
+/**
+ * Word-wraps text to fit a column width. The PDF renderer and the canvas preview both draw
+ * exactly these lines, so the reserved row height always matches what actually gets drawn.
+ */
+export function wrapLines(text: string, width: number, fontSize: number): string[] {
   const averageCharacterWidth = Math.max(1, fontSize * 0.55)
   const charactersPerLine = Math.max(1, Math.floor(width / averageCharacterWidth))
-  return Math.max(1, Math.ceil(text.length / charactersPerLine))
+  const lines: string[] = []
+  for (const paragraph of text.replaceAll('\r\n', '\n').split('\n')) {
+    const words = paragraph.split(/\s+/).filter(Boolean)
+    if (words.length === 0) {
+      lines.push('')
+      continue
+    }
+    let current = ''
+    for (const word of words) {
+      const candidate = current ? `${current} ${word}` : word
+      if (candidate.length <= charactersPerLine) {
+        current = candidate
+        continue
+      }
+      if (current) lines.push(current)
+      if (word.length <= charactersPerLine) {
+        current = word
+        continue
+      }
+      // A single word wider than the column on its own is hard-broken, mirroring the preview's
+      // overflow-wrap: anywhere behavior.
+      let remaining = word
+      while (remaining.length > charactersPerLine) {
+        lines.push(remaining.slice(0, charactersPerLine))
+        remaining = remaining.slice(charactersPerLine)
+      }
+      current = remaining
+    }
+    if (current) lines.push(current)
+  }
+  return lines.length > 0 ? lines : ['']
+}
+
+function lineCount(text: string, width: number, fontSize: number): number {
+  return wrapLines(text, width, fontSize).length
 }
 
 function snippedLine(text: string, width: number, fontSize: number): string {
@@ -48,6 +86,11 @@ function snippedLine(text: string, width: number, fontSize: number): string {
   if (text.length <= charactersPerLine) return text
   if (charactersPerLine <= 3) return text.slice(0, charactersPerLine)
   return `${text.slice(0, charactersPerLine - 3).trimEnd()}...`
+}
+
+function referenceLines(reference: string): string[] {
+  const lines = reference.replaceAll('\r\n', '\n').split('\n')
+  return [`Ref: ${lines[0] ?? ''}`, ...lines.slice(1)]
 }
 
 function shouldSnipForReference(
@@ -82,7 +125,11 @@ function columnContentHeight(
     const reference = valueFor(row, 'reference')
     if (template.showReferenceUnderMainText && reference) {
       const referenceLineStyle = referenceStyle(style, template)
-      return style.fontSize + referenceGap(template) + referenceLineStyle.fontSize
+      return (
+        style.fontSize +
+        referenceGap(template) +
+        referenceLines(reference).length * referenceLineStyle.fontSize
+      )
     }
   }
   const text = valueFor(row, column.sourceField)
@@ -218,13 +265,19 @@ export function buildKeptExportRenderPlan(
           message: `${column.name} overflows page ${pageNumber}.`
         })
       }
+      const isSnippedForReference = shouldSnipForReference(currentTemplate, column, reference)
+      const displayText = isSnippedForReference
+        ? snippedLine(text, column.width, style.fontSize)
+        : text
       placements.push({
         entryId: row.entryId,
         columnId: column.id,
         pageNumber,
-        text: shouldSnipForReference(currentTemplate, column, reference)
-          ? snippedLine(text, column.width, style.fontSize)
-          : text,
+        text: displayText,
+        // Snipped text is already truncated to one line; only wrap the unsnipped case.
+        lines: isSnippedForReference
+          ? [displayText]
+          : wrapLines(text, column.width, style.fontSize),
         x: column.x,
         y,
         width: column.width,
@@ -244,17 +297,21 @@ export function buildKeptExportRenderPlan(
           )
           if (!anchor) continue
           const style = referenceStyle(anchor.style, currentTemplate)
+          const referenceText = `Ref: ${reference}`
+          const lines = referenceLines(reference)
           placements.push({
             entryId: row.entryId,
             columnId: `${column.id}:reference`,
             pageNumber,
-            text: `Ref: ${reference}`,
+            text: referenceText,
+            // Only a single line height is reserved for the reference line; it does not wrap.
+            lines,
             x: anchor.x,
             y: anchor.y + anchor.style.fontSize + referenceGap(currentTemplate),
             width: anchor.width,
             ...(column.align ? { align: column.align } : {}),
             // The reference owns its own line box; the row offset reserves the 5pt clear space.
-            height: style.fontSize,
+            height: lines.length * style.fontSize,
             style
           })
         }

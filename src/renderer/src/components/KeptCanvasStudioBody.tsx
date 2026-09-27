@@ -12,6 +12,7 @@ import {
 
 import type { ProjectEntry } from '../../../shared/contracts'
 import type { KeptExportRenderPlan, KeptExportTemplate } from '../../../shared/keptExportTemplate'
+import type { KeptExportSummaryLine } from '../../../export'
 import {
   keptEntriesLayoutPageCount,
   keptEntriesPageDimensions,
@@ -47,6 +48,8 @@ interface KeptCanvasStudioBodyProps {
   onTextTemplateChange?: (template: KeptExportTemplate) => void
   /** Template render plan; the text canvas draws from this so config edits match the final PDF. */
   textRenderPlan?: KeptExportRenderPlan
+  /** Statement summary lines drawn on the export's final page; kept in sync with the preview. */
+  summaryLines?: readonly KeptExportSummaryLine[]
   onLayoutChange: (layout: KeptEntriesCanvasLayout) => void
   onClose: () => void
   onExport: () => void
@@ -78,6 +81,7 @@ export function KeptCanvasStudioBody({
   keptExportTemplate,
   onTextTemplateChange,
   textRenderPlan,
+  summaryLines = [],
   onLayoutChange,
   onClose,
   onExport,
@@ -223,6 +227,8 @@ export function KeptCanvasStudioBody({
             templatePage={templatePage}
             templatePageNumbers={keptExportTemplate?.pageNumbers}
             templatePageCount={pageCount}
+            // The export only draws these on its final page; match that exactly.
+            summaryLines={currentPage === pageCount ? summaryLines : undefined}
           />
         ) : (
           <>

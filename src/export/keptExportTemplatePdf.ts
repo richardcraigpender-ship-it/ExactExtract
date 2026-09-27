@@ -25,6 +25,15 @@ type SummaryField =
   | 'statement-closing-balance'
   | 'reconciliation-difference'
 
+/** Shared with the canvas preview so the summary block is positioned identically. */
+export const KEPT_EXPORT_SUMMARY_GEOMETRY = {
+  x: 48,
+  baseY: 40,
+  lineHeight: 14,
+  fontSize: 9,
+  color: '#17231c'
+} as const
+
 const PAGE_DIMENSIONS = {
   letter: { width: 612, height: 792 },
   a4: { width: 595.28, height: 841.89 }
@@ -124,6 +133,42 @@ function mappingForStats(): FinancialColumnMapping {
   }
 }
 
+export interface KeptExportSummaryLine {
+  field: SummaryField
+  text: string
+}
+
+/**
+ * Shared by the PDF renderer and the canvas preview so the statement summary text drawn on the
+ * final page is always identical, not independently computed in two places.
+ */
+export function buildKeptExportSummaryLines(
+  project: ProjectState,
+  template: KeptExportTemplate
+): KeptExportSummaryLine[] {
+  const summaryFields = (template as KeptExportTemplate & { summaryFields?: SummaryField[] })
+    .summaryFields
+  if (!summaryFields?.length) return []
+  const stats = calculateStatementStats(project.entries, mappingForStats(), 'kept')
+  const values: Record<SummaryField, number | null> = {
+    'money-in-total': stats.moneyIn,
+    'money-out-total': stats.moneyOut,
+    'net-movement': stats.netMovement,
+    'balance-snapshot-total': stats.balanceTotal,
+    'opening-balance': stats.openingBalance,
+    'calculated-closing-balance': stats.calculatedClosingBalance,
+    'statement-closing-balance': stats.closingBalance,
+    'reconciliation-difference': stats.difference
+  }
+  return summaryFields.map((field) => {
+    const value = values[field]
+    return {
+      field,
+      text: `${summaryLabel(field)}: ${value === null ? 'Unavailable' : value.toFixed(2)}`
+    }
+  })
+}
+
 /** Only captured or user-entered text is exported; a row with no reference stays blank. */
 function referenceForEntry(entry: ProjectState['entries'][number], rowReference?: string): string {
   return rowReference?.trim() || entry.reference?.trim() || entry.notes?.trim() || ''
@@ -218,22 +263,25 @@ export async function exportProjectKeptEntriesTemplatePdf(
     }
     for (const placement of renderedPage.placements) {
       const font = await pdf.embedFont(fontName(placement.style))
-      const y = pageSize.height - placement.y - placement.height + placement.style.fontSize
-      const text = safeText(placement.text, font)
-      const textWidth = font.widthOfTextAtSize(text, placement.style.fontSize)
-      const freeSpace = Math.max(0, placement.width - textWidth)
-      const x =
-        placement.align === 'right'
-          ? placement.x + freeSpace
-          : placement.align === 'center'
-            ? placement.x + freeSpace / 2
-            : placement.x
-      page.drawText(text, {
-        x,
-        y,
-        size: placement.style.fontSize,
-        font,
-        color: pdfColor(placement.style.color)
+      const lineHeight = placement.style.fontSize * 1.2
+      const baseY = pageSize.height - placement.y - placement.style.fontSize
+      placement.lines.forEach((line, lineIndex) => {
+        const text = safeText(line, font)
+        const textWidth = font.widthOfTextAtSize(text, placement.style.fontSize)
+        const freeSpace = Math.max(0, placement.width - textWidth)
+        const x =
+          placement.align === 'right'
+            ? placement.x + freeSpace
+            : placement.align === 'center'
+              ? placement.x + freeSpace / 2
+              : placement.x
+        page.drawText(text, {
+          x,
+          y: baseY - lineIndex * lineHeight,
+          size: placement.style.fontSize,
+          font,
+          color: pdfColor(placement.style.color)
+        })
       })
     }
     for (const divider of renderedPage.dividers) {
@@ -264,33 +312,22 @@ export async function exportProjectKeptEntriesTemplatePdf(
         })
       }
     }
-    const summaryFields = (template as KeptExportTemplate & { summaryFields?: SummaryField[] })
-      .summaryFields
-    if (renderedPage.pageNumber === plan.pages.length && summaryFields?.length) {
-      const stats = calculateStatementStats(project.entries, mappingForStats(), 'kept')
-      const values: Record<SummaryField, number | null> = {
-        'money-in-total': stats.moneyIn,
-        'money-out-total': stats.moneyOut,
-        'net-movement': stats.netMovement,
-        'balance-snapshot-total': stats.balanceTotal,
-        'opening-balance': stats.openingBalance,
-        'calculated-closing-balance': stats.calculatedClosingBalance,
-        'statement-closing-balance': stats.closingBalance,
-        'reconciliation-difference': stats.difference
-      }
+    const summaryLines =
+      renderedPage.pageNumber === plan.pages.length
+        ? buildKeptExportSummaryLines(project, template)
+        : []
+    if (summaryLines.length > 0) {
       const summaryFont = await pdf.embedFont(StandardFonts.Helvetica)
-      summaryFields.forEach((field, index) => {
-        const value = values[field]
-        page.drawText(
-          `${summaryLabel(field)}: ${value === null ? 'Unavailable' : value.toFixed(2)}`,
-          {
-            x: 48,
-            y: 40 + (summaryFields.length - index - 1) * 14,
-            size: 9,
-            font: summaryFont,
-            color: pdfColor('#17231c')
-          }
-        )
+      summaryLines.forEach((line, index) => {
+        page.drawText(safeText(line.text, summaryFont), {
+          x: KEPT_EXPORT_SUMMARY_GEOMETRY.x,
+          y:
+            KEPT_EXPORT_SUMMARY_GEOMETRY.baseY +
+            (summaryLines.length - index - 1) * KEPT_EXPORT_SUMMARY_GEOMETRY.lineHeight,
+          size: KEPT_EXPORT_SUMMARY_GEOMETRY.fontSize,
+          font: summaryFont,
+          color: pdfColor(KEPT_EXPORT_SUMMARY_GEOMETRY.color)
+        })
       })
     }
   }

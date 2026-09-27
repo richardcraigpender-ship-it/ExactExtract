@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 import type { KeptExportSourceRow, KeptExportTemplate } from '../shared/keptExportTemplate'
-import { buildKeptExportRenderPlan } from './keptExportLayout'
+import { buildKeptExportRenderPlan, wrapLines } from './keptExportLayout'
 
 const style = {
   fontRef: { kind: 'standard-14' as const, family: 'Helvetica' as const },
@@ -246,6 +246,22 @@ test('renders references under the main text column when configured', () => {
   assert.equal(reference?.height, reference?.style.fontSize ?? 0)
 })
 
+test('preserves explicit line breaks in reference metadata', () => {
+  const current = template()
+  current.useSeparateLaterPages = false
+  current.pageOneTemplate.showReferenceUnderMainText = true
+  const plan = buildKeptExportRenderPlan(
+    [{ entryId: 'one', values: { payee: 'One', reference: 'CARD-100\nAUTH-42' } }],
+    current
+  )
+
+  const reference = plan.pages[0]?.placements.find(
+    (placement) => placement.columnId === 'payee:reference'
+  )
+  assert.deepEqual(reference?.lines, ['Ref: CARD-100', 'AUTH-42'])
+  assert.equal(reference?.height, (reference?.style.fontSize ?? 0) * 2)
+})
+
 test('uses the configured payee-to-reference gap and reserves 5pt after the entry', () => {
   const current = template()
   current.pageOneTemplate.referenceGap = 8
@@ -392,6 +408,48 @@ test('keeps long payee text unsnipped when no reference sits underneath', () => 
 
   const payee = plan.pages[0]?.placements.find((placement) => placement.columnId === 'payee')
   assert.equal(payee?.text, 'A long payee description')
+})
+
+test('placement lines carry the exact wrapped segments the PDF renderer will draw', () => {
+  const current = template()
+  const column = current.pageOneTemplate.columns[0]!
+  const longPayee = 'A detailed statement description that needs more than one line to display'
+
+  const plan = buildKeptExportRenderPlan(
+    [{ entryId: 'one', values: { payee: longPayee } }],
+    current
+  )
+
+  const payee = plan.pages[0]?.placements.find((placement) => placement.columnId === 'payee')
+  const expectedLines = wrapLines(longPayee, column.width, style.fontSize)
+
+  assert.ok(
+    (payee?.lines.length ?? 0) > 1,
+    'expected the long payee text to wrap onto multiple lines'
+  )
+  assert.deepEqual(payee?.lines, expectedLines)
+  // The full, unsplit string still exists so callers that only need the raw value keep working.
+  assert.equal(payee?.text, longPayee)
+})
+
+test('snipped reference-anchor text carries a single unwrapped line', () => {
+  const current = template()
+  current.useSeparateLaterPages = false
+  current.pageOneTemplate.columns[0]!.width = 30
+  current.pageOneTemplate.columns[0]!.spacing = 12
+  current.pageOneTemplate.showReferenceUnderMainText = true
+  const plan = buildKeptExportRenderPlan(
+    [{ entryId: 'one', values: { payee: 'A long payee description', reference: 'CARD-100' } }],
+    current
+  )
+
+  const payee = plan.pages[0]?.placements.find((placement) => placement.columnId === 'payee')
+  const reference = plan.pages[0]?.placements.find(
+    (placement) => placement.columnId === 'payee:reference'
+  )
+
+  assert.deepEqual(payee?.lines, [payee?.text])
+  assert.deepEqual(reference?.lines, [reference?.text])
 })
 
 test('keeps a divider clear of the reference line beneath the payee', () => {

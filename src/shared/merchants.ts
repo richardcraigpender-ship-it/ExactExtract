@@ -72,8 +72,9 @@ export interface MerchantCreate {
   defaultReviewScope?: MerchantDefaultReviewScope
 }
 
-export interface MerchantUpdate
-  extends Partial<Omit<MerchantCreate, 'displayName' | 'defaultReviewStatus'>> {
+export interface MerchantUpdate extends Partial<
+  Omit<MerchantCreate, 'displayName' | 'defaultReviewStatus'>
+> {
   displayName?: string
   classification?: Extract<MerchantClassification, 'merchant-candidate' | 'excluded'>
   /** Passing null clears an existing default-review rule. */
@@ -95,6 +96,8 @@ export interface MerchantRuleDecision {
   action: MerchantRuleAction
   value: string | boolean
   appliedToEntryIds: string[]
+  /** Previous entry statuses keyed by entry ID, retained so undo is deterministic after reload. */
+  previousStatuses?: Record<string, ReviewStatus>
   reversible: boolean
   createdAt: string
   reversedAt?: string

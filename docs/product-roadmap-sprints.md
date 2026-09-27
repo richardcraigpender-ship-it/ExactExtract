@@ -2,6 +2,8 @@
 
 Planning basis: current extraction, OCR, review, analysis, payee, export, recovery, and Windows beta capabilities.
 
+For the consolidated two-agent execution plan, see [docs/two-agent-product-sprints.md](two-agent-product-sprints.md).
+
 ## Sprint 0 - Shared contracts and baselines
 
 **Goal:** Establish common definitions and evidence before multiple agents build dependent features.

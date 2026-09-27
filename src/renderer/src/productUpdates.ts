@@ -9,6 +9,34 @@ export interface ProductUpdate {
 
 export const PRODUCT_UPDATES: readonly ProductUpdate[] = [
   {
+    date: '2026-09-25',
+    kind: 'Changed',
+    title: 'Preview and export parity',
+    summary:
+      'Export preview settings now follow the same layout contracts as final PDF output for more predictable fonts, positioning, references, and spacing.'
+  },
+  {
+    date: '2026-09-25',
+    kind: 'Changed',
+    title: 'Direct Review queue access',
+    summary:
+      'Review stays one click away beside Source, Analysis, and Export while specialist tools remain grouped under Tools.'
+  },
+  {
+    date: '2026-09-25',
+    kind: 'Feature',
+    title: 'Safer merchant decisions',
+    summary:
+      'Merchant review rules preview affected entries and conflicts before applying reversible Keep, Maybe, or Exclude decisions.'
+  },
+  {
+    date: '2026-09-25',
+    kind: 'Changed',
+    title: 'ExactExtract Windows package',
+    summary:
+      'The verified Windows installer is now branded ExactExtract with matching packaging and artifact verification.'
+  },
+  {
     date: '2026-09-13',
     kind: 'Feature',
     title: 'Merchant review rules',

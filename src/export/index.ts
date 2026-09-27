@@ -19,8 +19,11 @@ export type {
 } from './keptImageLayout'
 export {
   buildKeptExportSourceRows,
-  exportProjectKeptEntriesTemplatePdf
+  buildKeptExportSummaryLines,
+  exportProjectKeptEntriesTemplatePdf,
+  KEPT_EXPORT_SUMMARY_GEOMETRY
 } from './keptExportTemplatePdf'
+export type { KeptExportSummaryLine } from './keptExportTemplatePdf'
 export { buildRunningBalanceValues } from './runningBalance'
 export type { RunningBalanceInputRow, RunningBalanceResult } from './runningBalance'
 export {

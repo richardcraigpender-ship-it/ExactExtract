@@ -18,7 +18,13 @@ import type {
   KeptExportTextStyle
 } from '../../../shared/keptExportTemplate'
 import { buildPageNumberDraw } from '../../../export/pageNumbers'
+import {
+  KEPT_EXPORT_SUMMARY_GEOMETRY,
+  type KeptExportSummaryLine
+} from '../../../export/keptExportTemplatePdf'
 import './ExportCanvas.css'
+
+const PDF_POINT_TO_CSS_PIXEL = 96 / 72
 
 interface ExportCanvasProps {
   layout: KeptEntriesCanvasLayout
@@ -44,6 +50,8 @@ interface ExportCanvasProps {
   onImagePlacementChange?: (placement: KeptImagePlacement) => void
   /** Layouts store references only, so the caller supplies displayable bytes. */
   resolveImageSource?: (source: KeptImageSourceRef) => string | undefined
+  /** Statement summary lines drawn on the export's final page; omit on other pages. */
+  summaryLines?: readonly KeptExportSummaryLine[]
 }
 
 function asPercent(value: number, total: number): string {
@@ -53,15 +61,44 @@ function asPercent(value: number, total: number): string {
 function fontFamily(fontRef: KeptEntriesFontRef): string {
   if (fontRef.kind === 'system') return `"${fontRef.family.replaceAll('"', '\\"')}"`
   if (fontRef.family === 'Times-Roman') return '"Times New Roman", Times, serif'
-  if (fontRef.family === 'Courier') return 'Courier, monospace'
+  // "Courier New" is metrically identical to the PDF's embedded Courier; generic
+  // monospace fonts are not, so prefer it before falling back.
+  if (fontRef.family === 'Courier') return '"Courier New", Courier, monospace'
   return 'Helvetica, Arial, sans-serif'
+}
+
+let measureContext: CanvasRenderingContext2D | null | undefined
+
+/** No canvas exists during server-side test rendering; the caller falls back to an estimate. */
+function getMeasureContext(): CanvasRenderingContext2D | null {
+  if (measureContext !== undefined) return measureContext
+  measureContext =
+    typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d')
+  return measureContext
+}
+
+/**
+ * Measures text width in PDF points using the preview's substitute font, so page-number
+ * center/right alignment matches pdf-lib's real font-metric alignment far more closely than a
+ * flat per-character estimate. Falls back to that estimate when no canvas context exists.
+ */
+function measureTextWidthPoints(
+  text: string,
+  fontSizePoints: number,
+  style: KeptExportTextStyle
+): number {
+  const context = getMeasureContext()
+  if (!context) return text.length * fontSizePoints * 0.55
+  const weight = style.fontWeight === 'bold' ? '700' : '400'
+  const fontStyle = style.fontStyle === 'italic' ? 'italic' : 'normal'
+  context.font = `${fontStyle} ${weight} ${fontSizePoints * PDF_POINT_TO_CSS_PIXEL}px ${fontFamily(style.fontRef)}`
+  return context.measureText(text).width / PDF_POINT_TO_CSS_PIXEL
 }
 
 function placementStyle(
   placement: KeptEntryPlacement,
   pageWidth: number,
   pageHeight: number,
-  zoom: number,
   textStyleOverride?: KeptExportTextStyle
 ): React.CSSProperties {
   const fontRef = textStyleOverride?.fontRef ?? placement.fontRef
@@ -74,7 +111,7 @@ function placementStyle(
     height: asPercent(placement.height, pageHeight),
     color: textStyleOverride?.color ?? placement.color,
     fontFamily: fontFamily(fontRef),
-    fontSize: `${(textStyleOverride?.fontSize ?? placement.fontSize) * zoom}px`,
+    fontSize: `${(textStyleOverride?.fontSize ?? placement.fontSize) * PDF_POINT_TO_CSS_PIXEL}px`,
     fontStyle:
       fontStyle === 'italic' ||
       (fontRef.kind === 'system' && fontRef.style?.toLowerCase().includes('italic'))
@@ -126,10 +163,12 @@ export function ExportCanvas({
   selectedImagePlacementId = null,
   onSelectImagePlacement,
   onImagePlacementChange,
-  resolveImageSource
+  resolveImageSource,
+  summaryLines = []
 }: ExportCanvasProps): React.JSX.Element {
   const dimensions = getCanvasPageDimensions(layout.pageSize, layout.orientation)
   const canvasZoom = Math.min(2, Math.max(0.5, zoom))
+  const pageWidth = dimensions.width * PDF_POINT_TO_CSS_PIXEL
   // Single-layer modes keep the other layer visible for alignment, but never selectable.
   const interactive = Boolean(onPlacementChange) && showText
   const imagesInteractive = Boolean(onImagePlacementChange) && showImages
@@ -163,16 +202,13 @@ export function ExportCanvas({
   const pageNumberDraw = useMemo(() => {
     const pageNumbers = templatePageNumbers ?? layout.pageNumbers
     if (!pageNumbers?.enabled) return undefined
-    const measureTextWidth = (text: string, fontSize: number): number => {
-      return text.length * fontSize * 0.6
-    }
     return buildPageNumberDraw(
       pageNumbers,
       templatePage?.pageNumber ?? pageNumber,
       templatePageCount,
       dimensions.width,
       dimensions.height,
-      measureTextWidth
+      (text, fontSize) => measureTextWidthPoints(text, fontSize, pageNumbers.textStyle)
     )
   }, [
     dimensions.height,
@@ -194,8 +230,9 @@ export function ExportCanvas({
         data-orientation={layout.orientation}
         style={{
           aspectRatio: `${dimensions.width} / ${dimensions.height}`,
-          width: `${760 * canvasZoom}px`,
-          minWidth: `${320 * canvasZoom}px`
+          width: `${pageWidth}px`,
+          minWidth: '320px',
+          zoom: canvasZoom
         }}
         onDragOver={
           onDropEntry
@@ -376,7 +413,7 @@ export function ExportCanvas({
                       ),
                       top: asPercent(placement.y + imageBalance.offsetY, dimensions.height),
                       color: imageBalance.color,
-                      fontSize: `${imageBalance.fontSize * canvasZoom}px`
+                      fontSize: `${imageBalance.fontSize * PDF_POINT_TO_CSS_PIXEL}px`
                     }}
                   >
                     {placement.runningBalanceText}
@@ -410,7 +447,7 @@ export function ExportCanvas({
                   dimensions.height - pageNumberDraw.y - pageNumberDraw.fontSize,
                   dimensions.height
                 ),
-                fontSize: `${pageNumberDraw.fontSize * canvasZoom}px`,
+                fontSize: `${pageNumberDraw.fontSize * PDF_POINT_TO_CSS_PIXEL}px`,
                 fontFamily: (templatePageNumbers ?? layout.pageNumbers)?.textStyle.fontRef
                   ? fontFamily((templatePageNumbers ?? layout.pageNumbers)!.textStyle.fontRef)
                   : 'inherit',
@@ -428,6 +465,28 @@ export function ExportCanvas({
               {pageNumberDraw.text}
             </span>
           )}
+          {summaryLines.map((line, index) => (
+            <span
+              key={line.field}
+              className="export-canvas-summary-line"
+              style={{
+                position: 'absolute',
+                left: asPercent(KEPT_EXPORT_SUMMARY_GEOMETRY.x, dimensions.width),
+                top: asPercent(
+                  dimensions.height -
+                    (KEPT_EXPORT_SUMMARY_GEOMETRY.baseY +
+                      (summaryLines.length - index - 1) * KEPT_EXPORT_SUMMARY_GEOMETRY.lineHeight) -
+                    KEPT_EXPORT_SUMMARY_GEOMETRY.fontSize,
+                  dimensions.height
+                ),
+                fontSize: `${KEPT_EXPORT_SUMMARY_GEOMETRY.fontSize * PDF_POINT_TO_CSS_PIXEL}px`,
+                fontFamily: 'Helvetica, Arial, sans-serif',
+                color: KEPT_EXPORT_SUMMARY_GEOMETRY.color
+              }}
+            >
+              {line.text}
+            </span>
+          ))}
           {templatePage &&
             templatePlacements.map((placement) => (
               <div
@@ -441,13 +500,17 @@ export function ExportCanvas({
                   width: asPercent(placement.width, dimensions.width),
                   color: placement.style.color,
                   fontFamily: fontFamily(placement.style.fontRef),
-                  fontSize: `${placement.style.fontSize * canvasZoom}px`,
+                  fontSize: `${placement.style.fontSize * PDF_POINT_TO_CSS_PIXEL}px`,
                   fontStyle: placement.style.fontStyle === 'italic' ? 'italic' : undefined,
                   fontWeight: placement.style.fontWeight === 'bold' ? 700 : undefined,
-                  textAlign: placement.align
+                  textAlign: placement.align,
+                  // Only break at the render plan's explicit lines; the PDF never auto-wraps a
+                  // single drawn line, so browser auto-wrap would hide real export overflow.
+                  whiteSpace: 'pre'
                 }}
               >
-                {placement.text}
+                {/* Explicit lines from the render plan, not browser auto-wrap, so this matches the PDF. */}
+                {(placement.lines ?? [placement.text]).join('\n')}
               </div>
             ))}
           {!useTemplateTextLayer &&
@@ -470,7 +533,6 @@ export function ExportCanvas({
                   placement,
                   dimensions.width,
                   dimensions.height,
-                  canvasZoom,
                   textStyleOverride
                 )}
                 onClick={interactive ? () => onSelectPlacement?.(placement.id) : undefined}

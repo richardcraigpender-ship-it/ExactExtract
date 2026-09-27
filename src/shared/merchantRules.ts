@@ -46,9 +46,7 @@ export function previewMerchantDefaultStatusRule(
       willChange: entry.status !== targetStatus
     })
   )
-  const conflicts = matches.filter(
-    (match) => match.willChange && match.currentStatus !== 'maybe'
-  )
+  const conflicts = matches.filter((match) => match.willChange && match.currentStatus !== 'maybe')
   return {
     merchantId: merchant.id,
     targetStatus,
@@ -62,6 +60,12 @@ export interface ApplyMerchantRuleResult {
   entries: ProjectEntry[]
   decision: MerchantRuleDecision
   changedEntryIds: string[]
+}
+
+export interface UndoMerchantRuleResult {
+  entries: ProjectEntry[]
+  decision: MerchantRuleDecision
+  restoredEntryIds: string[]
 }
 
 export function applyMerchantDefaultStatusRules(
@@ -97,12 +101,16 @@ export function applyMerchantDefaultStatusRule(
 ): ApplyMerchantRuleResult {
   const targetStatus = merchant.defaultReviewStatus
   if (!targetStatus) throw new Error('Merchant has no default review status rule to apply.')
-  const matchingIds = new Set(findMerchantMatchingEntries(merchant, entries).map((entry) => entry.id))
+  const matchingIds = new Set(
+    findMerchantMatchingEntries(merchant, entries).map((entry) => entry.id)
+  )
   const changedEntryIds: string[] = []
+  const previousStatuses: Record<string, ReviewStatus> = {}
   const nextEntries = entries.map((entry) => {
     if (!matchingIds.has(entry.id) || entry.status === targetStatus) return entry
     if (entry.status !== 'maybe' && !options.overrideConflicts) return entry
     changedEntryIds.push(entry.id)
+    previousStatuses[entry.id] = entry.status
     return { ...entry, status: targetStatus, updatedAt }
   })
   const decision: MerchantRuleDecision = {
@@ -111,8 +119,36 @@ export function applyMerchantDefaultStatusRule(
     action: 'set-default-status',
     value: targetStatus,
     appliedToEntryIds: changedEntryIds,
+    ...(changedEntryIds.length > 0 ? { previousStatuses } : {}),
     reversible: true,
     createdAt: updatedAt
   }
   return { entries: nextEntries, decision, changedEntryIds }
+}
+
+export function undoMerchantRuleDecision(
+  entries: readonly ProjectEntry[],
+  decision: MerchantRuleDecision,
+  updatedAt: string
+): UndoMerchantRuleResult {
+  if (!decision.reversible || decision.reversedAt) {
+    throw new Error('Merchant rule decision is no longer reversible.')
+  }
+  if (!decision.previousStatuses) {
+    throw new Error('Merchant rule decision has no previous statuses to restore.')
+  }
+  const targetIds = new Set(decision.appliedToEntryIds)
+  const restoredEntryIds: string[] = []
+  const nextEntries = entries.map((entry) => {
+    if (!targetIds.has(entry.id)) return entry
+    const previousStatus = decision.previousStatuses?.[entry.id]
+    if (!previousStatus) return entry
+    restoredEntryIds.push(entry.id)
+    return { ...entry, status: previousStatus, updatedAt }
+  })
+  return {
+    entries: nextEntries,
+    decision: { ...decision, reversible: false, reversedAt: updatedAt },
+    restoredEntryIds
+  }
 }

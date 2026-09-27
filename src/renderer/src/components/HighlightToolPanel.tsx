@@ -205,7 +205,11 @@ export function HighlightToolPanel({
 
         {measurements?.status === 'measured' ? (
           <table className="highlight-tool-measurements">
-            <caption>Selected highlight</caption>
+            <caption>
+              {measurements.targetCount && measurements.targetCount > 1
+                ? 'Most common selected highlight shape'
+                : 'Selected highlight'}
+            </caption>
             <thead>
               <tr>
                 <th scope="col">
@@ -222,6 +226,16 @@ export function HighlightToolPanel({
                 </tr>
               ))}
             </tbody>
+            {measurements.targetCount && measurements.targetCount > 1 && (
+              <tfoot>
+                <tr>
+                  <th scope="row" colSpan={2}>
+                    Common shape: {measurements.commonTargetCount ?? 1} of{' '}
+                    {measurements.targetCount} highlights
+                  </th>
+                </tr>
+              </tfoot>
+            )}
           </table>
         ) : missingPageSize ? (
           <p className="highlight-tool-hint">
